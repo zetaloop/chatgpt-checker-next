@@ -45,8 +45,8 @@
 
         displayBox.innerHTML = `
         <div id="pow-section">
-            <div style="margin-bottom: 10px;">
-                <strong>PoW 信息</strong>
+            <div style="margin-bottom: 2px;">
+                <strong>连接质量</strong>
             </div>
             PoW难度：<span id="difficulty">N/A</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
@@ -66,21 +66,21 @@
             <span id="persona-container" style="display: none">用户类型：<span id="persona">N/A</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
-            <div style="margin-top: 10px; margin-bottom: 10px;">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>深度研究</strong>
             </div>
             剩余次数：<span id="deep-research-usage">N/A</span><br>
             重置时间：<span id="deep-research-reset-time">N/A</span>
         </div>
         <div id="odyssey-section" style="margin-top: 10px; display: none">
-            <div style="margin-top: 10px; margin-bottom: 10px;">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>代理模式</strong>
             </div>
             剩余次数：<span id="odyssey-usage">N/A</span><br>
             重置时间：<span id="odyssey-reset-time">N/A</span>
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
-            <div style="margin-bottom: 10px;">
+            <div style="margin-bottom: 2px;">
                 <strong>Codex 可用次数</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
