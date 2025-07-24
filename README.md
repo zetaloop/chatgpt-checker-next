@@ -1,7 +1,8 @@
 > Forked from [KoriIku/chatgpt-degrade-checker](https://github.com/KoriIku/chatgpt-degrade-checker), and fixed some bugs.
 >
-> 20250609 Added Codex usage tracking.
-> 20250613 Added Deep Research usage tracking.
+> 20250609 Added Codex usage tracking.<br>
+> 20250613 Added Deep Research usage tracking.<br>
+> 20250725 Added ChatGPT Agent usage tracking.
 
 # ChatGPT Service Downgrade Detection Tool Next
 
