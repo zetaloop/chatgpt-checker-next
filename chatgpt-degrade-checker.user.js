@@ -72,6 +72,13 @@
             剩余次数：<span id="deep-research-usage">N/A</span><br>
             重置时间：<span id="deep-research-reset-time">N/A</span>
         </div>
+        <div id="odyssey-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 10px;">
+                <strong>代理模式</strong>
+            </div>
+            剩余次数：<span id="odyssey-usage">N/A</span><br>
+            重置时间：<span id="odyssey-reset-time">N/A</span>
+        </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 10px;">
                 <strong>Codex 可用次数</strong>
@@ -506,6 +513,43 @@
         }
     }
 
+    // 更新代理模式次数
+    let agentRemaining = null;
+    let agentReset = null;
+    function updateAgentInfo(remaining, resetAfter) {
+        const section = document.getElementById("odyssey-section");
+        const usageEl = document.getElementById("odyssey-usage");
+        const resetEl = document.getElementById("odyssey-reset-time");
+
+        if (!section || !usageEl || !resetEl) return;
+
+        if (typeof remaining !== "number") {
+            section.style.display = "none";
+            return;
+        }
+
+        agentRemaining = remaining;
+        agentReset = resetAfter || null;
+
+        section.style.display = "block";
+        if (!powFetched) {
+            section.style.marginTop = "0";
+        } else {
+            section.style.marginTop = "10px";
+        }
+
+        usageEl.innerText = `${remaining}次`;
+
+        if (agentReset) {
+            const date = new Date(agentReset);
+            resetEl.innerText = date
+                .toLocaleString("zh-CN", { hour12: false })
+                .replace(/\//g, "-");
+        } else {
+            resetEl.innerText = "N/A";
+        }
+    }
+
     // 拦截 fetch 请求
     const originalFetch = window.fetch;
     window.fetch = async function (resource, options = {}) {
@@ -592,13 +636,24 @@
             try {
                 bodyText = await response.text();
                 const data = JSON.parse(bodyText);
-                const item = Array.isArray(data.limits_progress)
+                const deep_research = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
                           (i) => i.feature_name === "deep_research"
                       )
                     : null;
-                if (item) {
-                    updateDeepResearchInfo(item.remaining, item.reset_after);
+                const odyssey = Array.isArray(data.limits_progress)
+                    ? data.limits_progress.find(
+                          (i) => i.feature_name === "odyssey"
+                      )
+                    : null;
+                if (deep_research) {
+                    updateDeepResearchInfo(
+                        deep_research.remaining,
+                        deep_research.reset_after
+                    );
+                }
+                if (odyssey) {
+                    updateAgentInfo(odyssey.remaining, odyssey.reset_after);
                 }
                 return new Response(bodyText, {
                     status: response.status,
@@ -607,7 +662,7 @@
                 });
             } catch (e) {
                 console.error(
-                    "[DegradeChecker] 处理 Deep Research 响应出错:",
+                    "[DegradeChecker] 处理 Deep Research 与 Agent 响应出错:",
                     e
                 );
                 if (typeof bodyText === "string") {
