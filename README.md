@@ -4,58 +4,26 @@
 > 20250613 Added Deep Research usage tracking.<br>
 > 20250725 Added ChatGPT Agent usage tracking.
 
-# ChatGPT Service Downgrade Detection Tool Next
+# ChatGPT Checker Next
 
-This tool helps detect if ChatGPT has limited access to certain features on your account by downgrading service due to a "high-risk" IP designation. Users encountering issues like the inability to generate images with GPT-4, limited web search access, or simplified responses from GPT-3.5 may benefit from running this script to identify potential downgrades.
+获取 ChatGPT 的服务降级风险等级、深度研究和 Codex 使用次数等信息。
 
-## Installation and Usage
-1. First, install Tampermonkey: https://www.tampermonkey.net/
+## 安装
 
-2. Then, click this link to install the tool: [Click to Install](https://github.com/zetaloop/chatgpt-degrade-checker/raw/refs/heads/main/chatgpt-degrade-checker.user.js)
+1. 首先需要安装 [Tampermonkey](https://www.tampermonkey.net)
+2. 然后点击链接安装此脚本 [chatgpt-checker-next.user.js](https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js)
+3. 打开 [chatgpt.com](https://chatgpt.com) 首页，页面右侧有一个绿色圆圈，将光标放上去即可查看服务质量（根据 PoW）、深度研究可用次数等信息。
 
-3. After installation, open [ChatGPT](https://chatgpt.com/). A green circle will appear on the right side of the screen. Hover over it to view diagnostic details. If the Proof of Work (PoW) difficulty displayed is unusually low, it may suggest that your IP has been flagged, which could result in limited access to certain features.
+## 功能
 
-   As a reference, PoW values with five or more digits generally indicate an unrestricted IP that should allow full access to ChatGPT’s capabilities. Values of 000032 or lower could indicate that the IP is considered high-risk, leading to restricted functionality.
+- **服务质量**：显示当前 Proof Of Work 的难度数值，数值越大通常代表风控越低，但并不是唯一的判断标准。在 ChatGPT 首页可用。
+- **深度研究**：Deep Research 模式的剩余可用次数和重置时间，在 ChatGPT 首页可用。
+- **代理模式**：ChatGPT Agent 模式的剩余可用次数和重置时间，在 ChatGPT 首页可用。
+- **Codex 可用次数**：显示 Codex 任务的已用次数进度条和重置事件，在 Codex 主页可用。
+- 更多功能敬请期待
 
-   _(Note: PoW levels can vary even for the same IP. For example, after completing a higher difficulty PoW, the next one may be slightly easier, although it typically won’t drop to “simple.”)_
+## 更多信息
 
-### Codex Usage Tracking
-When visiting `https://chatgpt.com/codex`, the PoW endpoint is unavailable. The userscript intercepts the Wham rate-limit API response and displays a purple progress bar showing how many Codex tasks you have used and how long until the quota resets. If PoW data cannot be retrieved, the PoW section is hidden and the circular icon turns purple to indicate Codex status.
+服务降级的表现：
 
-## What Is a Service Downgrade?
-When certain IPs are flagged as high-risk, ChatGPT may silently downgrade access by switching to a lower-tier model, such as the 4o-mini variant or a simpler model, without notifying the user.
-
-### Effects of Service Downgrades
-With service downgrades, even ChatGPT Plus users may notice missing features like web search and image generation on GPT-4. Similarly, if downgraded to a lighter GPT-3.5 model, responses may become more basic, with less depth in reasoning. 
-
-For users experiencing sudden changes in ChatGPT functionality—like missing image generation, web search, or nuanced responses—this tool may help clarify if a silent downgrade is impacting their experience.
-
-
----
-
-# ChatGPT 服务降级检测工具
-由于 ChatGPT 会对某些 ip 进行无提示的服务降级，此脚本用于检测你的 ip 是否被 ChatGPT 判定为高风险。在一定程度上可以用于辅助判断你的 ip 是否遭到服务降级。
-
-## 安装及使用
-1. 首先安装 tampermonkey：https://www.tampermonkey.net/
-
-2. 然后点击链接安装本工具： [点此安装](https://github.com/zetaloop/chatgpt-degrade-checker/raw/refs/heads/main/chatgpt-degrade-checker.user.js)
-
-3. 安装完成后打开 [chatgpt](https://chatgpt.com/)，你可以在屏幕右侧看到一个绿色圆圈，鼠标移上去之后会显示详细信息，如果 PoW 难度的值很低，代表你的 ip 可能被判断为了高风险。
-
-作为参考，这个值在超过 5 位时，一般代表你的ip较为优质，可以正常使用所有服务，如果小于等于 000032，说明你的 ip 被认为有很高的风险。
-
-（更详细的区分尚不清晰，我简单测试了几个 ip，发现即便对同一个 ip，其要求的 PoW 也很容易变动，例如，如果已经完成了一个较困难的 PoW，下一次的 PoW 难度就会稍稍降低，但不会降低到“简单”级别。）
-
-### Codex 使用量
-访问 `https://chatgpt.com/codex` 时无法获取 PoW 信息，脚本会拦截 Wham 接口的返回数据显示 Codex 当前额度，并以紫色进度条展示剩余次数和重置倒计时。如果无法获取 PoW 数据，会隐藏 PoW 信息，并把圆形图标变成紫色表示 Codex 状态。
-
-## 什么是服务降级？
-ChatGPT 会对一些被判断为高风险的 ip 降级服务，偷偷将模型切换为 4o-mini 或者更差，并且**没有任何提示**。
-
-### 服务降级有什么影响
-降级后，即便你是 plus 用户，在使用 4o 模型时会发现无法使用联网搜索、图片生成等功能，使用 o1 模型时，会发现模型不进行思考直接回答。
-
-
-
-
+o3、o4 等思考模型 "已思考几秒" 或不思考、创建图片时用旧的 sora3 替代 gpt-image-1、深度研究时直接回答而不启动研究等。
