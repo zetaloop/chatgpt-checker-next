@@ -493,7 +493,7 @@
         updateCodexCountdown();
     }
 
-    function formatCodexDuration(totalSecs, omitZeroSecWhenSubday) {
+    function formatCodexDuration(totalSecs, omitZeroUnits) {
         if (totalSecs == null) return "N/A";
         const t = Math.max(0, Math.floor(totalSecs));
         const d = Math.floor(t / 86400);
@@ -502,12 +502,16 @@
         const s = t % 60;
 
         if (d >= 1) {
-            return `${d}天${h}小时${m}分钟`;
+            const parts = [`${d}天`];
+            if (!omitZeroUnits || h > 0) parts.push(`${h}小时`);
+            if (!omitZeroUnits || m > 0) parts.push(`${m}分钟`);
+            return parts.join("");
         } else {
-            if (omitZeroSecWhenSubday && s === 0) {
-                return `${h}小时${m}分钟`;
-            }
-            return `${h}小时${m}分钟${s}秒`;
+            const parts = [];
+            if (!omitZeroUnits || h > 0) parts.push(`${h}小时`);
+            if (!omitZeroUnits || m > 0) parts.push(`${m}分钟`);
+            if (!omitZeroUnits || s > 0) parts.push(`${s}秒`);
+            return parts.length ? parts.join("") : "0秒";
         }
     }
 
@@ -522,14 +526,15 @@
         } else if (codexUsedPercentPrimary === 0) {
             let secs = null;
             if (typeof codexLimitWindowSecondsPrimary === "number") {
-                secs = codexLimitWindowSecondsPrimary;
+                secs = codexLimitWindowSecondsPrimary + 60;
             } else if (typeof codexResetsAfterPrimary === "number") {
-                secs = codexResetsAfterPrimary;
+                secs = codexResetsAfterPrimary + 60;
             } else if (typeof codexResetTimePrimary === "number") {
-                secs = Math.max(
-                    0,
-                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
-                );
+                secs =
+                    Math.max(
+                        0,
+                        Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                    ) + 60;
             }
             resetP.innerText =
                 secs != null
@@ -555,14 +560,17 @@
         } else if (codexUsedPercentSecondary === 0) {
             let secs = null;
             if (typeof codexLimitWindowSecondsSecondary === "number") {
-                secs = codexLimitWindowSecondsSecondary;
+                secs = codexLimitWindowSecondsSecondary + 60;
             } else if (typeof codexResetsAfterSecondary === "number") {
-                secs = codexResetsAfterSecondary;
+                secs = codexResetsAfterSecondary + 60;
             } else if (typeof codexResetTimeSecondary === "number") {
-                secs = Math.max(
-                    0,
-                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
-                );
+                secs =
+                    Math.max(
+                        0,
+                        Math.floor(
+                            (codexResetTimeSecondary - Date.now()) / 1000
+                        )
+                    ) + 60;
             }
             resetS.innerText =
                 secs != null
