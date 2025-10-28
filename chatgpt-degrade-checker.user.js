@@ -79,6 +79,13 @@
             剩余次数：<span id="odyssey-usage">N/A</span><br>
             重置时间：<span id="odyssey-reset-time">N/A</span>
         </div>
+        <div id="file-upload-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>文件上传</strong>
+            </div>
+            剩余次数：<span id="file-upload-usage">N/A</span><br>
+            重置时间：<span id="file-upload-reset-time">N/A</span>
+        </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 8px;">
                 <strong>Codex 用量</strong>
@@ -663,6 +670,38 @@
         }
     }
 
+    // 更新文件上传次数
+    let uploadRemaining = null;
+    let uploadReset = null;
+    function updateFileUploadInfo(remaining, resetAfter) {
+        const section = document.getElementById("file-upload-section");
+        const usageEl = document.getElementById("file-upload-usage");
+        const resetEl = document.getElementById("file-upload-reset-time");
+
+        if (!section || !usageEl || !resetEl) return;
+
+        if (typeof remaining !== "number") {
+            section.style.display = "none";
+            return;
+        }
+
+        uploadRemaining = remaining;
+        uploadReset = resetAfter || null;
+
+        section.style.display = "block";
+        section.style.marginTop = powFetched ? "10px" : "0";
+        usageEl.innerText = `${remaining}次`;
+
+        if (uploadReset) {
+            const date = new Date(uploadReset);
+            resetEl.innerText = date
+                .toLocaleString("zh-CN", { hour12: false })
+                .replace(/\//g, "-");
+        } else {
+            resetEl.innerText = "N/A";
+        }
+    }
+
     // 拦截 fetch 请求
     const originalFetch = window.fetch;
     window.fetch = async function (resource, options = {}) {
@@ -759,6 +798,11 @@
                           (i) => i.feature_name === "odyssey"
                       )
                     : null;
+                const file_upload = Array.isArray(data.limits_progress)
+                    ? data.limits_progress.find(
+                          (i) => i.feature_name === "file_upload"
+                      )
+                    : null;
                 if (deep_research) {
                     updateDeepResearchInfo(
                         deep_research.remaining,
@@ -767,6 +811,12 @@
                 }
                 if (odyssey) {
                     updateAgentInfo(odyssey.remaining, odyssey.reset_after);
+                }
+                if (file_upload) {
+                    updateFileUploadInfo(
+                        file_upload.remaining,
+                        file_upload.reset_after
+                    );
                 }
                 return new Response(bodyText, {
                     status: response.status,
