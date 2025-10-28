@@ -402,13 +402,17 @@
     let codexResetsAfterSecondary = null;
     let codexUsedPercentPrimary = null; // 0~100
     let codexUsedPercentSecondary = null; // 0~100
+    let codexLimitWindowSecondsPrimary = null;
+    let codexLimitWindowSecondsSecondary = null;
     function updateCodexInfo(
         pUsedPercent,
         pResetAfter,
         pResetAt,
         sUsedPercent,
         sResetAfter,
-        sResetAt
+        sResetAt,
+        pLimitWindowSecs,
+        sLimitWindowSecs
     ) {
         const section = document.getElementById("codex-section");
         const barP = document.getElementById("codex-progress-bar");
@@ -444,6 +448,10 @@
             typeof pResetAfter === "number" ? pResetAfter : null;
         codexResetsAfterSecondary =
             typeof sResetAfter === "number" ? sResetAfter : null;
+        codexLimitWindowSecondsPrimary =
+            typeof pLimitWindowSecs === "number" ? pLimitWindowSecs : null;
+        codexLimitWindowSecondsSecondary =
+            typeof sLimitWindowSecs === "number" ? sLimitWindowSecs : null;
 
         if (codexUsedPercentPrimary > 0 && codexResetsAfterPrimary != null) {
             codexResetTimePrimary = Date.now() + codexResetsAfterPrimary * 1000;
@@ -485,10 +493,22 @@
         updateCodexCountdown();
     }
 
-    function fmtMMSS(totalSecs) {
-        const m = Math.floor(totalSecs / 60);
-        const s = totalSecs % 60;
-        return s ? `${m}分钟${s}秒` : `${m}分钟`;
+    function formatCodexDuration(totalSecs, omitZeroSecWhenSubday) {
+        if (totalSecs == null) return "N/A";
+        const t = Math.max(0, Math.floor(totalSecs));
+        const d = Math.floor(t / 86400);
+        const h = Math.floor((t % 86400) / 3600);
+        const m = Math.floor((t % 3600) / 60);
+        const s = t % 60;
+
+        if (d >= 1) {
+            return `${d}天${h}小时${m}分钟`;
+        } else {
+            if (omitZeroSecWhenSubday && s === 0) {
+                return `${h}小时${m}分钟`;
+            }
+            return `${h}小时${m}分钟${s}秒`;
+        }
     }
 
     function updateCodexCountdown() {
@@ -499,39 +519,67 @@
         // 五小时
         if (codexUsedPercentPrimary == null) {
             resetP.innerText = "N/A";
-        } else if (
-            codexUsedPercentPrimary === 0 &&
-            codexResetsAfterPrimary != null
-        ) {
-            resetP.innerText = `${fmtMMSS(codexResetsAfterPrimary)}（未开始）`;
-        } else if (codexResetTimePrimary) {
-            const rem = Math.max(
-                0,
-                Math.floor((codexResetTimePrimary - Date.now()) / 1000)
-            );
-            resetP.innerText = rem >= 60 ? fmtMMSS(rem) : `${rem}秒`;
+        } else if (codexUsedPercentPrimary === 0) {
+            let secs = null;
+            if (typeof codexLimitWindowSecondsPrimary === "number") {
+                secs = codexLimitWindowSecondsPrimary;
+            } else if (typeof codexResetsAfterPrimary === "number") {
+                secs = codexResetsAfterPrimary;
+            } else if (typeof codexResetTimePrimary === "number") {
+                secs = Math.max(
+                    0,
+                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                );
+            }
+            resetP.innerText =
+                secs != null
+                    ? `${formatCodexDuration(secs, true)}（未开始）`
+                    : "N/A";
         } else {
-            resetP.innerText = "N/A";
+            let secs = null;
+            if (typeof codexResetTimePrimary === "number") {
+                secs = Math.max(
+                    0,
+                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                );
+            } else if (typeof codexResetsAfterPrimary === "number") {
+                secs = Math.max(0, Math.floor(codexResetsAfterPrimary));
+            }
+            resetP.innerText =
+                secs != null ? formatCodexDuration(secs, false) : "N/A";
         }
 
         // 一星期
         if (codexUsedPercentSecondary == null) {
             resetS.innerText = "N/A";
-        } else if (
-            codexUsedPercentSecondary === 0 &&
-            codexResetsAfterSecondary != null
-        ) {
-            resetS.innerText = `${fmtMMSS(
-                codexResetsAfterSecondary
-            )}（未开始）`;
-        } else if (codexResetTimeSecondary) {
-            const rem = Math.max(
-                0,
-                Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
-            );
-            resetS.innerText = rem >= 60 ? fmtMMSS(rem) : `${rem}秒`;
+        } else if (codexUsedPercentSecondary === 0) {
+            let secs = null;
+            if (typeof codexLimitWindowSecondsSecondary === "number") {
+                secs = codexLimitWindowSecondsSecondary;
+            } else if (typeof codexResetsAfterSecondary === "number") {
+                secs = codexResetsAfterSecondary;
+            } else if (typeof codexResetTimeSecondary === "number") {
+                secs = Math.max(
+                    0,
+                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
+                );
+            }
+            resetS.innerText =
+                secs != null
+                    ? `${formatCodexDuration(secs, true)}（未开始）`
+                    : "N/A";
         } else {
-            resetS.innerText = "N/A";
+            let secs = null;
+            if (typeof codexResetTimeSecondary === "number") {
+                secs = Math.max(
+                    0,
+                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
+                );
+            } else if (typeof codexResetsAfterSecondary === "number") {
+                secs = Math.max(0, Math.floor(codexResetsAfterSecondary));
+            }
+            resetS.innerText =
+                secs != null ? formatCodexDuration(secs, false) : "N/A";
         }
     }
     setInterval(updateCodexCountdown, 1000);
@@ -756,7 +804,13 @@
                         typeof s.reset_after_seconds === "number"
                             ? s.reset_after_seconds
                             : null,
-                        typeof s.reset_at === "number" ? s.reset_at : null
+                        typeof s.reset_at === "number" ? s.reset_at : null,
+                        typeof p.limit_window_seconds === "number"
+                            ? p.limit_window_seconds
+                            : null,
+                        typeof s.limit_window_seconds === "number"
+                            ? s.limit_window_seconds
+                            : null
                     );
                 }
                 return new Response(bodyText, {
