@@ -5,7 +5,7 @@
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
 // @version      2.5.0
-// @description  获取 ChatGPT 的服务降级风险等级、深度研究和 Codex 使用次数等信息。
+// @description  获取 ChatGPT 的服务降级风险等级、深度研究和 Codex 用量等信息。
 // @match        *://chatgpt.com/*
 // @grant        none
 // @run-at       document-start
@@ -81,7 +81,7 @@
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 2px;">
-                <strong>Codex 可用次数</strong>
+                <strong>Codex 用量</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -96,11 +96,17 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            已用次数：<span id="codex-usage">N/A</span><br>
+            五小时：<span id="codex-usage">N/A</span><br>
             <div id="codex-progress-bg" style="margin-top: 8px; margin-bottom: 8px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
             重置时间：<span id="codex-reset-time">N/A</span>
+            <div style="margin-top: 10px;"></div>
+            一星期：<span id="codex-usage-week">N/A</span><br>
+            <div id="codex-progress-bg-week" style="margin-top: 8px; margin-bottom: 8px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+                <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
+            </div>
+            重置时间：<span id="codex-reset-time-week">N/A</span>
         </div>
         <div style="
             margin-top: 12px;
@@ -212,7 +218,7 @@
         const codexTooltip = document.createElement("div");
         codexTooltip.id = "codex-tooltip-box";
         codexTooltip.innerText =
-            "访问 Codex 主页获取可用次数，使用一次之后才开始计时。";
+            "访问 Codex 主页获取用量数据，使用一次之后才开始计时。";
         codexTooltip.style.position = "fixed";
         codexTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         codexTooltip.style.color = "#fff";
@@ -389,42 +395,86 @@
         `;
     }
 
-    // 更新 Codex 可用次数进度条
-    let codexResetTime = null;
-    let codexLimit = null;
-    let codexUsed = null;
-    let codexResetsAfter = null;
-    function updateCodexInfo(limit, remaining, resetsAfter) {
+    // 更新 Codex 用量
+    let codexResetTimePrimary = null;
+    let codexResetTimeSecondary = null;
+    let codexResetsAfterPrimary = null;
+    let codexResetsAfterSecondary = null;
+    let codexUsedPercentPrimary = null; // 0~100
+    let codexUsedPercentSecondary = null; // 0~100
+    function updateCodexInfo(
+        pUsedPercent,
+        pResetAfter,
+        pResetAt,
+        sUsedPercent,
+        sResetAfter,
+        sResetAt
+    ) {
         const section = document.getElementById("codex-section");
-        const bar = document.getElementById("codex-progress-bar");
-        const usageEl = document.getElementById("codex-usage");
-        const resetEl = document.getElementById("codex-reset-time");
+        const barP = document.getElementById("codex-progress-bar");
+        const usageP = document.getElementById("codex-usage");
+        const resetP = document.getElementById("codex-reset-time");
 
-        if (!section || !bar || !usageEl || !resetEl) return;
+        const barS = document.getElementById("codex-progress-bar-week");
+        const usageS = document.getElementById("codex-usage-week");
+        const resetS = document.getElementById("codex-reset-time-week");
 
-        if (typeof limit !== "number" || typeof remaining !== "number") {
+        if (
+            !section ||
+            !barP ||
+            !usageP ||
+            !resetP ||
+            !barS ||
+            !usageS ||
+            !resetS
+        )
+            return;
+
+        if (
+            typeof pUsedPercent !== "number" ||
+            typeof sUsedPercent !== "number"
+        ) {
             section.style.display = "none";
             return;
         }
 
-        codexLimit = limit;
-        codexUsed = limit - (remaining + 1);
-        codexResetsAfter = resetsAfter;
-        const percent = Math.max(0, Math.min(100, (codexUsed / limit) * 100));
-        bar.style.width = `${percent}%`;
-        bar.style.background = "#C26FFD";
-        section.style.display = "block";
-        if (!powFetched) {
-            section.style.marginTop = "0";
+        codexUsedPercentPrimary = Math.max(0, Math.min(100, pUsedPercent));
+        codexUsedPercentSecondary = Math.max(0, Math.min(100, sUsedPercent));
+        codexResetsAfterPrimary =
+            typeof pResetAfter === "number" ? pResetAfter : null;
+        codexResetsAfterSecondary =
+            typeof sResetAfter === "number" ? sResetAfter : null;
+
+        if (codexUsedPercentPrimary > 0 && codexResetsAfterPrimary != null) {
+            codexResetTimePrimary = Date.now() + codexResetsAfterPrimary * 1000;
+        } else if (typeof pResetAt === "number") {
+            codexResetTimePrimary = pResetAt * 1000;
         } else {
-            section.style.marginTop = "10px";
+            codexResetTimePrimary = null;
         }
 
-        if (codexUsed > 0) {
-            codexResetTime = Date.now() + resetsAfter * 1000;
+        if (
+            codexUsedPercentSecondary > 0 &&
+            codexResetsAfterSecondary != null
+        ) {
+            codexResetTimeSecondary =
+                Date.now() + codexResetsAfterSecondary * 1000;
+        } else if (typeof sResetAt === "number") {
+            codexResetTimeSecondary = sResetAt * 1000;
         } else {
-            codexResetTime = null;
+            codexResetTimeSecondary = null;
         }
+
+        barP.style.width = `${codexUsedPercentPrimary}%`;
+        barS.style.width = `${codexUsedPercentSecondary}%`;
+        barP.style.background = "#C26FFD";
+        barS.style.background = "#C26FFD";
+
+        usageP.innerText = `${codexUsedPercentPrimary}%`;
+        usageS.innerText = `${codexUsedPercentSecondary}%`;
+
+        section.style.display = "block";
+        section.style.marginTop = powFetched ? "10px" : "0";
 
         codexFetched = true;
         if (!powFetched) {
@@ -435,43 +485,53 @@
         updateCodexCountdown();
     }
 
+    function fmtMMSS(totalSecs) {
+        const m = Math.floor(totalSecs / 60);
+        const s = totalSecs % 60;
+        return s ? `${m}分钟${s}秒` : `${m}分钟`;
+    }
+
     function updateCodexCountdown() {
-        const usageEl = document.getElementById("codex-usage");
-        const resetEl = document.getElementById("codex-reset-time");
+        const resetP = document.getElementById("codex-reset-time");
+        const resetS = document.getElementById("codex-reset-time-week");
+        if (!resetP || !resetS) return;
 
-        if (!usageEl || !resetEl) return;
-        if (codexLimit === null || codexUsed === null) {
-            usageEl.innerText = "N/A";
-            resetEl.innerText = "N/A";
-            return;
-        }
-
-        usageEl.innerText = `${codexUsed}/${codexLimit}`;
-
-        // 未使用时静态显示 resetsAfter 时间
-        if (codexUsed === 0 && codexResetsAfter !== null) {
-            const totalSecs = codexResetsAfter;
-            const m = Math.floor(totalSecs / 60);
-            const s = totalSecs % 60;
-            const staticStr = s ? `${m}分钟${s}秒` : `${m}分钟`;
-            resetEl.innerText = `${staticStr}（未开始）`;
-            return;
-        }
-
-        // 已使用后动态倒计时
-        if (codexResetTime) {
-            const remainingSecs = Math.max(
+        // 五小时
+        if (codexUsedPercentPrimary == null) {
+            resetP.innerText = "N/A";
+        } else if (
+            codexUsedPercentPrimary === 0 &&
+            codexResetsAfterPrimary != null
+        ) {
+            resetP.innerText = `${fmtMMSS(codexResetsAfterPrimary)}（未开始）`;
+        } else if (codexResetTimePrimary) {
+            const rem = Math.max(
                 0,
-                Math.floor((codexResetTime - Date.now()) / 1000)
+                Math.floor((codexResetTimePrimary - Date.now()) / 1000)
             );
-            const minutes = Math.floor(remainingSecs / 60);
-            const seconds = remainingSecs % 60;
-            const timeStr = minutes
-                ? `${minutes}分钟${seconds}秒`
-                : `${seconds}秒`;
-            resetEl.innerText = timeStr;
+            resetP.innerText = rem >= 60 ? fmtMMSS(rem) : `${rem}秒`;
         } else {
-            resetEl.innerText = "N/A";
+            resetP.innerText = "N/A";
+        }
+
+        // 一星期
+        if (codexUsedPercentSecondary == null) {
+            resetS.innerText = "N/A";
+        } else if (
+            codexUsedPercentSecondary === 0 &&
+            codexResetsAfterSecondary != null
+        ) {
+            resetS.innerText = `${fmtMMSS(
+                codexResetsAfterSecondary
+            )}（未开始）`;
+        } else if (codexResetTimeSecondary) {
+            const rem = Math.max(
+                0,
+                Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
+            );
+            resetS.innerText = rem >= 60 ? fmtMMSS(rem) : `${rem}秒`;
+        } else {
+            resetS.innerText = "N/A";
         }
     }
     setInterval(updateCodexCountdown, 1000);
@@ -495,12 +555,7 @@
         researchReset = resetAfter || null;
 
         section.style.display = "block";
-        if (!powFetched) {
-            section.style.marginTop = "0";
-        } else {
-            section.style.marginTop = "10px";
-        }
-
+        section.style.marginTop = powFetched ? "10px" : "0";
         usageEl.innerText = `${remaining}次`;
 
         if (researchReset) {
@@ -532,12 +587,7 @@
         agentReset = resetAfter || null;
 
         section.style.display = "block";
-        if (!powFetched) {
-            section.style.marginTop = "0";
-        } else {
-            section.style.marginTop = "10px";
-        }
-
+        section.style.marginTop = powFetched ? "10px" : "0";
         usageEl.innerText = `${remaining}次`;
 
         if (agentReset) {
@@ -677,7 +727,7 @@
         }
 
         if (
-            requestUrl.includes("/backend-api/wham/tasks/rate_limit") &&
+            requestUrl.includes("/backend-api/wham/usage") &&
             finalMethod === "GET" &&
             response.ok
         ) {
@@ -685,11 +735,28 @@
             try {
                 bodyText = await response.text();
                 const data = JSON.parse(bodyText);
-                if (location.pathname.startsWith("/codex")) {
+                if (
+                    location.pathname.startsWith("/codex") &&
+                    data &&
+                    data.rate_limit
+                ) {
+                    const p = data.rate_limit.primary_window || {};
+                    const s = data.rate_limit.secondary_window || {};
                     updateCodexInfo(
-                        data.limit,
-                        data.remaining,
-                        data.resets_after
+                        typeof p.used_percent === "number"
+                            ? p.used_percent
+                            : null,
+                        typeof p.reset_after_seconds === "number"
+                            ? p.reset_after_seconds
+                            : null,
+                        typeof p.reset_at === "number" ? p.reset_at : null,
+                        typeof s.used_percent === "number"
+                            ? s.used_percent
+                            : null,
+                        typeof s.reset_after_seconds === "number"
+                            ? s.reset_after_seconds
+                            : null,
+                        typeof s.reset_at === "number" ? s.reset_at : null
                     );
                 }
                 return new Response(bodyText, {
