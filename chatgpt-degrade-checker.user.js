@@ -46,7 +46,7 @@
         displayBox.innerHTML = `
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
-                <strong>服务质量</strong>
+                <strong>服务信息</strong>
             </div>
             PoW难度：<span id="difficulty">N/A</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
@@ -62,7 +62,6 @@
                 border: 1px solid #fff;
                 margin-left: 3px;
             ">?</span><br>
-            IP质量：<span id="ip-quality">N/A</span><br>
             <span id="persona-container" style="display: none">用户类型：<span id="persona">N/A</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
@@ -213,7 +212,7 @@
         const tooltip = document.createElement("div");
         tooltip.id = "tooltip";
         tooltip.innerText =
-            "这个值越小，代表PoW难度越高，ChatGPT认为你的IP风险越高。";
+            "这个数值越大，相当于 ChatGPT 认为你的 IP 风险越低。";
         tooltip.style.position = "fixed";
         tooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         tooltip.style.color = "#fff";
@@ -349,12 +348,10 @@
     // 更新difficulty指示器
     function updateDifficultyIndicator(difficulty) {
         const difficultyLevel = document.getElementById("difficulty-level");
-        const ipQuality = document.getElementById("ip-quality");
 
         if (difficulty === "N/A") {
             setIconColors("#888", "#666");
             difficultyLevel.innerText = "";
-            ipQuality.innerHTML = "N/A";
             powFetched = false;
             const powSection = document.getElementById("pow-section");
             if (powSection && codexFetched) powSection.style.display = "none";
@@ -364,37 +361,32 @@
         const cleanDifficulty = difficulty.replace("0x", "").replace(/^0+/, "");
         const hexLength = cleanDifficulty.length;
 
-        let color, secondaryColor, textColor, level, qualityText;
+        let color, secondaryColor, textColor, level;
 
         if (hexLength <= 2) {
             color = "#F44336";
             secondaryColor = "#d32f2f";
             textColor = "#ff6b6b";
-            level = "(困难)";
-            qualityText = "高风险";
+            level = "(风险)";
         } else if (hexLength === 3) {
             color = "#FFC107";
             secondaryColor = "#ffa000";
             textColor = "#ffd700";
             level = "(中等)";
-            qualityText = "中等";
         } else if (hexLength === 4) {
             color = "#8BC34A";
             secondaryColor = "#689f38";
             textColor = "#9acd32";
-            level = "(简单)";
-            qualityText = "良好";
+            level = "(良好)";
         } else {
             color = "#4CAF50";
             secondaryColor = "#388e3c";
             textColor = "#98fb98";
-            level = "(极易)";
-            qualityText = "优秀";
+            level = "(优秀)";
         }
 
         setIconColors(color, secondaryColor);
         difficultyLevel.innerHTML = `<span style="color: ${textColor}">${level}</span>`;
-        ipQuality.innerHTML = `<span style="color: ${textColor}">${qualityText}</span>`;
         powFetched = true;
         const powSection = document.getElementById("pow-section");
         if (powSection) powSection.style.display = "block";
