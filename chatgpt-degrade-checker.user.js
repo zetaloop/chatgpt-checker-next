@@ -32,7 +32,7 @@
         displayBox.style.top = "50%";
         displayBox.style.right = "20px";
         displayBox.style.transform = "translateY(-50%)";
-        displayBox.style.width = "220px";
+        displayBox.style.width = "240px";
         displayBox.style.padding = "10px";
         displayBox.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
         displayBox.style.color = "#fff";
@@ -80,7 +80,7 @@
             重置时间：<span id="odyssey-reset-time">N/A</span>
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
-            <div style="margin-bottom: 2px;">
+            <div style="margin-bottom: 8px;">
                 <strong>Codex 用量</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
@@ -96,14 +96,20 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            五小时：<span id="codex-usage">N/A</span><br>
-            <div id="codex-progress-bg" style="margin-top: 8px; margin-bottom: 8px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
+                <span>已用：<span id="codex-usage">N/A</span></span>
+                <span><i>每5小时</i></span>
+            </div>
+            <div id="codex-progress-bg" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
             重置时间：<span id="codex-reset-time">N/A</span>
-            <div style="margin-top: 10px;"></div>
-            一星期：<span id="codex-usage-week">N/A</span><br>
-            <div id="codex-progress-bg-week" style="margin-top: 8px; margin-bottom: 8px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+            <div style="margin-top: 8px;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
+                <span>已用：<span id="codex-usage-week">N/A</span></span>
+                <span><i>每周</i></span>
+            </div>
+            <div id="codex-progress-bg-week" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
             重置时间：<span id="codex-reset-time-week">N/A</span>
@@ -505,6 +511,7 @@
             const parts = [`${d}天`];
             if (!omitZeroUnits || h > 0) parts.push(`${h}小时`);
             if (!omitZeroUnits || m > 0) parts.push(`${m}分钟`);
+            if (!omitZeroUnits || s > 0) parts.push(`${s}秒`);
             return parts.join("");
         } else {
             const parts = [];
