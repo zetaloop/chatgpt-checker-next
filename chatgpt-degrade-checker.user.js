@@ -63,6 +63,7 @@
                 margin-left: 3px;
             ">?</span><br>
             <span id="persona-container" style="display: none">用户类型：<span id="persona">N/A</span></span>
+            <span id="default-model-container" style="display: none">默认模型：<span id="default-model">N/A</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -694,6 +695,24 @@
         }
     }
 
+    // 更新默认模型
+    let defaultModelSlug = null;
+    function updateDefaultModelInfo(slug) {
+        const container = document.getElementById("default-model-container");
+        const valueEl = document.getElementById("default-model");
+        if (!container || !valueEl) return;
+
+        if (!slug || typeof slug !== "string") {
+            container.style.display = "none";
+            defaultModelSlug = null;
+            return;
+        }
+
+        defaultModelSlug = slug;
+        valueEl.innerText = slug;
+        container.style.display = "inline";
+    }
+
     // 拦截 fetch 请求
     const originalFetch = window.fetch;
     window.fetch = async function (resource, options = {}) {
@@ -810,6 +829,11 @@
                         file_upload.reset_after
                     );
                 }
+                updateDefaultModelInfo(
+                    typeof data.default_model_slug === "string"
+                        ? data.default_model_slug
+                        : null
+                );
                 return new Response(bodyText, {
                     status: response.status,
                     statusText: response.statusText,
