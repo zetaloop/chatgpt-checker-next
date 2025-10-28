@@ -4,8 +4,8 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      2.5.0
-// @description  获取 ChatGPT 的服务降级风险等级、深度研究和 Codex 使用次数等信息。
+// @version      2.6.0
+// @description  获取 ChatGPT 的服务降级风险等级、深度研究和 Codex 用量等信息。
 // @match        *://chatgpt.com/*
 // @grant        none
 // @run-at       document-start
@@ -32,7 +32,7 @@
         displayBox.style.top = "50%";
         displayBox.style.right = "20px";
         displayBox.style.transform = "translateY(-50%)";
-        displayBox.style.width = "220px";
+        displayBox.style.width = "240px";
         displayBox.style.padding = "10px";
         displayBox.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
         displayBox.style.color = "#fff";
@@ -46,7 +46,7 @@
         displayBox.innerHTML = `
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
-                <strong>服务质量</strong>
+                <strong>服务信息</strong>
             </div>
             PoW难度：<span id="difficulty">N/A</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
@@ -62,8 +62,8 @@
                 border: 1px solid #fff;
                 margin-left: 3px;
             ">?</span><br>
-            IP质量：<span id="ip-quality">N/A</span><br>
             <span id="persona-container" style="display: none">用户类型：<span id="persona">N/A</span></span>
+            <span id="default-model-container" style="display: none">默认模型：<span id="default-model">N/A</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -79,9 +79,16 @@
             剩余次数：<span id="odyssey-usage">N/A</span><br>
             重置时间：<span id="odyssey-reset-time">N/A</span>
         </div>
+        <div id="file-upload-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>文件上传</strong>
+            </div>
+            剩余次数：<span id="file-upload-usage">N/A</span><br>
+            重置时间：<span id="file-upload-reset-time">N/A</span>
+        </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
-            <div style="margin-bottom: 2px;">
-                <strong>Codex 可用次数</strong>
+            <div style="margin-bottom: 8px;">
+                <strong>Codex 用量</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -96,11 +103,23 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            已用次数：<span id="codex-usage">N/A</span><br>
-            <div id="codex-progress-bg" style="margin-top: 8px; margin-bottom: 8px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
+                <span>已用：<span id="codex-usage">N/A</span></span>
+                <span><i>每5小时</i></span>
+            </div>
+            <div id="codex-progress-bg" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
             重置时间：<span id="codex-reset-time">N/A</span>
+            <div style="margin-top: 8px;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
+                <span>已用：<span id="codex-usage-week">N/A</span></span>
+                <span><i>每周</i></span>
+            </div>
+            <div id="codex-progress-bg-week" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+                <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
+            </div>
+            重置时间：<span id="codex-reset-time-week">N/A</span>
         </div>
         <div style="
             margin-top: 12px;
@@ -194,7 +213,7 @@
         const tooltip = document.createElement("div");
         tooltip.id = "tooltip";
         tooltip.innerText =
-            "这个值越小，代表PoW难度越高，ChatGPT认为你的IP风险越高。";
+            "这个数值越大，相当于 ChatGPT 认为你的 IP 风险越低。";
         tooltip.style.position = "fixed";
         tooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         tooltip.style.color = "#fff";
@@ -212,7 +231,7 @@
         const codexTooltip = document.createElement("div");
         codexTooltip.id = "codex-tooltip-box";
         codexTooltip.innerText =
-            "访问 Codex 主页获取可用次数，使用一次之后才开始计时。";
+            "访问 Codex 主页获取用量数据，使用一次之后才开始计时。";
         codexTooltip.style.position = "fixed";
         codexTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         codexTooltip.style.color = "#fff";
@@ -330,12 +349,10 @@
     // 更新difficulty指示器
     function updateDifficultyIndicator(difficulty) {
         const difficultyLevel = document.getElementById("difficulty-level");
-        const ipQuality = document.getElementById("ip-quality");
 
         if (difficulty === "N/A") {
             setIconColors("#888", "#666");
             difficultyLevel.innerText = "";
-            ipQuality.innerHTML = "N/A";
             powFetched = false;
             const powSection = document.getElementById("pow-section");
             if (powSection && codexFetched) powSection.style.display = "none";
@@ -345,37 +362,32 @@
         const cleanDifficulty = difficulty.replace("0x", "").replace(/^0+/, "");
         const hexLength = cleanDifficulty.length;
 
-        let color, secondaryColor, textColor, level, qualityText;
+        let color, secondaryColor, textColor, level;
 
         if (hexLength <= 2) {
             color = "#F44336";
             secondaryColor = "#d32f2f";
             textColor = "#ff6b6b";
-            level = "(困难)";
-            qualityText = "高风险";
+            level = "(风险)";
         } else if (hexLength === 3) {
             color = "#FFC107";
             secondaryColor = "#ffa000";
             textColor = "#ffd700";
             level = "(中等)";
-            qualityText = "中等";
         } else if (hexLength === 4) {
             color = "#8BC34A";
             secondaryColor = "#689f38";
             textColor = "#9acd32";
-            level = "(简单)";
-            qualityText = "良好";
+            level = "(良好)";
         } else {
             color = "#4CAF50";
             secondaryColor = "#388e3c";
             textColor = "#98fb98";
-            level = "(极易)";
-            qualityText = "优秀";
+            level = "(优秀)";
         }
 
         setIconColors(color, secondaryColor);
         difficultyLevel.innerHTML = `<span style="color: ${textColor}">${level}</span>`;
-        ipQuality.innerHTML = `<span style="color: ${textColor}">${qualityText}</span>`;
         powFetched = true;
         const powSection = document.getElementById("pow-section");
         if (powSection) powSection.style.display = "block";
@@ -389,42 +401,94 @@
         `;
     }
 
-    // 更新 Codex 可用次数进度条
-    let codexResetTime = null;
-    let codexLimit = null;
-    let codexUsed = null;
-    let codexResetsAfter = null;
-    function updateCodexInfo(limit, remaining, resetsAfter) {
+    // 更新 Codex 用量
+    let codexResetTimePrimary = null;
+    let codexResetTimeSecondary = null;
+    let codexResetsAfterPrimary = null;
+    let codexResetsAfterSecondary = null;
+    let codexUsedPercentPrimary = null; // 0~100
+    let codexUsedPercentSecondary = null; // 0~100
+    let codexLimitWindowSecondsPrimary = null;
+    let codexLimitWindowSecondsSecondary = null;
+    function updateCodexInfo(
+        pUsedPercent,
+        pResetAfter,
+        pResetAt,
+        sUsedPercent,
+        sResetAfter,
+        sResetAt,
+        pLimitWindowSecs,
+        sLimitWindowSecs
+    ) {
         const section = document.getElementById("codex-section");
-        const bar = document.getElementById("codex-progress-bar");
-        const usageEl = document.getElementById("codex-usage");
-        const resetEl = document.getElementById("codex-reset-time");
+        const barP = document.getElementById("codex-progress-bar");
+        const usageP = document.getElementById("codex-usage");
+        const resetP = document.getElementById("codex-reset-time");
 
-        if (!section || !bar || !usageEl || !resetEl) return;
+        const barS = document.getElementById("codex-progress-bar-week");
+        const usageS = document.getElementById("codex-usage-week");
+        const resetS = document.getElementById("codex-reset-time-week");
 
-        if (typeof limit !== "number" || typeof remaining !== "number") {
+        if (
+            !section ||
+            !barP ||
+            !usageP ||
+            !resetP ||
+            !barS ||
+            !usageS ||
+            !resetS
+        )
+            return;
+
+        if (
+            typeof pUsedPercent !== "number" ||
+            typeof sUsedPercent !== "number"
+        ) {
             section.style.display = "none";
             return;
         }
 
-        codexLimit = limit;
-        codexUsed = limit - (remaining + 1);
-        codexResetsAfter = resetsAfter;
-        const percent = Math.max(0, Math.min(100, (codexUsed / limit) * 100));
-        bar.style.width = `${percent}%`;
-        bar.style.background = "#C26FFD";
-        section.style.display = "block";
-        if (!powFetched) {
-            section.style.marginTop = "0";
+        codexUsedPercentPrimary = Math.max(0, Math.min(100, pUsedPercent));
+        codexUsedPercentSecondary = Math.max(0, Math.min(100, sUsedPercent));
+        codexResetsAfterPrimary =
+            typeof pResetAfter === "number" ? pResetAfter : null;
+        codexResetsAfterSecondary =
+            typeof sResetAfter === "number" ? sResetAfter : null;
+        codexLimitWindowSecondsPrimary =
+            typeof pLimitWindowSecs === "number" ? pLimitWindowSecs : null;
+        codexLimitWindowSecondsSecondary =
+            typeof sLimitWindowSecs === "number" ? sLimitWindowSecs : null;
+
+        if (codexUsedPercentPrimary > 0 && codexResetsAfterPrimary != null) {
+            codexResetTimePrimary = Date.now() + codexResetsAfterPrimary * 1000;
+        } else if (typeof pResetAt === "number") {
+            codexResetTimePrimary = pResetAt * 1000;
         } else {
-            section.style.marginTop = "10px";
+            codexResetTimePrimary = null;
         }
 
-        if (codexUsed > 0) {
-            codexResetTime = Date.now() + resetsAfter * 1000;
+        if (
+            codexUsedPercentSecondary > 0 &&
+            codexResetsAfterSecondary != null
+        ) {
+            codexResetTimeSecondary =
+                Date.now() + codexResetsAfterSecondary * 1000;
+        } else if (typeof sResetAt === "number") {
+            codexResetTimeSecondary = sResetAt * 1000;
         } else {
-            codexResetTime = null;
+            codexResetTimeSecondary = null;
         }
+
+        barP.style.width = `${codexUsedPercentPrimary}%`;
+        barS.style.width = `${codexUsedPercentSecondary}%`;
+        barP.style.background = "#C26FFD";
+        barS.style.background = "#C26FFD";
+
+        usageP.innerText = `${codexUsedPercentPrimary}%`;
+        usageS.innerText = `${codexUsedPercentSecondary}%`;
+
+        section.style.display = "block";
+        section.style.marginTop = powFetched ? "10px" : "0";
 
         codexFetched = true;
         if (!powFetched) {
@@ -435,43 +499,102 @@
         updateCodexCountdown();
     }
 
-    function updateCodexCountdown() {
-        const usageEl = document.getElementById("codex-usage");
-        const resetEl = document.getElementById("codex-reset-time");
+    function formatCodexDuration(totalSecs, omitZeroUnits) {
+        if (totalSecs == null) return "N/A";
+        const t = Math.max(0, Math.floor(totalSecs));
+        const d = Math.floor(t / 86400);
+        const h = Math.floor((t % 86400) / 3600);
+        const m = Math.floor((t % 3600) / 60);
+        const s = t % 60;
 
-        if (!usageEl || !resetEl) return;
-        if (codexLimit === null || codexUsed === null) {
-            usageEl.innerText = "N/A";
-            resetEl.innerText = "N/A";
-            return;
-        }
-
-        usageEl.innerText = `${codexUsed}/${codexLimit}`;
-
-        // 未使用时静态显示 resetsAfter 时间
-        if (codexUsed === 0 && codexResetsAfter !== null) {
-            const totalSecs = codexResetsAfter;
-            const m = Math.floor(totalSecs / 60);
-            const s = totalSecs % 60;
-            const staticStr = s ? `${m}分钟${s}秒` : `${m}分钟`;
-            resetEl.innerText = `${staticStr}（未开始）`;
-            return;
-        }
-
-        // 已使用后动态倒计时
-        if (codexResetTime) {
-            const remainingSecs = Math.max(
-                0,
-                Math.floor((codexResetTime - Date.now()) / 1000)
-            );
-            const minutes = Math.floor(remainingSecs / 60);
-            const seconds = remainingSecs % 60;
-            const timeStr = minutes
-                ? `${minutes}分钟${seconds}秒`
-                : `${seconds}秒`;
-            resetEl.innerText = timeStr;
+        if (d >= 1) {
+            const parts = [`${d}天`];
+            if (!omitZeroUnits || h > 0) parts.push(`${h}小时`);
+            if (!omitZeroUnits || m > 0) parts.push(`${m}分钟`);
+            if (!omitZeroUnits || s > 0) parts.push(`${s}秒`);
+            return parts.join("");
         } else {
-            resetEl.innerText = "N/A";
+            const parts = [];
+            if (!omitZeroUnits || h > 0) parts.push(`${h}小时`);
+            if (!omitZeroUnits || m > 0) parts.push(`${m}分钟`);
+            if (!omitZeroUnits || s > 0) parts.push(`${s}秒`);
+            return parts.length ? parts.join("") : "0秒";
+        }
+    }
+
+    function updateCodexCountdown() {
+        const resetP = document.getElementById("codex-reset-time");
+        const resetS = document.getElementById("codex-reset-time-week");
+        if (!resetP || !resetS) return;
+
+        // 五小时
+        if (codexUsedPercentPrimary == null) {
+            resetP.innerText = "N/A";
+        } else if (codexUsedPercentPrimary === 0) {
+            let secs = null;
+            if (typeof codexLimitWindowSecondsPrimary === "number") {
+                secs = codexLimitWindowSecondsPrimary + 60;
+            } else if (typeof codexResetsAfterPrimary === "number") {
+                secs = codexResetsAfterPrimary + 60;
+            } else if (typeof codexResetTimePrimary === "number") {
+                secs =
+                    Math.max(
+                        0,
+                        Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                    ) + 60;
+            }
+            resetP.innerText =
+                secs != null
+                    ? `${formatCodexDuration(secs, true)}（未开始）`
+                    : "N/A";
+        } else {
+            let secs = null;
+            if (typeof codexResetTimePrimary === "number") {
+                secs = Math.max(
+                    0,
+                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                );
+            } else if (typeof codexResetsAfterPrimary === "number") {
+                secs = Math.max(0, Math.floor(codexResetsAfterPrimary));
+            }
+            resetP.innerText =
+                secs != null ? formatCodexDuration(secs, false) : "N/A";
+        }
+
+        // 一星期
+        if (codexUsedPercentSecondary == null) {
+            resetS.innerText = "N/A";
+        } else if (codexUsedPercentSecondary === 0) {
+            let secs = null;
+            if (typeof codexLimitWindowSecondsSecondary === "number") {
+                secs = codexLimitWindowSecondsSecondary + 60;
+            } else if (typeof codexResetsAfterSecondary === "number") {
+                secs = codexResetsAfterSecondary + 60;
+            } else if (typeof codexResetTimeSecondary === "number") {
+                secs =
+                    Math.max(
+                        0,
+                        Math.floor(
+                            (codexResetTimeSecondary - Date.now()) / 1000
+                        )
+                    ) + 60;
+            }
+            resetS.innerText =
+                secs != null
+                    ? `${formatCodexDuration(secs, true)}（未开始）`
+                    : "N/A";
+        } else {
+            let secs = null;
+            if (typeof codexResetTimeSecondary === "number") {
+                secs = Math.max(
+                    0,
+                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
+                );
+            } else if (typeof codexResetsAfterSecondary === "number") {
+                secs = Math.max(0, Math.floor(codexResetsAfterSecondary));
+            }
+            resetS.innerText =
+                secs != null ? formatCodexDuration(secs, false) : "N/A";
         }
     }
     setInterval(updateCodexCountdown, 1000);
@@ -495,12 +618,7 @@
         researchReset = resetAfter || null;
 
         section.style.display = "block";
-        if (!powFetched) {
-            section.style.marginTop = "0";
-        } else {
-            section.style.marginTop = "10px";
-        }
-
+        section.style.marginTop = powFetched ? "10px" : "0";
         usageEl.innerText = `${remaining}次`;
 
         if (researchReset) {
@@ -532,12 +650,7 @@
         agentReset = resetAfter || null;
 
         section.style.display = "block";
-        if (!powFetched) {
-            section.style.marginTop = "0";
-        } else {
-            section.style.marginTop = "10px";
-        }
-
+        section.style.marginTop = powFetched ? "10px" : "0";
         usageEl.innerText = `${remaining}次`;
 
         if (agentReset) {
@@ -548,6 +661,56 @@
         } else {
             resetEl.innerText = "N/A";
         }
+    }
+
+    // 更新文件上传次数
+    let uploadRemaining = null;
+    let uploadReset = null;
+    function updateFileUploadInfo(remaining, resetAfter) {
+        const section = document.getElementById("file-upload-section");
+        const usageEl = document.getElementById("file-upload-usage");
+        const resetEl = document.getElementById("file-upload-reset-time");
+
+        if (!section || !usageEl || !resetEl) return;
+
+        if (typeof remaining !== "number") {
+            section.style.display = "none";
+            return;
+        }
+
+        uploadRemaining = remaining;
+        uploadReset = resetAfter || null;
+
+        section.style.display = "block";
+        section.style.marginTop = powFetched ? "10px" : "0";
+        usageEl.innerText = `${remaining}次`;
+
+        if (uploadReset) {
+            const date = new Date(uploadReset);
+            resetEl.innerText = date
+                .toLocaleString("zh-CN", { hour12: false })
+                .replace(/\//g, "-");
+        } else {
+            resetEl.innerText = "N/A";
+        }
+    }
+
+    // 更新默认模型
+    let defaultModelSlug = null;
+    function updateDefaultModelInfo(slug) {
+        const container = document.getElementById("default-model-container");
+        const valueEl = document.getElementById("default-model");
+        if (!container || !valueEl) return;
+
+        if (!slug || typeof slug !== "string") {
+            container.style.display = "none";
+            defaultModelSlug = null;
+            return;
+        }
+
+        defaultModelSlug = slug;
+        valueEl.innerText = slug;
+        container.style.display = "inline";
     }
 
     // 拦截 fetch 请求
@@ -646,6 +809,11 @@
                           (i) => i.feature_name === "odyssey"
                       )
                     : null;
+                const file_upload = Array.isArray(data.limits_progress)
+                    ? data.limits_progress.find(
+                          (i) => i.feature_name === "file_upload"
+                      )
+                    : null;
                 if (deep_research) {
                     updateDeepResearchInfo(
                         deep_research.remaining,
@@ -655,6 +823,17 @@
                 if (odyssey) {
                     updateAgentInfo(odyssey.remaining, odyssey.reset_after);
                 }
+                if (file_upload) {
+                    updateFileUploadInfo(
+                        file_upload.remaining,
+                        file_upload.reset_after
+                    );
+                }
+                updateDefaultModelInfo(
+                    typeof data.default_model_slug === "string"
+                        ? data.default_model_slug
+                        : null
+                );
                 return new Response(bodyText, {
                     status: response.status,
                     statusText: response.statusText,
@@ -677,7 +856,7 @@
         }
 
         if (
-            requestUrl.includes("/backend-api/wham/tasks/rate_limit") &&
+            requestUrl.includes("/backend-api/wham/usage") &&
             finalMethod === "GET" &&
             response.ok
         ) {
@@ -685,11 +864,34 @@
             try {
                 bodyText = await response.text();
                 const data = JSON.parse(bodyText);
-                if (location.pathname.startsWith("/codex")) {
+                if (
+                    location.pathname.startsWith("/codex") &&
+                    data &&
+                    data.rate_limit
+                ) {
+                    const p = data.rate_limit.primary_window || {};
+                    const s = data.rate_limit.secondary_window || {};
                     updateCodexInfo(
-                        data.limit,
-                        data.remaining,
-                        data.resets_after
+                        typeof p.used_percent === "number"
+                            ? p.used_percent
+                            : null,
+                        typeof p.reset_after_seconds === "number"
+                            ? p.reset_after_seconds
+                            : null,
+                        typeof p.reset_at === "number" ? p.reset_at : null,
+                        typeof s.used_percent === "number"
+                            ? s.used_percent
+                            : null,
+                        typeof s.reset_after_seconds === "number"
+                            ? s.reset_after_seconds
+                            : null,
+                        typeof s.reset_at === "number" ? s.reset_at : null,
+                        typeof p.limit_window_seconds === "number"
+                            ? p.limit_window_seconds
+                            : null,
+                        typeof s.limit_window_seconds === "number"
+                            ? s.limit_window_seconds
+                            : null
                     );
                 }
                 return new Response(bodyText, {
