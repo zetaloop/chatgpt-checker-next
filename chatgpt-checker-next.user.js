@@ -43,6 +43,14 @@
         displayBox.style.transition = "all 0.3s ease";
         displayBox.style.display = "none";
 
+        const scriptVersion =
+            typeof GM_info === "object" &&
+            GM_info &&
+            typeof GM_info.script === "object" &&
+            typeof GM_info.script.version === "string"
+                ? GM_info.script.version
+                : "";
+
         displayBox.innerHTML = `
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
@@ -130,7 +138,7 @@
             text-align: center;
             letter-spacing: 0.3px;
         ">
-            ChatGPT Checker Next
+            ChatGPT Checker Next${scriptVersion ? ` v${scriptVersion}` : ""}
     </div>`;
         document.body.appendChild(displayBox);
 
