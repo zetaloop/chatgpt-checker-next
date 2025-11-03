@@ -507,6 +507,14 @@
         updateCodexCountdown();
     }
 
+    function isCodexTimerNotStarted(limitSecs, resetAfterSecs) {
+        return (
+            typeof limitSecs === "number" &&
+            typeof resetAfterSecs === "number" &&
+            limitSecs === resetAfterSecs
+        );
+    }
+
     function formatCodexDuration(totalSecs, omitZeroUnits) {
         if (totalSecs == null) return "N/A";
         const t = Math.max(0, Math.floor(totalSecs));
@@ -535,25 +543,23 @@
         const resetS = document.getElementById("codex-reset-time-week");
         if (!resetP || !resetS) return;
 
+        const notStartedPrimary = isCodexTimerNotStarted(
+            codexLimitWindowSecondsPrimary,
+            codexResetsAfterPrimary
+        );
+        const notStartedSecondary = isCodexTimerNotStarted(
+            codexLimitWindowSecondsSecondary,
+            codexResetsAfterSecondary
+        );
+
         // 五小时
         if (codexUsedPercentPrimary == null) {
             resetP.innerText = "N/A";
-        } else if (codexUsedPercentPrimary === 0) {
-            let secs = null;
-            if (typeof codexLimitWindowSecondsPrimary === "number") {
-                secs = codexLimitWindowSecondsPrimary;
-            } else if (typeof codexResetsAfterPrimary === "number") {
-                secs = codexResetsAfterPrimary;
-            } else if (typeof codexResetTimePrimary === "number") {
-                secs = Math.max(
-                    0,
-                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
-                );
-            }
-            resetP.innerText =
-                secs != null
-                    ? `${formatCodexDuration(secs, true)}（未开始）`
-                    : "N/A";
+        } else if (notStartedPrimary) {
+            resetP.innerText = `${formatCodexDuration(
+                codexLimitWindowSecondsPrimary,
+                true
+            )}（未开始）`;
         } else {
             let secs = null;
             if (typeof codexResetTimePrimary === "number") {
@@ -571,22 +577,11 @@
         // 一星期
         if (codexUsedPercentSecondary == null) {
             resetS.innerText = "N/A";
-        } else if (codexUsedPercentSecondary === 0) {
-            let secs = null;
-            if (typeof codexLimitWindowSecondsSecondary === "number") {
-                secs = codexLimitWindowSecondsSecondary;
-            } else if (typeof codexResetsAfterSecondary === "number") {
-                secs = codexResetsAfterSecondary;
-            } else if (typeof codexResetTimeSecondary === "number") {
-                secs = Math.max(
-                    0,
-                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
-                );
-            }
-            resetS.innerText =
-                secs != null
-                    ? `${formatCodexDuration(secs, true)}（未开始）`
-                    : "N/A";
+        } else if (notStartedSecondary) {
+            resetS.innerText = `${formatCodexDuration(
+                codexLimitWindowSecondsSecondary,
+                true
+            )}（未开始）`;
         } else {
             let secs = null;
             if (typeof codexResetTimeSecondary === "number") {
