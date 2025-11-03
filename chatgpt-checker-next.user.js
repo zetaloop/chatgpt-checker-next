@@ -412,6 +412,8 @@
     // 更新 Codex 用量
     let codexResetTimePrimary = null;
     let codexResetTimeSecondary = null;
+    let codexResetAtPrimary = null;
+    let codexResetAtSecondary = null;
     let codexResetsAfterPrimary = null;
     let codexResetsAfterSecondary = null;
     let codexUsedPercentPrimary = null; // 0~100
@@ -448,29 +450,24 @@
         )
             return;
 
-        if (
-            typeof pUsedPercent !== "number" ||
-            typeof sUsedPercent !== "number"
-        ) {
+        if (pUsedPercent == null || sUsedPercent == null) {
             section.style.display = "none";
             return;
         }
 
         codexUsedPercentPrimary = Math.max(0, Math.min(100, pUsedPercent));
         codexUsedPercentSecondary = Math.max(0, Math.min(100, sUsedPercent));
-        codexResetsAfterPrimary =
-            typeof pResetAfter === "number" ? pResetAfter : null;
-        codexResetsAfterSecondary =
-            typeof sResetAfter === "number" ? sResetAfter : null;
-        codexLimitWindowSecondsPrimary =
-            typeof pLimitWindowSecs === "number" ? pLimitWindowSecs : null;
-        codexLimitWindowSecondsSecondary =
-            typeof sLimitWindowSecs === "number" ? sLimitWindowSecs : null;
+        codexResetsAfterPrimary = pResetAfter ?? null;
+        codexResetsAfterSecondary = sResetAfter ?? null;
+        codexLimitWindowSecondsPrimary = pLimitWindowSecs ?? null;
+        codexLimitWindowSecondsSecondary = sLimitWindowSecs ?? null;
+        codexResetAtPrimary = pResetAt != null ? pResetAt * 1000 : null;
+        codexResetAtSecondary = sResetAt != null ? sResetAt * 1000 : null;
 
         if (codexUsedPercentPrimary > 0 && codexResetsAfterPrimary != null) {
             codexResetTimePrimary = Date.now() + codexResetsAfterPrimary * 1000;
-        } else if (typeof pResetAt === "number") {
-            codexResetTimePrimary = pResetAt * 1000;
+        } else if (codexResetAtPrimary != null) {
+            codexResetTimePrimary = codexResetAtPrimary;
         } else {
             codexResetTimePrimary = null;
         }
@@ -481,8 +478,8 @@
         ) {
             codexResetTimeSecondary =
                 Date.now() + codexResetsAfterSecondary * 1000;
-        } else if (typeof sResetAt === "number") {
-            codexResetTimeSecondary = sResetAt * 1000;
+        } else if (codexResetAtSecondary != null) {
+            codexResetTimeSecondary = codexResetAtSecondary;
         } else {
             codexResetTimeSecondary = null;
         }
@@ -509,8 +506,8 @@
 
     function isCodexTimerNotStarted(limitSecs, resetAfterSecs) {
         return (
-            typeof limitSecs === "number" &&
-            typeof resetAfterSecs === "number" &&
+            limitSecs != null &&
+            resetAfterSecs != null &&
             limitSecs === resetAfterSecs
         );
     }
@@ -538,6 +535,19 @@
         }
     }
 
+    function formatCodexAbsoluteTime(timestampMs) {
+        if (timestampMs == null) return "";
+        const date = new Date(timestampMs);
+        if (Number.isNaN(date.getTime())) return "";
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const hours = `${date.getHours()}`.padStart(2, "0");
+        const minutes = `${date.getMinutes()}`.padStart(2, "0");
+        const seconds = `${date.getSeconds()}`.padStart(2, "0");
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    }
+
     function updateCodexCountdown() {
         const resetP = document.getElementById("codex-reset-time");
         const resetS = document.getElementById("codex-reset-time-week");
@@ -553,47 +563,69 @@
         );
 
         // 五小时
+        let tooltipTimestampPrimary = null;
         if (codexUsedPercentPrimary == null) {
             resetP.innerText = "N/A";
         } else if (notStartedPrimary) {
-            resetP.innerText = `${formatCodexDuration(
-                codexLimitWindowSecondsPrimary,
-                true
-            )}（未开始）`;
+            const secs = codexLimitWindowSecondsPrimary;
+            resetP.innerText = `${formatCodexDuration(secs, true)}（未开始）`;
+            tooltipTimestampPrimary = codexResetAtPrimary;
         } else {
-            let secs = null;
-            if (typeof codexResetTimePrimary === "number") {
-                secs = Math.max(
+            if (codexResetTimePrimary != null) {
+                const secs = Math.max(
                     0,
                     Math.floor((codexResetTimePrimary - Date.now()) / 1000)
                 );
-            } else if (typeof codexResetsAfterPrimary === "number") {
-                secs = Math.max(0, Math.floor(codexResetsAfterPrimary));
+                resetP.innerText = formatCodexDuration(secs, false);
+            } else {
+                resetP.innerText = "N/A";
             }
-            resetP.innerText =
-                secs != null ? formatCodexDuration(secs, false) : "N/A";
+            tooltipTimestampPrimary = codexResetAtPrimary;
+        }
+        if (tooltipTimestampPrimary != null) {
+            const tooltipText = formatCodexAbsoluteTime(
+                tooltipTimestampPrimary
+            );
+            if (tooltipText) {
+                resetP.title = tooltipText;
+            } else {
+                resetP.removeAttribute("title");
+            }
+        } else {
+            resetP.removeAttribute("title");
         }
 
         // 一星期
+        let tooltipTimestampSecondary = null;
         if (codexUsedPercentSecondary == null) {
             resetS.innerText = "N/A";
         } else if (notStartedSecondary) {
-            resetS.innerText = `${formatCodexDuration(
-                codexLimitWindowSecondsSecondary,
-                true
-            )}（未开始）`;
+            const secs = codexLimitWindowSecondsSecondary;
+            resetS.innerText = `${formatCodexDuration(secs, true)}（未开始）`;
+            tooltipTimestampSecondary = codexResetAtSecondary;
         } else {
-            let secs = null;
-            if (typeof codexResetTimeSecondary === "number") {
-                secs = Math.max(
+            if (codexResetTimeSecondary != null) {
+                const secs = Math.max(
                     0,
                     Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
                 );
-            } else if (typeof codexResetsAfterSecondary === "number") {
-                secs = Math.max(0, Math.floor(codexResetsAfterSecondary));
+                resetS.innerText = formatCodexDuration(secs, false);
+            } else {
+                resetS.innerText = "N/A";
             }
-            resetS.innerText =
-                secs != null ? formatCodexDuration(secs, false) : "N/A";
+            tooltipTimestampSecondary = codexResetAtSecondary;
+        }
+        if (tooltipTimestampSecondary != null) {
+            const tooltipText = formatCodexAbsoluteTime(
+                tooltipTimestampSecondary
+            );
+            if (tooltipText) {
+                resetS.title = tooltipText;
+            } else {
+                resetS.removeAttribute("title");
+            }
+        } else {
+            resetS.removeAttribute("title");
         }
     }
     setInterval(updateCodexCountdown, 1000);
