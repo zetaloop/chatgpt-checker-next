@@ -117,9 +117,9 @@
         </div>
         <div id="memory-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
-                <strong>记忆</strong>
+                <strong>模型记忆</strong>
             </div>
-            用量：<span id="memory-usage">...</span>
+            记忆容量：<span id="memory-usage">...</span>
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 8px;">
@@ -1150,17 +1150,29 @@
         if (container) container.style.display = "block";
     }
 
+    let memoryUsageTokens = null;
+    let memoryMaxTokensValue = null;
     function updateMemoryUsage(memoryNumTokens, memoryMaxTokens) {
         if (!isChatgptMode) return;
         const section = document.getElementById("memory-section");
         const valueEl = document.getElementById("memory-usage");
         if (!section || !valueEl) return;
-        if (
+
+        const valid =
             typeof memoryNumTokens === "number" &&
             typeof memoryMaxTokens === "number" &&
-            memoryMaxTokens > 0
+            memoryMaxTokens > 0;
+
+        if (valid) {
+            memoryUsageTokens = memoryNumTokens;
+            memoryMaxTokensValue = memoryMaxTokens;
+        }
+
+        if (
+            typeof memoryUsageTokens === "number" &&
+            typeof memoryMaxTokensValue === "number"
         ) {
-            valueEl.innerText = `${memoryNumTokens}/${memoryMaxTokens}`;
+            valueEl.innerText = `${memoryUsageTokens}/${memoryMaxTokensValue}`;
             section.style.display = "block";
             section.style.marginTop = powFetched ? "10px" : "0";
         } else {
