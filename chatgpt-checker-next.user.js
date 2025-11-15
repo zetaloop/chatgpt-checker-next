@@ -277,8 +277,7 @@
         // 创建 Codex 提示框
         const codexTooltip = document.createElement("div");
         codexTooltip.id = "codex-tooltip-box";
-        codexTooltip.innerText =
-            "访问 Codex 主页获取用量数据，使用一次之后才开始计时。";
+        codexTooltip.innerText = "使用一次之后才开始计时。";
         codexTooltip.style.position = "fixed";
         codexTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         codexTooltip.style.color = "#fff";
