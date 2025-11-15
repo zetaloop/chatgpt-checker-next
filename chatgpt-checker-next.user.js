@@ -17,6 +17,23 @@
 (function () {
     "use strict";
 
+    const MODE_CHATGPT = "chatgpt";
+    const MODE_CODEX = "codex";
+    const MODE_SORA = "sora";
+
+    function detectPageMode() {
+        const { hostname, pathname } = window.location;
+        if (hostname === "sora.chatgpt.com") return MODE_SORA;
+        if (hostname === "chatgpt.com" && pathname.startsWith("/codex")) {
+            return MODE_CODEX;
+        }
+        return MODE_CHATGPT;
+    }
+
+    const currentPageMode = detectPageMode();
+    const isChatgptMode = currentPageMode === MODE_CHATGPT;
+    const isCodexMode = currentPageMode === MODE_CODEX;
+
     function createElements() {
         if (!document.body) {
             requestAnimationFrame(createElements);
@@ -142,6 +159,28 @@
     </div>`;
         document.body.appendChild(displayBox);
 
+        const powSection = document.getElementById("pow-section");
+        const deepSection = document.getElementById("deep-research-section");
+        const odysseySection = document.getElementById("odyssey-section");
+        const fileUploadSection = document.getElementById(
+            "file-upload-section"
+        );
+        const codexSection = document.getElementById("codex-section");
+
+        if (isCodexMode) {
+            if (powSection) powSection.style.display = "none";
+            if (deepSection) deepSection.style.display = "none";
+            if (odysseySection) odysseySection.style.display = "none";
+            if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (codexSection) {
+                codexSection.style.display = "block";
+                codexSection.style.marginTop = "0";
+            }
+        } else if (codexSection) {
+            codexSection.style.display = "none";
+            codexSection.style.marginTop = "10px";
+        }
+
         // 创建收缩状态的指示器
         const collapsedIndicator = document.createElement("div");
         collapsedIndicator.style.position = "fixed";
@@ -165,8 +204,8 @@
     <svg id="status-icon" width="32" height="32" viewBox="0 0 64 64" style="transition: all 0.3s ease;">
         <defs>
             <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#2ecc71;stop-opacity:1" />
+                <stop offset="0%" style="stop-color:#888;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#666;stop-opacity:1" />
             </linearGradient>
             <filter id="glow">
                 <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
@@ -645,6 +684,7 @@
     let researchRemaining = null;
     let researchReset = null;
     function updateDeepResearchInfo(remaining, resetAfter) {
+        if (!isChatgptMode) return;
         const section = document.getElementById("deep-research-section");
         const usageEl = document.getElementById("deep-research-usage");
         const resetEl = document.getElementById("deep-research-reset-time");
@@ -679,6 +719,7 @@
     let agentRemaining = null;
     let agentReset = null;
     function updateAgentInfo(remaining, resetAfter) {
+        if (!isChatgptMode) return;
         const section = document.getElementById("odyssey-section");
         const usageEl = document.getElementById("odyssey-usage");
         const resetEl = document.getElementById("odyssey-reset-time");
@@ -713,6 +754,7 @@
     let uploadRemaining = null;
     let uploadReset = null;
     function updateFileUploadInfo(remaining, resetAfter) {
+        if (!isChatgptMode) return;
         const section = document.getElementById("file-upload-section");
         const usageEl = document.getElementById("file-upload-usage");
         const resetEl = document.getElementById("file-upload-reset-time");
@@ -746,6 +788,7 @@
     // 更新默认模型
     let defaultModelSlug = null;
     function updateDefaultModelInfo(slug) {
+        if (!isChatgptMode) return;
         const container = document.getElementById("default-model-container");
         const valueEl = document.getElementById("default-model");
         if (!container || !valueEl) return;
@@ -781,6 +824,9 @@
             finalMethod === "POST" &&
             response.ok
         ) {
+            if (!isChatgptMode) {
+                return response;
+            }
             let responseBodyText;
             try {
                 responseBodyText = await response.text();
