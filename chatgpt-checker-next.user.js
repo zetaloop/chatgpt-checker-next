@@ -73,7 +73,7 @@
             <div style="margin-bottom: 2px;">
                 <strong>服务信息</strong>
             </div>
-            PoW难度：<span id="difficulty">N/A</span><span id="difficulty-level" style="margin-left: 3px"></span>
+            PoW难度：<span id="difficulty">...</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
                 cursor: pointer;
                 color: #fff;
@@ -87,29 +87,29 @@
                 border: 1px solid #fff;
                 margin-left: 3px;
             ">?</span><br>
-            <span id="persona-container" style="display: none">用户类型：<span id="persona">N/A</span></span>
-            <span id="default-model-container" style="display: none">默认模型：<span id="default-model">N/A</span></span>
+            <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
+            <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>深度研究</strong>
             </div>
-            剩余次数：<span id="deep-research-usage">N/A</span><br>
-            重置时间：<span id="deep-research-reset-time">N/A</span>
+            剩余次数：<span id="deep-research-usage">...</span><br>
+            重置时间：<span id="deep-research-reset-time">...</span>
         </div>
         <div id="odyssey-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>代理模式</strong>
             </div>
-            剩余次数：<span id="odyssey-usage">N/A</span><br>
-            重置时间：<span id="odyssey-reset-time">N/A</span>
+            剩余次数：<span id="odyssey-usage">...</span><br>
+            重置时间：<span id="odyssey-reset-time">...</span>
         </div>
         <div id="file-upload-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>文件上传</strong>
             </div>
-            剩余次数：<span id="file-upload-usage">N/A</span><br>
-            重置时间：<span id="file-upload-reset-time">N/A</span>
+            剩余次数：<span id="file-upload-usage">...</span><br>
+            重置时间：<span id="file-upload-reset-time">...</span>
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 8px;">
@@ -129,22 +129,22 @@
                 ">?</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
-                <span>已用：<span id="codex-usage">N/A</span></span>
+                <span>已用：<span id="codex-usage">...</span></span>
                 <span><i>每5小时</i></span>
             </div>
             <div id="codex-progress-bg" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
-            重置时间：<span id="codex-reset-time">N/A</span>
+            重置时间：<span id="codex-reset-time">...</span>
             <div style="margin-top: 8px;"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
-                <span>已用：<span id="codex-usage-week">N/A</span></span>
+                <span>已用：<span id="codex-usage-week">...</span></span>
                 <span><i>每周</i></span>
             </div>
             <div id="codex-progress-bg-week" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
-            重置时间：<span id="codex-reset-time-week">N/A</span>
+            重置时间：<span id="codex-reset-time-week">...</span>
         </div>
         <div style="
             margin-top: 12px;
@@ -396,7 +396,7 @@
     function updateDifficultyIndicator(difficulty) {
         const difficultyLevel = document.getElementById("difficulty-level");
 
-        if (difficulty === "N/A") {
+        if (difficulty === "...") {
             setIconColors("#888", "#666");
             difficultyLevel.innerText = "";
             powFetched = false;
@@ -551,7 +551,7 @@
     }
 
     function formatCodexDuration(totalSecs, omitZeroUnits) {
-        if (totalSecs == null) return "N/A";
+        if (totalSecs == null) return "...";
         const t = Math.max(0, Math.floor(totalSecs));
         const d = Math.floor(t / 86400);
         const h = Math.floor((t % 86400) / 3600);
@@ -603,7 +603,7 @@
         // 五小时
         let tooltipTimestampPrimary = null;
         if (codexUsedPercentPrimary == null) {
-            resetP.innerText = "N/A";
+            resetP.innerText = "...";
         } else if (notStartedPrimary) {
             const secs = codexLimitWindowSecondsPrimary;
             resetP.innerText = `${formatCodexDuration(secs, true)}（未开始）`;
@@ -616,7 +616,7 @@
                 );
                 resetP.innerText = formatCodexDuration(secs, false);
             } else {
-                resetP.innerText = "N/A";
+                resetP.innerText = "...";
             }
             tooltipTimestampPrimary = codexResetAtPrimary;
         }
@@ -636,7 +636,7 @@
         // 一星期
         let tooltipTimestampSecondary = null;
         if (codexUsedPercentSecondary == null) {
-            resetS.innerText = "N/A";
+            resetS.innerText = "...";
         } else if (notStartedSecondary) {
             const secs = codexLimitWindowSecondsSecondary;
             resetS.innerText = `${formatCodexDuration(secs, true)}（未开始）`;
@@ -649,7 +649,7 @@
                 );
                 resetS.innerText = formatCodexDuration(secs, false);
             } else {
-                resetS.innerText = "N/A";
+                resetS.innerText = "...";
             }
             tooltipTimestampSecondary = codexResetAtSecondary;
         }
@@ -710,7 +710,7 @@
                 .toLocaleString("zh-CN", { hour12: false })
                 .replace(/\//g, "-");
         } else {
-            resetEl.innerText = "N/A";
+            resetEl.innerText = "...";
         }
     }
 
@@ -745,7 +745,7 @@
                 .toLocaleString("zh-CN", { hour12: false })
                 .replace(/\//g, "-");
         } else {
-            resetEl.innerText = "N/A";
+            resetEl.innerText = "...";
         }
     }
 
@@ -780,7 +780,7 @@
                 .toLocaleString("zh-CN", { hour12: false })
                 .replace(/\//g, "-");
         } else {
-            resetEl.innerText = "N/A";
+            resetEl.innerText = "...";
         }
     }
 
@@ -793,14 +793,15 @@
         if (!container || !valueEl) return;
 
         if (!slug || typeof slug !== "string") {
-            container.style.display = "none";
             defaultModelSlug = null;
+            valueEl.innerText = "...";
+            container.style.display = "block";
             return;
         }
 
         defaultModelSlug = slug;
         valueEl.innerText = slug;
-        container.style.display = "inline";
+        container.style.display = "block";
     }
 
     // 拦截 fetch 请求
@@ -832,8 +833,8 @@
                 const data = JSON.parse(responseBodyText);
                 const difficulty = data.proofofwork
                     ? data.proofofwork.difficulty
-                    : "N/A";
-                const persona = data.persona || "N/A";
+                    : "...";
+                const persona = data.persona || "...";
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = difficulty;
 
@@ -844,14 +845,14 @@
                     if (
                         persona &&
                         typeof persona === "string" &&
-                        persona !== "N/A" &&
+                        persona !== "..." &&
                         !persona.toLowerCase().includes("free")
                     ) {
-                        personaContainer.style.display = "block";
                         personaElement.innerText = persona;
                     } else {
-                        personaContainer.style.display = "none";
+                        personaElement.innerText = "...";
                     }
+                    personaContainer.style.display = "block";
                 }
                 updateDifficultyIndicator(difficulty);
 
@@ -866,11 +867,10 @@
                     e
                 );
                 const difficultyElement = document.getElementById("difficulty");
-                if (difficultyElement) difficultyElement.innerText = "N/A";
-                updateDifficultyIndicator("N/A");
-                const personaContainer =
-                    document.getElementById("persona-container");
-                if (personaContainer) personaContainer.style.display = "none";
+                if (difficultyElement) difficultyElement.innerText = "...";
+                updateDifficultyIndicator("...");
+                const personaElement = document.getElementById("persona");
+                if (personaElement) personaElement.innerText = "...";
 
                 if (typeof responseBodyText === "string") {
                     return new Response(responseBodyText, {
