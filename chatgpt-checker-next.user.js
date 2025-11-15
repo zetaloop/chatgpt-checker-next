@@ -165,26 +165,34 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            生成模型：<span id="sora-models">...</span><br>
-            免费次数：<span id="sora-free-usage">...</span><br>
-            重置时间：<span id="sora-reset-time">...</span>
-            <div style="margin-top: 8px; margin-bottom: 2px;">
-                <strong>积分</strong>
-                <span id="credits-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span>
+            <div id="sora-models-line" style="margin-top: 4px;">
+                生成模型：<span id="sora-models">...</span>
             </div>
-            剩余积分：<span id="sora-credits-detail">...</span>
+            <div id="sora-free-line" style="margin-top: 4px;">
+                免费次数：<span id="sora-free-usage">...</span>
+            </div>
+            <div id="sora-reset-line" style="margin-top: 4px;">
+                重置时间：<span id="sora-reset-time">...</span>
+            </div>
+            <div id="sora-credits-block" style="margin-top: 8px;">
+                <div style="margin-bottom: 2px;">
+                    <strong>积分</strong>
+                    <span id="credits-tooltip" style="
+                        cursor: pointer;
+                        color: #fff;
+                        font-size: 12px;
+                        display: inline-block;
+                        width: 14px;
+                        height: 14px;
+                        line-height: 14px;
+                        text-align: center;
+                        border-radius: 50%;
+                        border: 1px solid #fff;
+                        margin-left: 3px;
+                    ">?</span>
+                </div>
+                剩余积分：<span id="sora-credits-detail">...</span>
+            </div>
         </div>
         <div style="
             margin-top: 12px;
@@ -377,7 +385,7 @@
         const soraInfoTooltipBox = document.createElement("div");
         soraInfoTooltipBox.id = "sora-info-tooltip-box";
         soraInfoTooltipBox.innerText =
-            "Sora 1（即 Turbo 模型）没有次数限制。Sora 2 有每日免费次数，也可使用积分。";
+            "Sora 1 (也就是 Turbo) 没有次数限制。Sora 2 有每日次数，也可使用积分。";
         soraInfoTooltipBox.style.position = "fixed";
         soraInfoTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         soraInfoTooltipBox.style.color = "#fff";
@@ -766,6 +774,19 @@
     let soraResetDeadlineMs = null;
     let soraLimitWindowSeconds = null;
     let soraTimerNotStarted = false;
+    let soraSupportsQuota = null;
+
+    function applySoraQuotaVisibility() {
+        const showQuota = soraSupportsQuota !== false;
+        const freeLine = document.getElementById("sora-free-line");
+        const resetLine = document.getElementById("sora-reset-line");
+        const creditsBlock = document.getElementById("sora-credits-block");
+        if (freeLine) freeLine.style.display = showQuota ? "block" : "none";
+        if (resetLine) resetLine.style.display = showQuota ? "block" : "none";
+        if (creditsBlock)
+            creditsBlock.style.display = showQuota ? "block" : "none";
+    }
+
     function updateSoraModels(models) {
         if (!isSoraMode) return;
         const modelsEl = document.getElementById("sora-models");
@@ -792,6 +813,20 @@
             })
             .filter(Boolean);
         modelsEl.innerText = formatted.length ? formatted.join("、") : "...";
+        const hasTurbo = Array.isArray(models)
+            ? models.some((item) => {
+                  if (!item || typeof item !== "object") return false;
+                  const id =
+                      typeof item.id === "string" ? item.id.toLowerCase() : "";
+                  return id === "turbo";
+              })
+            : false;
+        if (hasTurbo) {
+            soraSupportsQuota = false;
+        } else if (formatted.length) {
+            soraSupportsQuota = true;
+        }
+        applySoraQuotaVisibility();
         setIconColors("#0A6FDC", "#074DA7");
     }
 
@@ -803,6 +838,10 @@
         estimatedPurchasedVideosRemaining
     ) {
         if (!isSoraMode) return;
+        if (soraSupportsQuota === false) {
+            applySoraQuotaVisibility();
+            return;
+        }
         const section = document.getElementById("sora-section");
         const freeUsageEl = document.getElementById("sora-free-usage");
         const resetEl = document.getElementById("sora-reset-time");
@@ -829,7 +868,7 @@
             typeof creditRemaining === "number" &&
             typeof estimatedPurchasedVideosRemaining === "number"
         ) {
-            creditsDetailEl.innerText = `${creditRemaining}，可生成${estimatedPurchasedVideosRemaining}次`;
+            creditsDetailEl.innerText = `${creditRemaining} = ${estimatedPurchasedVideosRemaining}次`;
         } else {
             creditsDetailEl.innerText = "...";
         }
