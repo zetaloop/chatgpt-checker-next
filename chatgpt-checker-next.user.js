@@ -7,6 +7,7 @@
 // @version      2.7.0
 // @description  获取 ChatGPT 的服务降级风险等级和用量信息。
 // @match        *://chatgpt.com/*
+// @match        *://sora.chatgpt.com/*
 // @grant        none
 // @run-at       document-start
 // @downloadURL  https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js
@@ -33,6 +34,7 @@
     const currentPageMode = detectPageMode();
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
+    const isSoraMode = currentPageMode === MODE_SORA;
 
     function createElements() {
         if (!document.body) {
@@ -146,6 +148,30 @@
             </div>
             重置时间：<span id="codex-reset-time-week">...</span>
         </div>
+        <div id="sora-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>Sora 2</strong>
+            </div>
+            免费次数：<span id="sora-free-usage">...</span><br>
+            重置时间：<span id="sora-reset-time">...</span>
+            <div style="margin-top: 8px; margin-bottom: 2px;">
+                <strong>积分</strong>
+                <span id="sora-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span>
+            </div>
+            剩余积分：<span id="sora-credits-detail">...</span>
+        </div>
         <div style="
             margin-top: 12px;
             padding-top: 8px;
@@ -166,19 +192,43 @@
             "file-upload-section"
         );
         const codexSection = document.getElementById("codex-section");
+        const soraSection = document.getElementById("sora-section");
 
         if (isCodexMode) {
             if (powSection) powSection.style.display = "none";
             if (deepSection) deepSection.style.display = "none";
             if (odysseySection) odysseySection.style.display = "none";
             if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (soraSection) {
+                soraSection.style.display = "none";
+                soraSection.style.marginTop = "10px";
+            }
             if (codexSection) {
                 codexSection.style.display = "block";
                 codexSection.style.marginTop = "0";
             }
-        } else if (codexSection) {
-            codexSection.style.display = "none";
-            codexSection.style.marginTop = "10px";
+        } else if (isSoraMode) {
+            if (powSection) powSection.style.display = "none";
+            if (deepSection) deepSection.style.display = "none";
+            if (odysseySection) odysseySection.style.display = "none";
+            if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (codexSection) {
+                codexSection.style.display = "none";
+                codexSection.style.marginTop = "10px";
+            }
+            if (soraSection) {
+                soraSection.style.display = "block";
+                soraSection.style.marginTop = "0";
+            }
+        } else {
+            if (codexSection) {
+                codexSection.style.display = "none";
+                codexSection.style.marginTop = "10px";
+            }
+            if (soraSection) {
+                soraSection.style.display = "none";
+                soraSection.style.marginTop = "10px";
+            }
         }
 
         // 创建收缩状态的指示器
@@ -291,6 +341,24 @@
         codexTooltip.style.pointerEvents = "none";
         document.body.appendChild(codexTooltip);
 
+        // 创建 Sora 提示框
+        const soraTooltipBox = document.createElement("div");
+        soraTooltipBox.id = "sora-tooltip-box";
+        soraTooltipBox.innerText =
+            "单独购买的积分，可用于 Codex、Sora 2 等任务。";
+        soraTooltipBox.style.position = "fixed";
+        soraTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        soraTooltipBox.style.color = "#fff";
+        soraTooltipBox.style.padding = "8px 12px";
+        soraTooltipBox.style.borderRadius = "5px";
+        soraTooltipBox.style.fontSize = "12px";
+        soraTooltipBox.style.visibility = "hidden";
+        soraTooltipBox.style.zIndex = "10001";
+        soraTooltipBox.style.width = "240px";
+        soraTooltipBox.style.lineHeight = "1.4";
+        soraTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(soraTooltipBox);
+
         // 显示提示
         document
             .getElementById("difficulty-tooltip")
@@ -353,12 +421,47 @@
             }
         }
 
-        // 延迟添加 Codex 提示事件，因为元素可能在后面动态显示
-        setTimeout(addCodexTooltipEvents, 100);
+        // Sora 提示事件处理
+        function addSoraTooltipEvents() {
+            const soraTooltipElement = document.getElementById("sora-tooltip");
+            if (soraTooltipElement) {
+                soraTooltipElement.addEventListener(
+                    "mouseenter",
+                    function (event) {
+                        soraTooltipBox.style.visibility = "visible";
+
+                        const tooltipWidth = 240;
+                        const mouseX = event.clientX;
+                        const mouseY = event.clientY;
+
+                        let leftPosition = mouseX - tooltipWidth - 10;
+                        if (leftPosition < 10) {
+                            leftPosition = mouseX + 20;
+                        }
+
+                        let topPosition = mouseY - 40;
+
+                        soraTooltipBox.style.left = `${leftPosition}px`;
+                        soraTooltipBox.style.top = `${topPosition}px`;
+                    }
+                );
+
+                soraTooltipElement.addEventListener("mouseleave", function () {
+                    soraTooltipBox.style.visibility = "hidden";
+                });
+            }
+        }
+
+        // 延迟添加 Codex/Sora 提示事件，因为元素可能在后面动态显示
+        setTimeout(() => {
+            addCodexTooltipEvents();
+            addSoraTooltipEvents();
+        }, 100);
 
         // 在 MutationObserver 中也需要重新绑定事件
         function rebindCodexEvents() {
             addCodexTooltipEvents();
+            addSoraTooltipEvents();
         }
 
         // 暴露函数供 MutationObserver 使用
@@ -668,6 +771,106 @@
     }
     setInterval(updateCodexCountdown, 1000);
 
+    // 更新 Sora 用量
+    let soraResetDeadlineMs = null;
+    let soraLimitWindowSeconds = null;
+    let soraTimerNotStarted = false;
+    function updateSoraInfo(
+        rateLimitReached,
+        accessResetsInSeconds,
+        creditRemaining,
+        estimatedVideosRemaining,
+        estimatedPurchasedVideosRemaining
+    ) {
+        if (!isSoraMode) return;
+        const section = document.getElementById("sora-section");
+        const freeUsageEl = document.getElementById("sora-free-usage");
+        const resetEl = document.getElementById("sora-reset-time");
+        const creditsDetailEl = document.getElementById("sora-credits-detail");
+
+        if (!section || !freeUsageEl || !resetEl || !creditsDetailEl) {
+            return;
+        }
+
+        if (
+            typeof estimatedVideosRemaining === "number" &&
+            typeof estimatedPurchasedVideosRemaining === "number"
+        ) {
+            const freeCount = Math.max(
+                0,
+                estimatedVideosRemaining - estimatedPurchasedVideosRemaining
+            );
+            freeUsageEl.innerText = `${freeCount}次`;
+        } else {
+            freeUsageEl.innerText = "...";
+        }
+
+        if (
+            typeof creditRemaining === "number" &&
+            typeof estimatedPurchasedVideosRemaining === "number"
+        ) {
+            creditsDetailEl.innerText = `${creditRemaining}，可生成${estimatedPurchasedVideosRemaining}次`;
+        } else {
+            creditsDetailEl.innerText = "...";
+        }
+
+        if (typeof accessResetsInSeconds === "number") {
+            soraLimitWindowSeconds = accessResetsInSeconds;
+            soraTimerNotStarted = accessResetsInSeconds === 86400;
+            if (soraTimerNotStarted) {
+                soraResetDeadlineMs = null;
+            } else {
+                soraResetDeadlineMs = Date.now() + accessResetsInSeconds * 1000;
+            }
+        } else {
+            soraResetDeadlineMs = null;
+            soraLimitWindowSeconds = null;
+            soraTimerNotStarted = false;
+            resetEl.innerText = "...";
+            resetEl.removeAttribute("title");
+        }
+        updateSoraCountdown();
+
+        section.style.display = "block";
+        section.style.marginTop = "0";
+        setIconColors("#0A6FDC", "#074DA7");
+    }
+
+    function updateSoraCountdown() {
+        if (!isSoraMode) return;
+        const resetEl = document.getElementById("sora-reset-time");
+        if (!resetEl) return;
+        if (soraTimerNotStarted) {
+            if (typeof soraLimitWindowSeconds === "number") {
+                resetEl.innerText = `${formatCodexDuration(
+                    soraLimitWindowSeconds,
+                    true
+                )}（未开始）`;
+            } else {
+                resetEl.innerText = "...";
+            }
+            resetEl.removeAttribute("title");
+            return;
+        }
+        if (soraResetDeadlineMs == null) {
+            resetEl.innerText = "...";
+            resetEl.removeAttribute("title");
+            return;
+        }
+        const remainingSecs = Math.max(
+            0,
+            Math.floor((soraResetDeadlineMs - Date.now()) / 1000)
+        );
+        resetEl.innerText = formatCodexDuration(remainingSecs, false);
+        const tooltipText = formatCodexAbsoluteTime(soraResetDeadlineMs);
+        if (tooltipText) {
+            resetEl.title = tooltipText;
+        } else {
+            resetEl.removeAttribute("title");
+        }
+    }
+    setInterval(updateSoraCountdown, 1000);
+
     function isMonthlyResetNotStarted(resetAfter) {
         if (!resetAfter) return false;
         const timestamp = new Date(resetAfter).getTime();
@@ -937,6 +1140,57 @@
                     "[DegradeChecker] 处理 Deep Research 与 Agent 响应出错:",
                     e
                 );
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend/nf/check") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isSoraMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                const info = data?.rate_limit_and_credit_balance;
+                if (info) {
+                    updateSoraInfo(
+                        typeof info.rate_limit_reached === "boolean"
+                            ? info.rate_limit_reached
+                            : null,
+                        typeof info.access_resets_in_seconds === "number"
+                            ? info.access_resets_in_seconds
+                            : null,
+                        typeof info.credit_remaining === "number"
+                            ? info.credit_remaining
+                            : null,
+                        typeof info.estimated_num_videos_remaining === "number"
+                            ? info.estimated_num_videos_remaining
+                            : null,
+                        typeof info.estimated_num_purchased_videos_remaining ===
+                            "number"
+                            ? info.estimated_num_purchased_videos_remaining
+                            : null
+                    );
+                }
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[DegradeChecker] 处理 Sora 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
