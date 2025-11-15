@@ -149,7 +149,7 @@
             重置时间：<span id="codex-reset-time-week">...</span>
         </div>
         <div id="sora-section" style="margin-top: 10px; display: none">
-            <div style="margin-top: 10px; margin-bottom: 2px;">
+            <div style="margin-bottom: 2px;">
                 <strong>Sora</strong>
             </div>
             免费次数：<span id="sora-free-usage">...</span><br>
