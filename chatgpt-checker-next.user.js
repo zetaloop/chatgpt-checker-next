@@ -35,6 +35,7 @@
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
     const isSoraMode = currentPageMode === MODE_SORA;
+    const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
     function createElements() {
         if (!document.body) {
@@ -91,6 +92,8 @@
             ">?</span><br>
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
+            <span id="adult-status-container" style="display: block">是否成年：<span id="adult-status">...</span></span>
+            <span id="memory-usage-container" style="display: block">记忆用量：<span id="memory-usage">...</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -165,16 +168,16 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            <div id="sora-models-line" style="margin-top: 4px;">
+            <div id="sora-models-container">
                 生成模型：<span id="sora-models">...</span>
             </div>
-            <div id="sora-free-line" style="margin-top: 4px;">
+            <div id="sora-free-container">
                 免费次数：<span id="sora-free-usage">...</span>
             </div>
-            <div id="sora-reset-line" style="margin-top: 4px;">
+            <div id="sora-reset-container">
                 重置时间：<span id="sora-reset-time">...</span>
             </div>
-            <div id="sora-credits-block" style="margin-top: 8px;">
+            <div id="sora-credits-container" style="margin-top: 10px;">
                 <div style="margin-bottom: 2px;">
                     <strong>积分</strong>
                     <span id="credits-tooltip" style="
@@ -708,7 +711,10 @@
             resetP.innerText = "...";
         } else if (notStartedPrimary) {
             const secs = codexLimitWindowSecondsPrimary;
-            resetP.innerText = `${formatCodexDuration(secs, true)}（未开始）`;
+            resetP.innerHTML = `${formatCodexDuration(
+                secs,
+                true
+            )}${NOT_STARTED_BADGE}`;
             tooltipTimestampPrimary = codexResetAtPrimary;
         } else {
             if (codexResetTimePrimary != null) {
@@ -741,7 +747,10 @@
             resetS.innerText = "...";
         } else if (notStartedSecondary) {
             const secs = codexLimitWindowSecondsSecondary;
-            resetS.innerText = `${formatCodexDuration(secs, true)}（未开始）`;
+            resetS.innerHTML = `${formatCodexDuration(
+                secs,
+                true
+            )}${NOT_STARTED_BADGE}`;
             tooltipTimestampSecondary = codexResetAtSecondary;
         } else {
             if (codexResetTimeSecondary != null) {
@@ -778,13 +787,17 @@
 
     function applySoraQuotaVisibility() {
         const showQuota = soraSupportsQuota !== false;
-        const freeLine = document.getElementById("sora-free-line");
-        const resetLine = document.getElementById("sora-reset-line");
-        const creditsBlock = document.getElementById("sora-credits-block");
-        if (freeLine) freeLine.style.display = showQuota ? "block" : "none";
-        if (resetLine) resetLine.style.display = showQuota ? "block" : "none";
-        if (creditsBlock)
-            creditsBlock.style.display = showQuota ? "block" : "none";
+        const freeContainer = document.getElementById("sora-free-container");
+        const resetContainer = document.getElementById("sora-reset-container");
+        const creditsContainer = document.getElementById(
+            "sora-credits-container"
+        );
+        if (freeContainer)
+            freeContainer.style.display = showQuota ? "block" : "none";
+        if (resetContainer)
+            resetContainer.style.display = showQuota ? "block" : "none";
+        if (creditsContainer)
+            creditsContainer.style.display = showQuota ? "block" : "none";
     }
 
     function updateSoraModels(models) {
@@ -901,10 +914,10 @@
         if (!resetEl) return;
         if (soraTimerNotStarted) {
             if (typeof soraLimitWindowSeconds === "number") {
-                resetEl.innerText = `${formatCodexDuration(
+                resetEl.innerHTML = `${formatCodexDuration(
                     soraLimitWindowSeconds,
                     true
-                )}（未开始）`;
+                )}${NOT_STARTED_BADGE}`;
             } else {
                 resetEl.innerText = "...";
             }
@@ -962,9 +975,11 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        usageEl.innerText = isMonthlyResetNotStarted(resetAfter)
-            ? `${remaining}次（未开始）`
-            : `${remaining}次`;
+        if (isMonthlyResetNotStarted(resetAfter)) {
+            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
+        } else {
+            usageEl.innerText = `${remaining}次`;
+        }
 
         if (researchReset) {
             const date = new Date(researchReset);
@@ -997,9 +1012,11 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        usageEl.innerText = isMonthlyResetNotStarted(resetAfter)
-            ? `${remaining}次（未开始）`
-            : `${remaining}次`;
+        if (isMonthlyResetNotStarted(resetAfter)) {
+            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
+        } else {
+            usageEl.innerText = `${remaining}次`;
+        }
 
         if (agentReset) {
             const date = new Date(agentReset);
@@ -1032,9 +1049,11 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        usageEl.innerText = isMonthlyResetNotStarted(resetAfter)
-            ? `${remaining}次（未开始）`
-            : `${remaining}次`;
+        if (isMonthlyResetNotStarted(resetAfter)) {
+            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
+        } else {
+            usageEl.innerText = `${remaining}次`;
+        }
 
         if (uploadReset) {
             const date = new Date(uploadReset);
@@ -1064,6 +1083,36 @@
         defaultModelSlug = slug;
         valueEl.innerText = slug;
         container.style.display = "block";
+    }
+
+    function updateAdultStatus(isAdult) {
+        if (!isChatgptMode) return;
+        const container = document.getElementById("adult-status-container");
+        const valueEl = document.getElementById("adult-status");
+        if (!valueEl) return;
+        if (typeof isAdult === "boolean") {
+            valueEl.innerText = isAdult ? "True" : "False";
+        } else {
+            valueEl.innerText = "...";
+        }
+        if (container) container.style.display = "block";
+    }
+
+    function updateMemoryUsage(memoryNumTokens, memoryMaxTokens) {
+        if (!isChatgptMode) return;
+        const container = document.getElementById("memory-usage-container");
+        const valueEl = document.getElementById("memory-usage");
+        if (!valueEl) return;
+        if (
+            typeof memoryNumTokens === "number" &&
+            typeof memoryMaxTokens === "number" &&
+            memoryMaxTokens > 0
+        ) {
+            valueEl.innerText = `${memoryNumTokens}/${memoryMaxTokens}`;
+        } else {
+            valueEl.innerText = "...";
+        }
+        if (container) container.style.display = "block";
     }
 
     // 拦截 fetch 请求
@@ -1136,6 +1185,77 @@
 
                 if (typeof responseBodyText === "string") {
                     return new Response(responseBodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend-api/settings/is_adult") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                updateAdultStatus(
+                    typeof data?.is_adult === "boolean" ? data.is_adult : null
+                );
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[DegradeChecker] 处理成年状态响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend-api/memories") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                updateMemoryUsage(
+                    typeof data?.memory_num_tokens === "number"
+                        ? data.memory_num_tokens
+                        : null,
+                    typeof data?.memory_max_tokens === "number"
+                        ? data.memory_max_tokens
+                        : null
+                );
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[DegradeChecker] 处理记忆用量响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
                         status: response.status,
                         statusText: response.statusText,
                         headers: response.headers,
