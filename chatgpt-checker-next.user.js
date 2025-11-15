@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      2.7.1
+// @version      2.7.2
 // @description  获取 ChatGPT 的服务降级风险等级和各功能可用额度信息。
 // @match        *://chatgpt.com/*
 // @match        *://sora.chatgpt.com/*
@@ -996,15 +996,24 @@
     }
     setInterval(updateSoraCountdown, 1000);
 
-    function isMonthlyResetNotStarted(resetAfter) {
-        if (!resetAfter) return false;
+    function isResetTimestampNear(resetAfter, expectedTimestamp) {
+        if (!resetAfter || typeof expectedTimestamp !== "number") return false;
         const timestamp = new Date(resetAfter).getTime();
         if (Number.isNaN(timestamp)) return false;
-        const now = Date.now();
-        const monthLater = new Date(now);
+        return Math.abs(timestamp - expectedTimestamp) <= 5000;
+    }
+
+    function isMonthlyResetNotStarted(resetAfter) {
+        const monthLater = new Date(Date.now());
         monthLater.setMonth(monthLater.getMonth() + 1);
-        return Math.abs(timestamp - monthLater.getTime()) <= 5000;
+        return isResetTimestampNear(resetAfter, monthLater.getTime());
         // 如果获取的时间接近当前的一个月后，认定为计数未开始
+    }
+
+    function isFileUploadResetNotStarted(resetAfter) {
+        const threeHoursLater = Date.now() + 3 * 60 * 60 * 1000;
+        return isResetTimestampNear(resetAfter, threeHoursLater);
+        // 如果获取的时间接近当前的三小时后，认定为计数未开始
     }
 
     // 更新深度研究次数
@@ -1102,7 +1111,7 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        if (isMonthlyResetNotStarted(resetAfter)) {
+        if (isFileUploadResetNotStarted(resetAfter)) {
             usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
         } else {
             usageEl.innerText = `${remaining}次`;
