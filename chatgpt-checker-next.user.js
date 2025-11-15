@@ -74,7 +74,7 @@
         displayBox.innerHTML = `
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
-                <strong>服务信息</strong>
+                <strong>ChatGPT</strong>
             </div>
             PoW难度：<span id="difficulty">...</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
@@ -93,7 +93,6 @@
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
             <span id="adult-status-container" style="display: block">是否成年：<span id="adult-status">...</span></span>
-            <span id="memory-usage-container" style="display: block">记忆用量：<span id="memory-usage">...</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -115,6 +114,12 @@
             </div>
             剩余次数：<span id="file-upload-usage">...</span><br>
             重置时间：<span id="file-upload-reset-time">...</span>
+        </div>
+        <div id="memory-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>记忆</strong>
+            </div>
+            用量：<span id="memory-usage">...</span>
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 8px;">
@@ -1147,19 +1152,21 @@
 
     function updateMemoryUsage(memoryNumTokens, memoryMaxTokens) {
         if (!isChatgptMode) return;
-        const container = document.getElementById("memory-usage-container");
+        const section = document.getElementById("memory-section");
         const valueEl = document.getElementById("memory-usage");
-        if (!valueEl) return;
+        if (!section || !valueEl) return;
         if (
             typeof memoryNumTokens === "number" &&
             typeof memoryMaxTokens === "number" &&
             memoryMaxTokens > 0
         ) {
             valueEl.innerText = `${memoryNumTokens}/${memoryMaxTokens}`;
+            section.style.display = "block";
+            section.style.marginTop = powFetched ? "10px" : "0";
         } else {
             valueEl.innerText = "...";
+            section.style.display = "none";
         }
-        if (container) container.style.display = "block";
     }
 
     // 拦截 fetch 请求
