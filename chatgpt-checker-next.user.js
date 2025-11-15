@@ -115,7 +115,7 @@
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 8px;">
-                <strong>Codex 用量</strong>
+                <strong>Codex</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -150,7 +150,7 @@
         </div>
         <div id="sora-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
-                <strong>Sora 2</strong>
+                <strong>Sora</strong>
             </div>
             免费次数：<span id="sora-free-usage">...</span><br>
             重置时间：<span id="sora-reset-time">...</span>
@@ -345,7 +345,7 @@
         const soraTooltipBox = document.createElement("div");
         soraTooltipBox.id = "sora-tooltip-box";
         soraTooltipBox.innerText =
-            "单独购买的积分，可用于 Codex、Sora 2 等任务。";
+            "单独购买的积分，可用于 Codex、Sora 等任务。";
         soraTooltipBox.style.position = "fixed";
         soraTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         soraTooltipBox.style.color = "#fff";
