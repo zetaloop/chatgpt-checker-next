@@ -150,6 +150,25 @@
                 <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
             重置时间：<span id="codex-reset-time-week">...</span>
+            <div id="codex-credits-container" style="margin-top: 10px; display: none;">
+                <div style="margin-bottom: 2px;">
+                    <strong>积分</strong>
+                    <span id="codex-credits-tooltip" style="
+                        cursor: pointer;
+                        color: #fff;
+                        font-size: 12px;
+                        display: inline-block;
+                        width: 14px;
+                        height: 14px;
+                        line-height: 14px;
+                        text-align: center;
+                        border-radius: 50%;
+                        border: 1px solid #fff;
+                        margin-left: 3px;
+                    ">?</span>
+                </div>
+                剩余积分：<span id="codex-credits-value">...</span>
+            </div>
         </div>
         <div id="sora-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 2px;">
@@ -177,7 +196,7 @@
             <div id="sora-reset-container">
                 重置时间：<span id="sora-reset-time">...</span>
             </div>
-            <div id="sora-credits-container" style="margin-top: 10px;">
+            <div id="sora-credits-container" style="margin-top: 10px; display: none;">
                 <div style="margin-bottom: 2px;">
                     <strong>积分</strong>
                     <span id="credits-tooltip" style="
@@ -460,6 +479,7 @@
         function bindAllTooltips() {
             bindTooltipEvents("codex-tooltip", codexTooltipBox);
             bindTooltipEvents("credits-tooltip", creditsTooltipBox);
+            bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
         }
 
@@ -647,6 +667,27 @@
         updateCodexCountdown();
     }
 
+    function updateCodexCredits(credits) {
+        if (!isCodexMode) return;
+        const container = document.getElementById("codex-credits-container");
+        const valueEl = document.getElementById("codex-credits-value");
+        if (!container || !valueEl) return;
+        const balanceRaw =
+            credits &&
+            (typeof credits.balance === "string"
+                ? credits.balance.trim()
+                : typeof credits.balance === "number"
+                ? String(credits.balance)
+                : "");
+        if (balanceRaw) {
+            valueEl.innerText = balanceRaw;
+            container.style.display = "block";
+        } else {
+            valueEl.innerText = "...";
+            container.style.display = "none";
+        }
+    }
+
     function isCodexTimerNotStarted(limitSecs, resetAfterSecs) {
         return (
             limitSecs != null &&
@@ -784,6 +825,7 @@
     let soraLimitWindowSeconds = null;
     let soraTimerNotStarted = false;
     let soraSupportsQuota = null;
+    let soraCreditsAvailable = false;
 
     function applySoraQuotaVisibility() {
         const showQuota = soraSupportsQuota !== false;
@@ -796,8 +838,10 @@
             freeContainer.style.display = showQuota ? "block" : "none";
         if (resetContainer)
             resetContainer.style.display = showQuota ? "block" : "none";
-        if (creditsContainer)
-            creditsContainer.style.display = showQuota ? "block" : "none";
+        if (creditsContainer) {
+            const showCredits = showQuota && soraCreditsAvailable;
+            creditsContainer.style.display = showCredits ? "block" : "none";
+        }
     }
 
     function updateSoraModels(models) {
@@ -852,6 +896,7 @@
     ) {
         if (!isSoraMode) return;
         if (soraSupportsQuota === false) {
+            soraCreditsAvailable = false;
             applySoraQuotaVisibility();
             return;
         }
@@ -877,14 +922,15 @@
             freeUsageEl.innerText = "...";
         }
 
-        if (
+        const hasCredits =
             typeof creditRemaining === "number" &&
-            typeof estimatedPurchasedVideosRemaining === "number"
-        ) {
+            typeof estimatedPurchasedVideosRemaining === "number";
+        if (hasCredits) {
             creditsDetailEl.innerText = `${creditRemaining} = ${estimatedPurchasedVideosRemaining}次`;
         } else {
             creditsDetailEl.innerText = "...";
         }
+        soraCreditsAvailable = hasCredits;
 
         if (typeof accessResetsInSeconds === "number") {
             soraLimitWindowSeconds = accessResetsInSeconds;
@@ -902,6 +948,7 @@
             resetEl.removeAttribute("title");
         }
         updateSoraCountdown();
+        applySoraQuotaVisibility();
 
         section.style.display = "block";
         section.style.marginTop = "0";
@@ -1454,6 +1501,7 @@
                             ? s.limit_window_seconds
                             : null
                     );
+                    updateCodexCredits(data.credits);
                 }
                 return new Response(bodyText, {
                     status: response.status,
