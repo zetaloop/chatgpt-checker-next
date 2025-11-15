@@ -630,6 +630,17 @@
     }
     setInterval(updateCodexCountdown, 1000);
 
+    function isMonthlyResetNotStarted(resetAfter) {
+        if (!resetAfter) return false;
+        const timestamp = new Date(resetAfter).getTime();
+        if (Number.isNaN(timestamp)) return false;
+        const now = Date.now();
+        const monthLater = new Date(now);
+        monthLater.setMonth(monthLater.getMonth() + 1);
+        return Math.abs(timestamp - monthLater.getTime()) <= 5000;
+        // 如果获取的时间接近当前的一个月后，认定为计数未开始
+    }
+
     // 更新深度研究次数
     let researchRemaining = null;
     let researchReset = null;
@@ -650,7 +661,9 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        usageEl.innerText = `${remaining}次`;
+        usageEl.innerText = isMonthlyResetNotStarted(resetAfter)
+            ? `${remaining}次（未开始）`
+            : `${remaining}次`;
 
         if (researchReset) {
             const date = new Date(researchReset);
@@ -682,7 +695,9 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        usageEl.innerText = `${remaining}次`;
+        usageEl.innerText = isMonthlyResetNotStarted(resetAfter)
+            ? `${remaining}次（未开始）`
+            : `${remaining}次`;
 
         if (agentReset) {
             const date = new Date(agentReset);
@@ -714,7 +729,9 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        usageEl.innerText = `${remaining}次`;
+        usageEl.innerText = isMonthlyResetNotStarted(resetAfter)
+            ? `${remaining}次（未开始）`
+            : `${remaining}次`;
 
         if (uploadReset) {
             const date = new Date(uploadReset);
