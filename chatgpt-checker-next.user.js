@@ -890,7 +890,7 @@
             soraSupportsQuota = true;
         }
         applySoraQuotaVisibility();
-        setIconColors("#0A6FDC", "#074DA7");
+        setIconColors("#2E91F6", "#1666D6");
     }
 
     function updateSoraInfo(
@@ -958,7 +958,7 @@
 
         section.style.display = "block";
         section.style.marginTop = "0";
-        setIconColors("#0A6FDC", "#074DA7");
+        setIconColors("#2E91F6", "#1666D6");
     }
 
     function updateSoraCountdown() {
