@@ -43,11 +43,11 @@
             return;
         }
 
-        if (document.getElementById("degrade-checker-displayBox")) return;
+        if (document.getElementById("checker-next-displayBox")) return;
 
         // 创建显示框
         const displayBox = document.createElement("div");
-        displayBox.id = "degrade-checker-displayBox";
+        displayBox.id = "checker-next-displayBox";
         displayBox.style.position = "fixed";
         displayBox.style.top = "50%";
         displayBox.style.right = "20px";
@@ -501,7 +501,7 @@
     // 使用 MutationObserver 观测 DOM 改动
     const observer = new MutationObserver((mutationsList, observer) => {
         // 保持检测器元素
-        if (!document.getElementById("degrade-checker-displayBox")) {
+        if (!document.getElementById("checker-next-displayBox")) {
             createElements();
         }
         // 重新绑定 Codex 事件
@@ -1239,10 +1239,7 @@
                     headers: response.headers,
                 });
             } catch (e) {
-                console.error(
-                    "[DegradeChecker] 处理响应或重新创建响应时出错:",
-                    e
-                );
+                console.error("[CheckerNext] 处理响应或重新创建响应时出错:", e);
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = "...";
                 updateDifficultyIndicator("...");
@@ -1281,7 +1278,7 @@
                     headers: response.headers,
                 });
             } catch (e) {
-                console.error("[DegradeChecker] 处理成年状态响应出错:", e);
+                console.error("[CheckerNext] 处理成年状态响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
@@ -1319,7 +1316,7 @@
                     headers: response.headers,
                 });
             } catch (e) {
-                console.error("[DegradeChecker] 处理记忆用量响应出错:", e);
+                console.error("[CheckerNext] 处理记忆用量响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
@@ -1382,7 +1379,7 @@
                 });
             } catch (e) {
                 console.error(
-                    "[DegradeChecker] 处理 Deep Research 与 Agent 响应出错:",
+                    "[CheckerNext] 处理 Deep Research 与 Agent 响应出错:",
                     e
                 );
                 if (typeof bodyText === "string") {
@@ -1435,7 +1432,7 @@
                     headers: response.headers,
                 });
             } catch (e) {
-                console.error("[DegradeChecker] 处理 Sora 响应出错:", e);
+                console.error("[CheckerNext] 处理 Sora 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
@@ -1470,7 +1467,7 @@
                     headers: response.headers,
                 });
             } catch (e) {
-                console.error("[DegradeChecker] 处理 Sora 模型响应出错:", e);
+                console.error("[CheckerNext] 处理 Sora 模型响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
@@ -1528,7 +1525,7 @@
                     headers: response.headers,
                 });
             } catch (e) {
-                console.error("[DegradeChecker] 处理 Codex 响应出错:", e);
+                console.error("[CheckerNext] 处理 Codex 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
