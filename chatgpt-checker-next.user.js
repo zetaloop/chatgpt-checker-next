@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      2.7.0
+// @version      2.7.1
 // @description  获取 ChatGPT 的服务降级风险等级和各功能可用额度信息。
 // @match        *://chatgpt.com/*
 // @match        *://sora.chatgpt.com/*
@@ -92,6 +92,7 @@
             ">?</span><br>
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
+            <span id="price-region-container" style="display: block">价格地区：<span id="price-region">...</span></span>
             <span id="adult-status-container" style="display: block">是否成年：<span id="adult-status">...</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
@@ -1137,6 +1138,23 @@
         container.style.display = "block";
     }
 
+    let priceRegionCode = null;
+    function updatePriceRegion(countryCode) {
+        if (!isChatgptMode) return;
+        const container = document.getElementById("price-region-container");
+        const valueEl = document.getElementById("price-region");
+        if (!container || !valueEl) return;
+
+        if (typeof countryCode === "string" && countryCode.trim()) {
+            priceRegionCode = countryCode.trim().toUpperCase();
+        } else {
+            priceRegionCode = null;
+        }
+
+        valueEl.innerText = priceRegionCode || "...";
+        container.style.display = "block";
+    }
+
     function updateAdultStatus(isAdult) {
         if (!isChatgptMode) return;
         const container = document.getElementById("adult-status-container");
@@ -1279,6 +1297,43 @@
                 });
             } catch (e) {
                 console.error("[CheckerNext] 处理成年状态响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes(
+                "/backend-api/checkout_pricing_config/configs"
+            ) &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                updatePriceRegion(
+                    typeof data?.country_code === "string"
+                        ? data.country_code
+                        : null
+                );
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理价格地区响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
