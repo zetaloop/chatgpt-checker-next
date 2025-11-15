@@ -151,12 +151,26 @@
         <div id="sora-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 2px;">
                 <strong>Sora</strong>
+                <span id="sora-info-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span>
             </div>
+            生成模型：<span id="sora-models">...</span><br>
             免费次数：<span id="sora-free-usage">...</span><br>
             重置时间：<span id="sora-reset-time">...</span>
             <div style="margin-top: 8px; margin-bottom: 2px;">
                 <strong>积分</strong>
-                <span id="sora-tooltip" style="
+                <span id="credits-tooltip" style="
                     cursor: pointer;
                     color: #fff;
                     font-size: 12px;
@@ -325,39 +339,57 @@
         document.body.appendChild(tooltip);
 
         // 创建 Codex 提示框
-        const codexTooltip = document.createElement("div");
-        codexTooltip.id = "codex-tooltip-box";
-        codexTooltip.innerText = "使用一次之后才开始计时。";
-        codexTooltip.style.position = "fixed";
-        codexTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        codexTooltip.style.color = "#fff";
-        codexTooltip.style.padding = "8px 12px";
-        codexTooltip.style.borderRadius = "5px";
-        codexTooltip.style.fontSize = "12px";
-        codexTooltip.style.visibility = "hidden";
-        codexTooltip.style.zIndex = "10001";
-        codexTooltip.style.width = "240px";
-        codexTooltip.style.lineHeight = "1.4";
-        codexTooltip.style.pointerEvents = "none";
-        document.body.appendChild(codexTooltip);
+        const codexTooltipBox = document.createElement("div");
+        codexTooltipBox.id = "codex-tooltip-box";
+        codexTooltipBox.innerText = "使用一次之后才开始计时。";
+        codexTooltipBox.style.position = "fixed";
+        codexTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        codexTooltipBox.style.color = "#fff";
+        codexTooltipBox.style.padding = "8px 12px";
+        codexTooltipBox.style.borderRadius = "5px";
+        codexTooltipBox.style.fontSize = "12px";
+        codexTooltipBox.style.visibility = "hidden";
+        codexTooltipBox.style.zIndex = "10001";
+        codexTooltipBox.style.width = "240px";
+        codexTooltipBox.style.lineHeight = "1.4";
+        codexTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(codexTooltipBox);
 
-        // 创建 Sora 提示框
-        const soraTooltipBox = document.createElement("div");
-        soraTooltipBox.id = "sora-tooltip-box";
-        soraTooltipBox.innerText =
+        // 创建积分提示框
+        const creditsTooltipBox = document.createElement("div");
+        creditsTooltipBox.id = "credits-tooltip-box";
+        creditsTooltipBox.innerText =
             "单独购买的积分，可用于 Codex、Sora 等任务。";
-        soraTooltipBox.style.position = "fixed";
-        soraTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        soraTooltipBox.style.color = "#fff";
-        soraTooltipBox.style.padding = "8px 12px";
-        soraTooltipBox.style.borderRadius = "5px";
-        soraTooltipBox.style.fontSize = "12px";
-        soraTooltipBox.style.visibility = "hidden";
-        soraTooltipBox.style.zIndex = "10001";
-        soraTooltipBox.style.width = "240px";
-        soraTooltipBox.style.lineHeight = "1.4";
-        soraTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(soraTooltipBox);
+        creditsTooltipBox.style.position = "fixed";
+        creditsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        creditsTooltipBox.style.color = "#fff";
+        creditsTooltipBox.style.padding = "8px 12px";
+        creditsTooltipBox.style.borderRadius = "5px";
+        creditsTooltipBox.style.fontSize = "12px";
+        creditsTooltipBox.style.visibility = "hidden";
+        creditsTooltipBox.style.zIndex = "10001";
+        creditsTooltipBox.style.width = "240px";
+        creditsTooltipBox.style.lineHeight = "1.4";
+        creditsTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(creditsTooltipBox);
+
+        // 创建 Sora 信息提示框
+        const soraInfoTooltipBox = document.createElement("div");
+        soraInfoTooltipBox.id = "sora-info-tooltip-box";
+        soraInfoTooltipBox.innerText =
+            "Sora 1（即 Turbo 模型）没有次数限制。Sora 2 有每日免费次数，也可使用积分。";
+        soraInfoTooltipBox.style.position = "fixed";
+        soraInfoTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        soraInfoTooltipBox.style.color = "#fff";
+        soraInfoTooltipBox.style.padding = "8px 12px";
+        soraInfoTooltipBox.style.borderRadius = "5px";
+        soraInfoTooltipBox.style.fontSize = "12px";
+        soraInfoTooltipBox.style.visibility = "hidden";
+        soraInfoTooltipBox.style.zIndex = "10001";
+        soraInfoTooltipBox.style.width = "240px";
+        soraInfoTooltipBox.style.lineHeight = "1.4";
+        soraInfoTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(soraInfoTooltipBox);
 
         // 显示提示
         document
@@ -388,84 +420,43 @@
                 tooltip.style.visibility = "hidden";
             });
 
-        // Codex 提示事件处理
-        function addCodexTooltipEvents() {
-            const codexTooltipElement =
-                document.getElementById("codex-tooltip");
-            if (codexTooltipElement) {
-                codexTooltipElement.addEventListener(
-                    "mouseenter",
-                    function (event) {
-                        codexTooltip.style.visibility = "visible";
+        function bindTooltipEvents(triggerId, tooltipElement) {
+            const trigger = document.getElementById(triggerId);
+            if (!trigger || !tooltipElement) return;
+            trigger.addEventListener("mouseenter", function (event) {
+                tooltipElement.style.visibility = "visible";
 
-                        const tooltipWidth = 240;
-                        const windowWidth = window.innerWidth;
-                        const mouseX = event.clientX;
-                        const mouseY = event.clientY;
+                const tooltipWidth = 240;
+                const mouseX = event.clientX;
+                const mouseY = event.clientY;
 
-                        let leftPosition = mouseX - tooltipWidth - 10;
-                        if (leftPosition < 10) {
-                            leftPosition = mouseX + 20;
-                        }
+                let leftPosition = mouseX - tooltipWidth - 10;
+                if (leftPosition < 10) {
+                    leftPosition = mouseX + 20;
+                }
 
-                        let topPosition = mouseY - 40;
+                let topPosition = mouseY - 40;
 
-                        codexTooltip.style.left = `${leftPosition}px`;
-                        codexTooltip.style.top = `${topPosition}px`;
-                    }
-                );
+                tooltipElement.style.left = `${leftPosition}px`;
+                tooltipElement.style.top = `${topPosition}px`;
+            });
 
-                codexTooltipElement.addEventListener("mouseleave", function () {
-                    codexTooltip.style.visibility = "hidden";
-                });
-            }
+            trigger.addEventListener("mouseleave", function () {
+                tooltipElement.style.visibility = "hidden";
+            });
         }
 
-        // Sora 提示事件处理
-        function addSoraTooltipEvents() {
-            const soraTooltipElement = document.getElementById("sora-tooltip");
-            if (soraTooltipElement) {
-                soraTooltipElement.addEventListener(
-                    "mouseenter",
-                    function (event) {
-                        soraTooltipBox.style.visibility = "visible";
-
-                        const tooltipWidth = 240;
-                        const mouseX = event.clientX;
-                        const mouseY = event.clientY;
-
-                        let leftPosition = mouseX - tooltipWidth - 10;
-                        if (leftPosition < 10) {
-                            leftPosition = mouseX + 20;
-                        }
-
-                        let topPosition = mouseY - 40;
-
-                        soraTooltipBox.style.left = `${leftPosition}px`;
-                        soraTooltipBox.style.top = `${topPosition}px`;
-                    }
-                );
-
-                soraTooltipElement.addEventListener("mouseleave", function () {
-                    soraTooltipBox.style.visibility = "hidden";
-                });
-            }
+        function bindAllTooltips() {
+            bindTooltipEvents("codex-tooltip", codexTooltipBox);
+            bindTooltipEvents("credits-tooltip", creditsTooltipBox);
+            bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
         }
 
-        // 延迟添加 Codex/Sora 提示事件，因为元素可能在后面动态显示
-        setTimeout(() => {
-            addCodexTooltipEvents();
-            addSoraTooltipEvents();
-        }, 100);
+        // 延迟添加提示事件，因为元素可能在后面动态显示
+        setTimeout(bindAllTooltips, 100);
 
         // 在 MutationObserver 中也需要重新绑定事件
-        function rebindCodexEvents() {
-            addCodexTooltipEvents();
-            addSoraTooltipEvents();
-        }
-
-        // 暴露函数供 MutationObserver 使用
-        window.rebindCodexEvents = rebindCodexEvents;
+        window.rebindCodexEvents = bindAllTooltips;
     }
 
     // 创建元素
@@ -775,6 +766,35 @@
     let soraResetDeadlineMs = null;
     let soraLimitWindowSeconds = null;
     let soraTimerNotStarted = false;
+    function updateSoraModels(models) {
+        if (!isSoraMode) return;
+        const modelsEl = document.getElementById("sora-models");
+        if (!modelsEl) return;
+        if (!Array.isArray(models) || models.length === 0) {
+            modelsEl.innerText = "...";
+            return;
+        }
+        const formatted = models
+            .map((item) => {
+                if (!item || typeof item !== "object") return null;
+                const label =
+                    typeof item.label === "string" && item.label.trim()
+                        ? item.label.trim()
+                        : "";
+                const id =
+                    typeof item.id === "string" && item.id.trim()
+                        ? item.id.trim()
+                        : "";
+                if (label && id) return `${label} (${id})`;
+                if (label) return label;
+                if (id) return id;
+                return null;
+            })
+            .filter(Boolean);
+        modelsEl.innerText = formatted.length ? formatted.join("、") : "...";
+        setIconColors("#0A6FDC", "#074DA7");
+    }
+
     function updateSoraInfo(
         rateLimitReached,
         accessResetsInSeconds,
@@ -1191,6 +1211,41 @@
                 });
             } catch (e) {
                 console.error("[DegradeChecker] 处理 Sora 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend/models") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isSoraMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                if (Array.isArray(data?.data)) {
+                    updateSoraModels(data.data);
+                } else {
+                    updateSoraModels(null);
+                }
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[DegradeChecker] 处理 Sora 模型响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
