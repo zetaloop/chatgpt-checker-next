@@ -1,0 +1,43 @@
+{
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": true
+        }
+    },
+    "javascript": {
+        "globals": [
+            "GM_info",
+            "GM_getValue",
+            "GM_setValue",
+            "GM_xmlhttpRequest",
+            "unsafeWindow"
+        ]
+    },
+    "overrides": [
+        {
+            "includes": ["**/*.user.js"],
+            "linter": {
+                "rules": {
+                    "complexity": {
+                        "useArrowFunction": "off"
+                    },
+                    "suspicious": {
+                        "noRedundantUseStrict": "off"
+                    },
+                    "correctness": {
+                        "noUnusedVariables": "off",
+                        "noUnusedFunctionParameters": "off"
+                    },
+                    "style": {
+                        "useConst": "off"
+                    }
+                }
+            }
+        }
+    ]
+}

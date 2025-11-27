@@ -239,7 +239,7 @@
         const deepSection = document.getElementById("deep-research-section");
         const odysseySection = document.getElementById("odyssey-section");
         const fileUploadSection = document.getElementById(
-            "file-upload-section"
+            "file-upload-section",
         );
         const codexSection = document.getElementById("codex-section");
         const soraSection = document.getElementById("sora-section");
@@ -597,7 +597,7 @@
         sResetAfter,
         sResetAt,
         pLimitWindowSecs,
-        sLimitWindowSecs
+        sLimitWindowSecs,
     ) {
         const section = document.getElementById("codex-section");
         const barP = document.getElementById("codex-progress-bar");
@@ -683,8 +683,8 @@
             (typeof credits.balance === "string"
                 ? credits.balance.trim()
                 : typeof credits.balance === "number"
-                ? String(credits.balance)
-                : "");
+                  ? String(credits.balance)
+                  : "");
         if (balanceRaw) {
             valueEl.innerText = balanceRaw;
             container.style.display = "block";
@@ -745,11 +745,11 @@
 
         const notStartedPrimary = isCodexTimerNotStarted(
             codexLimitWindowSecondsPrimary,
-            codexResetsAfterPrimary
+            codexResetsAfterPrimary,
         );
         const notStartedSecondary = isCodexTimerNotStarted(
             codexLimitWindowSecondsSecondary,
-            codexResetsAfterSecondary
+            codexResetsAfterSecondary,
         );
 
         // 五小时
@@ -760,14 +760,14 @@
             const secs = codexLimitWindowSecondsPrimary;
             resetP.innerHTML = `${formatCodexDuration(
                 secs,
-                true
+                true,
             )}${NOT_STARTED_BADGE}`;
             tooltipTimestampPrimary = codexResetAtPrimary;
         } else {
             if (codexResetTimePrimary != null) {
                 const secs = Math.max(
                     0,
-                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                    Math.floor((codexResetTimePrimary - Date.now()) / 1000),
                 );
                 resetP.innerText = formatCodexDuration(secs, false);
             } else {
@@ -777,7 +777,7 @@
         }
         if (tooltipTimestampPrimary != null) {
             const tooltipText = formatCodexAbsoluteTime(
-                tooltipTimestampPrimary
+                tooltipTimestampPrimary,
             );
             if (tooltipText) {
                 resetP.title = tooltipText;
@@ -796,14 +796,14 @@
             const secs = codexLimitWindowSecondsSecondary;
             resetS.innerHTML = `${formatCodexDuration(
                 secs,
-                true
+                true,
             )}${NOT_STARTED_BADGE}`;
             tooltipTimestampSecondary = codexResetAtSecondary;
         } else {
             if (codexResetTimeSecondary != null) {
                 const secs = Math.max(
                     0,
-                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
+                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000),
                 );
                 resetS.innerText = formatCodexDuration(secs, false);
             } else {
@@ -813,7 +813,7 @@
         }
         if (tooltipTimestampSecondary != null) {
             const tooltipText = formatCodexAbsoluteTime(
-                tooltipTimestampSecondary
+                tooltipTimestampSecondary,
             );
             if (tooltipText) {
                 resetS.title = tooltipText;
@@ -838,7 +838,7 @@
         const freeContainer = document.getElementById("sora-free-container");
         const resetContainer = document.getElementById("sora-reset-container");
         const creditsContainer = document.getElementById(
-            "sora-credits-container"
+            "sora-credits-container",
         );
         if (freeContainer)
             freeContainer.style.display = showQuota ? "block" : "none";
@@ -898,7 +898,7 @@
         accessResetsInSeconds,
         creditRemaining,
         estimatedVideosRemaining,
-        estimatedPurchasedVideosRemaining
+        estimatedPurchasedVideosRemaining,
     ) {
         if (!isSoraMode) return;
         if (soraSupportsQuota === false) {
@@ -921,7 +921,7 @@
         ) {
             const freeCount = Math.max(
                 0,
-                estimatedVideosRemaining - estimatedPurchasedVideosRemaining
+                estimatedVideosRemaining - estimatedPurchasedVideosRemaining,
             );
             freeUsageEl.innerText = `${freeCount}次`;
         } else {
@@ -969,7 +969,7 @@
             if (typeof soraLimitWindowSeconds === "number") {
                 resetEl.innerHTML = `${formatCodexDuration(
                     soraLimitWindowSeconds,
-                    true
+                    true,
                 )}${NOT_STARTED_BADGE}`;
             } else {
                 resetEl.innerText = "...";
@@ -984,7 +984,7 @@
         }
         const remainingSecs = Math.max(
             0,
-            Math.floor((soraResetDeadlineMs - Date.now()) / 1000)
+            Math.floor((soraResetDeadlineMs - Date.now()) / 1000),
         );
         resetEl.innerText = formatCodexDuration(remainingSecs, false);
         const tooltipText = formatCodexAbsoluteTime(soraResetDeadlineMs);
@@ -1223,7 +1223,7 @@
         if (
             (requestUrl.includes("/backend-api/sentinel/chat-requirements") ||
                 requestUrl.includes(
-                    "/backend-anon/sentinel/chat-requirements"
+                    "/backend-anon/sentinel/chat-requirements",
                 )) &&
             finalMethod === "POST" &&
             response.ok
@@ -1297,7 +1297,7 @@
                 bodyText = await response.text();
                 const data = JSON.parse(bodyText);
                 updateAdultStatus(
-                    typeof data?.is_adult === "boolean" ? data.is_adult : null
+                    typeof data?.is_adult === "boolean" ? data.is_adult : null,
                 );
                 return new Response(bodyText, {
                     status: response.status,
@@ -1319,7 +1319,7 @@
 
         if (
             requestUrl.includes(
-                "/backend-api/checkout_pricing_config/configs"
+                "/backend-api/checkout_pricing_config/configs",
             ) &&
             finalMethod === "GET" &&
             response.ok
@@ -1334,7 +1334,7 @@
                 updatePriceRegion(
                     typeof data?.country_code === "string"
                         ? data.country_code
-                        : null
+                        : null,
                 );
                 return new Response(bodyText, {
                     status: response.status,
@@ -1372,7 +1372,7 @@
                         : null,
                     typeof data?.memory_max_tokens === "number"
                         ? data.memory_max_tokens
-                        : null
+                        : null,
                 );
                 return new Response(bodyText, {
                     status: response.status,
@@ -1403,23 +1403,23 @@
                 const data = JSON.parse(bodyText);
                 const deep_research = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
-                          (i) => i.feature_name === "deep_research"
+                          (i) => i.feature_name === "deep_research",
                       )
                     : null;
                 const odyssey = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
-                          (i) => i.feature_name === "odyssey"
+                          (i) => i.feature_name === "odyssey",
                       )
                     : null;
                 const file_upload = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
-                          (i) => i.feature_name === "file_upload"
+                          (i) => i.feature_name === "file_upload",
                       )
                     : null;
                 if (deep_research) {
                     updateDeepResearchInfo(
                         deep_research.remaining,
-                        deep_research.reset_after
+                        deep_research.reset_after,
                     );
                 }
                 if (odyssey) {
@@ -1428,13 +1428,13 @@
                 if (file_upload) {
                     updateFileUploadInfo(
                         file_upload.remaining,
-                        file_upload.reset_after
+                        file_upload.reset_after,
                     );
                 }
                 updateDefaultModelInfo(
                     typeof data.default_model_slug === "string"
                         ? data.default_model_slug
-                        : null
+                        : null,
                 );
                 return new Response(bodyText, {
                     status: response.status,
@@ -1444,7 +1444,7 @@
             } catch (e) {
                 console.error(
                     "[CheckerNext] 处理 Deep Research 与 Agent 响应出错:",
-                    e
+                    e,
                 );
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
@@ -1487,7 +1487,7 @@
                         typeof info.estimated_num_purchased_videos_remaining ===
                             "number"
                             ? info.estimated_num_purchased_videos_remaining
-                            : null
+                            : null,
                     );
                 }
                 return new Response(bodyText, {
@@ -1579,7 +1579,7 @@
                             : null,
                         typeof s.limit_window_seconds === "number"
                             ? s.limit_window_seconds
-                            : null
+                            : null,
                     );
                     updateCodexCredits(data.credits);
                 }

@@ -298,7 +298,7 @@
 
                         codexTooltip.style.left = `${leftPosition}px`;
                         codexTooltip.style.top = `${topPosition}px`;
-                    }
+                    },
                 );
 
                 codexTooltipElement.addEventListener("mouseleave", function () {
@@ -418,7 +418,7 @@
         sResetAfter,
         sResetAt,
         pLimitWindowSecs,
-        sLimitWindowSecs
+        sLimitWindowSecs,
     ) {
         const section = document.getElementById("codex-section");
         const barP = document.getElementById("codex-progress-bar");
@@ -540,7 +540,7 @@
                 secs =
                     Math.max(
                         0,
-                        Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                        Math.floor((codexResetTimePrimary - Date.now()) / 1000),
                     ) + 60;
             }
             resetP.innerText =
@@ -552,7 +552,7 @@
             if (typeof codexResetTimePrimary === "number") {
                 secs = Math.max(
                     0,
-                    Math.floor((codexResetTimePrimary - Date.now()) / 1000)
+                    Math.floor((codexResetTimePrimary - Date.now()) / 1000),
                 );
             } else if (typeof codexResetsAfterPrimary === "number") {
                 secs = Math.max(0, Math.floor(codexResetsAfterPrimary));
@@ -575,8 +575,8 @@
                     Math.max(
                         0,
                         Math.floor(
-                            (codexResetTimeSecondary - Date.now()) / 1000
-                        )
+                            (codexResetTimeSecondary - Date.now()) / 1000,
+                        ),
                     ) + 60;
             }
             resetS.innerText =
@@ -588,7 +588,7 @@
             if (typeof codexResetTimeSecondary === "number") {
                 secs = Math.max(
                     0,
-                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000)
+                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000),
                 );
             } else if (typeof codexResetsAfterSecondary === "number") {
                 secs = Math.max(0, Math.floor(codexResetsAfterSecondary));
@@ -728,7 +728,7 @@
         if (
             (requestUrl.includes("/backend-api/sentinel/chat-requirements") ||
                 requestUrl.includes(
-                    "/backend-anon/sentinel/chat-requirements"
+                    "/backend-anon/sentinel/chat-requirements",
                 )) &&
             finalMethod === "POST" &&
             response.ok
@@ -770,7 +770,7 @@
             } catch (e) {
                 console.error(
                     "[DegradeChecker] 处理响应或重新创建响应时出错:",
-                    e
+                    e,
                 );
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = "N/A";
@@ -801,23 +801,23 @@
                 const data = JSON.parse(bodyText);
                 const deep_research = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
-                          (i) => i.feature_name === "deep_research"
+                          (i) => i.feature_name === "deep_research",
                       )
                     : null;
                 const odyssey = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
-                          (i) => i.feature_name === "odyssey"
+                          (i) => i.feature_name === "odyssey",
                       )
                     : null;
                 const file_upload = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
-                          (i) => i.feature_name === "file_upload"
+                          (i) => i.feature_name === "file_upload",
                       )
                     : null;
                 if (deep_research) {
                     updateDeepResearchInfo(
                         deep_research.remaining,
-                        deep_research.reset_after
+                        deep_research.reset_after,
                     );
                 }
                 if (odyssey) {
@@ -826,13 +826,13 @@
                 if (file_upload) {
                     updateFileUploadInfo(
                         file_upload.remaining,
-                        file_upload.reset_after
+                        file_upload.reset_after,
                     );
                 }
                 updateDefaultModelInfo(
                     typeof data.default_model_slug === "string"
                         ? data.default_model_slug
-                        : null
+                        : null,
                 );
                 return new Response(bodyText, {
                     status: response.status,
@@ -842,7 +842,7 @@
             } catch (e) {
                 console.error(
                     "[DegradeChecker] 处理 Deep Research 与 Agent 响应出错:",
-                    e
+                    e,
                 );
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
@@ -891,7 +891,7 @@
                             : null,
                         typeof s.limit_window_seconds === "number"
                             ? s.limit_window_seconds
-                            : null
+                            : null,
                     );
                 }
                 return new Response(bodyText, {
