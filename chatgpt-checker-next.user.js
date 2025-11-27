@@ -156,15 +156,16 @@
                 <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
             </div>
             重置时间：<span id="codex-reset-time-week">...</span>
-            <div style="margin-top: 8px;"></div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
-                <span>已用：<span id="codex-usage-review">...</span></span>
-                <span><i>代码审查</i></span>
+            <div id="codex-review-container" style="margin-top: 8px; display: none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
+                    <span>已用：<span id="codex-usage-review">...</span></span>
+                    <span><i>代码审查</i></span>
+                </div>
+                <div id="codex-progress-bg-review" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+                    <div id="codex-progress-bar-review" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
+                </div>
+                重置时间：<span id="codex-reset-time-review">...</span>
             </div>
-            <div id="codex-progress-bg-review" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
-                <div id="codex-progress-bar-review" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
-            </div>
-            重置时间：<span id="codex-reset-time-review">...</span>
             <div id="codex-credits-container" style="margin-top: 10px; display: none;">
                 <div style="margin-bottom: 2px;">
                     <strong>积分</strong>
@@ -644,18 +645,17 @@
         )
             return;
 
-        if (
-            pUsedPercent == null ||
-            sUsedPercent == null ||
-            rUsedPercent == null
-        ) {
+        if (pUsedPercent == null || sUsedPercent == null) {
             section.style.display = "none";
             return;
         }
 
         codexUsedPercentPrimary = Math.max(0, Math.min(100, pUsedPercent));
         codexUsedPercentSecondary = Math.max(0, Math.min(100, sUsedPercent));
-        codexUsedPercentReview = Math.max(0, Math.min(100, rUsedPercent));
+        codexUsedPercentReview =
+            rUsedPercent != null
+                ? Math.max(0, Math.min(100, rUsedPercent))
+                : null;
         codexResetsAfterPrimary = pResetAfter ?? null;
         codexResetsAfterSecondary = sResetAfter ?? null;
         codexResetsAfterReview = rResetAfter ?? null;
@@ -696,14 +696,23 @@
 
         barP.style.width = `${codexUsedPercentPrimary}%`;
         barS.style.width = `${codexUsedPercentSecondary}%`;
-        barR.style.width = `${codexUsedPercentReview}%`;
         barP.style.background = "#C26FFD";
         barS.style.background = "#C26FFD";
-        barR.style.background = "#C26FFD";
 
         usageP.innerText = `${codexUsedPercentPrimary}%`;
         usageS.innerText = `${codexUsedPercentSecondary}%`;
-        usageR.innerText = `${codexUsedPercentReview}%`;
+
+        const reviewContainer = document.getElementById(
+            "codex-review-container",
+        );
+        if (codexUsedPercentReview != null) {
+            barR.style.width = `${codexUsedPercentReview}%`;
+            barR.style.background = "#C26FFD";
+            usageR.innerText = `${codexUsedPercentReview}%`;
+            if (reviewContainer) reviewContainer.style.display = "block";
+        } else {
+            if (reviewContainer) reviewContainer.style.display = "none";
+        }
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
