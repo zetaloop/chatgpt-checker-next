@@ -62,7 +62,10 @@
         displayBox.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.3)";
         displayBox.style.zIndex = "10000";
         displayBox.style.transition = "height 0.3s ease";
-        displayBox.style.display = "none";
+        displayBox.style.opacity = "0";
+        displayBox.style.transform =
+            "translateY(-50%) translateX(4px) scale(0.98)";
+        displayBox.style.pointerEvents = "none";
         displayBox.style.height = "auto";
 
         const scriptVersion =
@@ -369,19 +372,26 @@
 
         // 鼠标悬停事件
         collapsedIndicator.addEventListener("mouseenter", function () {
-            // 打开时先禁用动画，设置正确高度后再启用
+            // 打开时先禁用高度动画，设置正确高度
             displayBox.style.transition = "none";
-            displayBox.style.display = "block";
             displayBox.style.height = contentWrapper.offsetHeight + "px";
-            // 强制重绘后再启用动画
+            // 强制重绘后启用所有动画
             displayBox.offsetHeight;
-            displayBox.style.transition = "height 0.3s ease";
+            displayBox.style.transition =
+                "height 0.2s ease, opacity 0.06s ease-out, transform 0.06s ease-out";
+            displayBox.style.opacity = "1";
+            displayBox.style.transform =
+                "translateY(-50%) translateX(0) scale(1)";
+            displayBox.style.pointerEvents = "auto";
             displayBoxInitialized = true;
             collapsedIndicator.style.opacity = "0";
         });
 
         displayBox.addEventListener("mouseleave", function () {
-            displayBox.style.display = "none";
+            displayBox.style.opacity = "0";
+            displayBox.style.transform =
+                "translateY(-50%) translateX(2px) scale(0.98)";
+            displayBox.style.pointerEvents = "none";
             displayBoxInitialized = false;
             collapsedIndicator.style.opacity = "1";
         });
