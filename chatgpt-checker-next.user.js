@@ -41,15 +41,16 @@
     const isGrokMode = currentPageMode === MODE_GROK;
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
-    // --- Grok: Spoil RSC dehydrated data to force client-side refetch ---
-    // --- Grok: Parse user info from RSC data ---
+    // Spoil RSC dehydrated data to force client-side refetch
+    // Parse user info from RSC data
     let grokSubscriptionType = null;
     let grokCountryCode = null;
     let grokUserInfoFetched = false;
 
-    if (isGrokMode) {
-        const SPOIL_QUERY_KEYS = ["get-models", "user-settings"];
+    // RSC 缓存需要 spoil 的查询键
+    const SPOIL_QUERY_KEYS = ["get-models"];
 
+    if (isGrokMode) {
         window.self.__next_f = window.self.__next_f || [];
         const originalPush = window.self.__next_f.push;
         window.self.__next_f.push = function (...args) {
@@ -89,9 +90,13 @@
                         }
                     }
 
-                    // 尝试找到 queries 数组并过滤
-                    const queriesStart = dataString.indexOf('"queries":[');
-                    if (queriesStart !== -1) {
+                    // 只有启用所有模型时才 spoil 相关查询
+                    if (
+                        grokAllModelsEnabled &&
+                        dataString.indexOf('"queries":[') !== -1
+                    ) {
+                        // 尝试找到 queries 数组并过滤
+                        const queriesStart = dataString.indexOf('"queries":[');
                         // 找到完整的 queries 数组
                         let depth = 0;
                         let start = queriesStart + 10;
@@ -157,6 +162,11 @@
     let grokDevToolsEnabled =
         isGrokMode && localStorage.getItem(GROK_DEV_TOOLS_KEY) === "true";
     let grokOriginalShowModelConfigOverride = null;
+
+    // Grok 所有模型开关状态存储
+    const GROK_ALL_MODELS_KEY = "checker-next-grok-all-models";
+    let grokAllModelsEnabled =
+        isGrokMode && localStorage.getItem(GROK_ALL_MODELS_KEY) === "true";
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
@@ -435,6 +445,47 @@
                         border-radius: 16px;
                     "></span>
                     <span id="grok-dev-tools-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="grok-all-models-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>解锁所有模型
+                <span id="grok-all-models-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="grok-all-models-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-all-models-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="grok-all-models-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -774,6 +825,24 @@
         grokOccasionalTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(grokOccasionalTooltipBox);
 
+        // 创建 Grok 所有模型提示框
+        const grokAllModelsTooltipBox = document.createElement("div");
+        grokAllModelsTooltipBox.id = "grok-all-models-tooltip-box";
+        grokAllModelsTooltipBox.innerText =
+            "强制重新请求 models 接口，并在界面上解锁不可用的模型，没什么实际作用。";
+        grokAllModelsTooltipBox.style.position = "fixed";
+        grokAllModelsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokAllModelsTooltipBox.style.color = "#fff";
+        grokAllModelsTooltipBox.style.padding = "8px 12px";
+        grokAllModelsTooltipBox.style.borderRadius = "5px";
+        grokAllModelsTooltipBox.style.fontSize = "12px";
+        grokAllModelsTooltipBox.style.visibility = "hidden";
+        grokAllModelsTooltipBox.style.zIndex = "10001";
+        grokAllModelsTooltipBox.style.width = "240px";
+        grokAllModelsTooltipBox.style.lineHeight = "1.4";
+        grokAllModelsTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokAllModelsTooltipBox);
+
         // 显示提示
         document
             .getElementById("difficulty-tooltip")
@@ -834,6 +903,10 @@
             bindTooltipEvents("credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
+            bindTooltipEvents(
+                "grok-all-models-tooltip",
+                grokAllModelsTooltipBox,
+            );
             bindTooltipEvents("grok-dev-tools-tooltip", grokDevToolsTooltipBox);
             bindTooltipEvents("grok-frequent-tooltip", grokFrequentTooltipBox);
             bindTooltipEvents(
@@ -883,8 +956,40 @@
             }
         }
 
+        // 绑定 Grok 所有模型开关事件
+        function bindGrokAllModelsToggle() {
+            const toggle = document.getElementById("grok-all-models-toggle");
+            const slider = document.getElementById("grok-all-models-slider");
+            const sliderDot = document.getElementById(
+                "grok-all-models-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            // 设置初始状态
+            toggle.checked = grokAllModelsEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokAllModelsEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokAllModelsEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_ALL_MODELS_KEY,
+                    grokAllModelsEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokAllModelsEnabled,
+                );
+            });
+        }
+
         if (isGrokMode) {
             setTimeout(bindGrokDevToolsToggle, 100);
+            setTimeout(bindGrokAllModelsToggle, 100);
             // 恢复已缓存的状态显示
             setTimeout(() => {
                 if (window.applyGrokDevToolsDisplay) {
@@ -901,7 +1006,10 @@
 
         // 在 MutationObserver 中也需要重新绑定事件
         window.rebindCodexEvents = bindAllTooltips;
-        window.rebindGrokToggle = bindGrokDevToolsToggle;
+        window.rebindGrokToggle = () => {
+            bindGrokDevToolsToggle();
+            bindGrokAllModelsToggle();
+        };
     }
 
     // 创建元素
