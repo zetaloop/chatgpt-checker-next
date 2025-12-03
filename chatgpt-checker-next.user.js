@@ -103,7 +103,6 @@
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
             <span id="price-region-container" style="display: block">价格地区：<span id="price-region">...</span></span>
-            <span id="adult-status-container" style="display: block">是否成年：<span id="adult-status">...</span></span>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -1305,19 +1304,6 @@
         container.style.display = "block";
     }
 
-    function updateAdultStatus(isAdult) {
-        if (!isChatgptMode) return;
-        const container = document.getElementById("adult-status-container");
-        const valueEl = document.getElementById("adult-status");
-        if (!valueEl) return;
-        if (typeof isAdult === "boolean") {
-            valueEl.innerText = isAdult ? "True" : "False";
-        } else {
-            valueEl.innerText = "...";
-        }
-        if (container) container.style.display = "block";
-    }
-
     let memoryUsageTokens = null;
     let memoryMaxTokensValue = null;
     function updateMemoryUsage(memoryNumTokens, memoryMaxTokens) {
@@ -1416,39 +1402,6 @@
 
                 if (typeof responseBodyText === "string") {
                     return new Response(responseBodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
-                }
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend-api/settings/is_adult") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isChatgptMode) {
-                return response;
-            }
-            let bodyText;
-            try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
-                updateAdultStatus(
-                    typeof data?.is_adult === "boolean" ? data.is_adult : null,
-                );
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
-            } catch (e) {
-                console.error("[CheckerNext] 处理成年状态响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
                         status: response.status,
                         statusText: response.statusText,
                         headers: response.headers,
