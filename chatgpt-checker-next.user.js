@@ -53,15 +53,17 @@
         displayBox.style.right = "20px";
         displayBox.style.transform = "translateY(-50%)";
         displayBox.style.width = "240px";
-        displayBox.style.padding = "10px";
+        displayBox.style.padding = "0";
+        displayBox.style.overflow = "hidden";
         displayBox.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
         displayBox.style.color = "#fff";
         displayBox.style.fontSize = "14px";
         displayBox.style.borderRadius = "8px";
         displayBox.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.3)";
         displayBox.style.zIndex = "10000";
-        displayBox.style.transition = "all 0.3s ease";
+        displayBox.style.transition = "height 0.3s ease";
         displayBox.style.display = "none";
+        displayBox.style.height = "auto";
 
         const scriptVersion =
             typeof GM_info === "object" &&
@@ -71,7 +73,9 @@
                 ? GM_info.script.version
                 : "";
 
-        displayBox.innerHTML = `                                        
+        const contentWrapper = document.createElement("div");
+        contentWrapper.style.padding = "10px";
+        contentWrapper.innerHTML = `
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
                 <strong>ChatGPT</strong>
@@ -243,7 +247,15 @@
         ">
             ChatGPT Checker Next${scriptVersion ? ` v${scriptVersion}` : ""}
     </div>`;
+        displayBox.appendChild(contentWrapper);
         document.body.appendChild(displayBox);
+
+        let displayBoxInitialized = false;
+        const resizeObserver = new ResizeObserver(() => {
+            if (!displayBoxInitialized) return;
+            displayBox.style.height = contentWrapper.offsetHeight + "px";
+        });
+        resizeObserver.observe(contentWrapper);
 
         const powSection = document.getElementById("pow-section");
         const deepSection = document.getElementById("deep-research-section");
@@ -357,12 +369,20 @@
 
         // 鼠标悬停事件
         collapsedIndicator.addEventListener("mouseenter", function () {
+            // 打开时先禁用动画，设置正确高度后再启用
+            displayBox.style.transition = "none";
             displayBox.style.display = "block";
+            displayBox.style.height = contentWrapper.offsetHeight + "px";
+            // 强制重绘后再启用动画
+            displayBox.offsetHeight;
+            displayBox.style.transition = "height 0.3s ease";
+            displayBoxInitialized = true;
             collapsedIndicator.style.opacity = "0";
         });
 
         displayBox.addEventListener("mouseleave", function () {
             displayBox.style.display = "none";
+            displayBoxInitialized = false;
             collapsedIndicator.style.opacity = "1";
         });
 
