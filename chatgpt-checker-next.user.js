@@ -37,6 +37,9 @@
     const isSoraMode = currentPageMode === MODE_SORA;
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
+    // 全局状态：记录弹窗是否正在显示
+    let isDisplayBoxVisible = false;
+
     function createElements() {
         if (!document.body) {
             requestAnimationFrame(createElements);
@@ -260,6 +263,20 @@
         });
         resizeObserver.observe(contentWrapper);
 
+        // 如果之前弹窗正在显示，直接恢复显示状态（跳过动画）
+        if (isDisplayBoxVisible) {
+            displayBox.style.transition = "none";
+            displayBox.style.height = contentWrapper.offsetHeight + "px";
+            displayBox.style.opacity = "1";
+            displayBox.style.transform =
+                "translateY(-50%) translateX(0) scale(1)";
+            displayBox.style.pointerEvents = "auto";
+            displayBox.offsetHeight; // 强制重绘
+            displayBox.style.transition =
+                "height 0.2s ease, opacity 0.06s ease-out, transform 0.06s ease-out";
+            displayBoxInitialized = true;
+        }
+
         const powSection = document.getElementById("pow-section");
         const deepSection = document.getElementById("deep-research-section");
         const odysseySection = document.getElementById("odyssey-section");
@@ -384,6 +401,7 @@
                 "translateY(-50%) translateX(0) scale(1)";
             displayBox.style.pointerEvents = "auto";
             displayBoxInitialized = true;
+            isDisplayBoxVisible = true;
             collapsedIndicator.style.opacity = "0";
         });
 
@@ -393,6 +411,7 @@
                 "translateY(-50%) translateX(2px) scale(0.98)";
             displayBox.style.pointerEvents = "none";
             displayBoxInitialized = false;
+            isDisplayBoxVisible = false;
             collapsedIndicator.style.opacity = "1";
         });
 
