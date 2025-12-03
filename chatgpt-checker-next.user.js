@@ -380,7 +380,7 @@
             </div>
             会员类型：<span id="grok-subscription-type">...</span><br>
             账号地区：<span id="grok-country-code">...</span><br>
-            可用模型：<span id="grok-available-models">...</span>
+            <div id="grok-models-line" style="padding-left: 0.5em; text-indent: -0.5em; line-height: 1.4;">可用模型：<span id="grok-available-models">...</span></div>
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>任务</strong>
             </div>
@@ -1717,9 +1717,21 @@
                 }
                 return model;
             });
-            modelsEl.innerHTML = `<span style="font-size: 13px;">${formattedModels.join(", ")}</span>`;
+            modelsEl.innerHTML = `<span style="font-size: 11px;">${formattedModels.join(", ")}</span>`;
+            // 有数据时应用更紧凑的行高
+            const lineEl = document.getElementById("grok-models-line");
+            if (lineEl) {
+                lineEl.style.lineHeight = "1";
+                lineEl.style.paddingTop = "0.15em";
+            }
         } else if (!grokModelsFetched) {
             modelsEl.innerText = "...";
+            // 没有数据时恢复正常行高
+            const lineEl = document.getElementById("grok-models-line");
+            if (lineEl) {
+                lineEl.style.lineHeight = "1.4";
+                lineEl.style.paddingTop = "0";
+            }
         }
     }
 
