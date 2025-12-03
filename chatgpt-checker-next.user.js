@@ -253,7 +253,7 @@
             text-align: center;
             letter-spacing: 0.3px;
         ">
-            ChatGPT Checker Next${scriptVersion ? ` v${scriptVersion}` : ""}
+            <a href="https://github.com/zetaloop/chatgpt-checker-next" target="_blank" style="color: inherit; text-decoration: none;">ChatGPT Checker Next</a>${scriptVersion ? ` <a href="https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js" target="_blank" style="color: inherit; text-decoration: none;">v${scriptVersion}</a>` : ""}
     </div>`;
         displayBox.appendChild(contentWrapper);
         document.body.appendChild(displayBox);
