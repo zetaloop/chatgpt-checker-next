@@ -41,6 +41,80 @@
     const isGrokMode = currentPageMode === MODE_GROK;
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
+    // --- Grok: Spoil RSC dehydrated data to force client-side refetch ---
+    if (isGrokMode) {
+        const SPOIL_QUERY_KEYS = ["get-models", "user-settings"];
+
+        window.self.__next_f = window.self.__next_f || [];
+        const originalPush = window.self.__next_f.push;
+        window.self.__next_f.push = function (...args) {
+            try {
+                if (args[0] && typeof args[0][1] === "string") {
+                    let dataString = args[0][1];
+
+                    // 尝试找到 queries 数组并过滤
+                    const queriesStart = dataString.indexOf('"queries":[');
+                    if (queriesStart !== -1) {
+                        // 找到完整的 queries 数组
+                        let depth = 0;
+                        let start = queriesStart + 10;
+                        let end = start;
+                        for (let i = start; i < dataString.length; i++) {
+                            if (dataString[i] === "[") depth++;
+                            if (dataString[i] === "]") depth--;
+                            if (depth === 0) {
+                                end = i + 1;
+                                break;
+                            }
+                        }
+
+                        if (end > start) {
+                            try {
+                                const queriesArrayStr = dataString.substring(
+                                    start,
+                                    end,
+                                );
+                                const queries = JSON.parse(queriesArrayStr);
+
+                                // 过滤掉需要 spoil 的查询
+                                const filteredQueries = queries.filter((q) => {
+                                    const firstKey = q.queryKey?.[0];
+                                    if (SPOIL_QUERY_KEYS.includes(firstKey)) {
+                                        console.log(
+                                            "[CheckerNext] Spoiled RSC cache:",
+                                            firstKey,
+                                        );
+                                        return false;
+                                    }
+                                    return true;
+                                });
+
+                                if (filteredQueries.length !== queries.length) {
+                                    // 替换回去
+                                    const newQueriesStr =
+                                        JSON.stringify(filteredQueries);
+                                    dataString =
+                                        dataString.substring(0, start) +
+                                        newQueriesStr +
+                                        dataString.substring(end);
+                                    args[0][1] = dataString;
+                                }
+                            } catch (parseError) {
+                                // 解析失败时忽略
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(
+                    "[CheckerNext] Error while spoiling RSC data:",
+                    e,
+                );
+            }
+            return originalPush.apply(window.self.__next_f, args);
+        };
+    }
+
     // Grok 开发工具开关状态存储
     const GROK_DEV_TOOLS_KEY = "checker-next-grok-dev-tools";
     let grokDevToolsEnabled =
