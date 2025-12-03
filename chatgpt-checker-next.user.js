@@ -71,7 +71,7 @@
                 ? GM_info.script.version
                 : "";
 
-        displayBox.innerHTML = `
+        displayBox.innerHTML = `                                        
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
                 <strong>ChatGPT</strong>
@@ -141,7 +141,7 @@
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
                 <span>已用：<span id="codex-usage">...</span></span>
-                <span><i>每5小时</i></span>
+                <span><i>代码 每5小时</i></span>
             </div>
             <div id="codex-progress-bg" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
@@ -150,7 +150,7 @@
             <div style="margin-top: 8px;"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
                 <span>已用：<span id="codex-usage-week">...</span></span>
-                <span><i>每周</i></span>
+                <span><i>代码 每周</i></span>
             </div>
             <div id="codex-progress-bg-week" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                 <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
@@ -159,7 +159,7 @@
             <div id="codex-review-container" style="margin-top: 8px; display: none;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
                     <span>已用：<span id="codex-usage-review">...</span></span>
-                    <span><i>代码审查</i></span>
+                    <span><i>代码审查 每周</i></span>
                 </div>
                 <div id="codex-progress-bg-review" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
                     <div id="codex-progress-bar-review" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
