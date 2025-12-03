@@ -215,6 +215,9 @@
             <div id="sora-models-container">
                 生成模型：<span id="sora-models">...</span>
             </div>
+            <div id="sora-concurrent-container" style="display: none">
+                并行生成：<span id="sora-concurrent">...</span>
+            </div>
             <div id="sora-free-container">
                 免费次数：<span id="sora-free-usage">...</span>
             </div>
@@ -1030,7 +1033,24 @@
             soraSupportsQuota = true;
         }
         applySoraQuotaVisibility();
+        applySoraConcurrentVisibility(hasTurbo);
         setIconColors("#2E91F6", "#1666D6");
+    }
+
+    function applySoraConcurrentVisibility(show) {
+        const container = document.getElementById("sora-concurrent-container");
+        if (container) container.style.display = show ? "block" : "none";
+    }
+
+    function updateSoraConcurrent(maxConcurrent) {
+        if (!isSoraMode) return;
+        const valueEl = document.getElementById("sora-concurrent");
+        if (!valueEl) return;
+        if (typeof maxConcurrent === "number") {
+            valueEl.innerText = String(maxConcurrent);
+        } else {
+            valueEl.innerText = "...";
+        }
     }
 
     function updateSoraInfo(
@@ -1626,6 +1646,41 @@
                 });
             } catch (e) {
                 console.error("[CheckerNext] 处理 Sora 模型响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend/parameters") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isSoraMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                updateSoraConcurrent(
+                    typeof data?.max_relaxed_concurrent_gens === "number"
+                        ? data.max_relaxed_concurrent_gens
+                        : null,
+                );
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理 Sora 参数响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
