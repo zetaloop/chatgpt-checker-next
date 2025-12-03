@@ -41,6 +41,12 @@
     const isGrokMode = currentPageMode === MODE_GROK;
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
+    // Grok 开发工具开关状态存储
+    const GROK_DEV_TOOLS_KEY = "checker-next-grok-dev-tools";
+    let grokDevToolsEnabled =
+        isGrokMode && localStorage.getItem(GROK_DEV_TOOLS_KEY) === "true";
+    let grokOriginalShowModelConfigOverride = null;
+
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
 
@@ -251,6 +257,47 @@
         <div id="grok-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 2px;">
                 <strong>Grok</strong>
+            </div>
+            <div id="grok-dev-tools-container" style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px; margin-bottom: 4px;">
+                <span>开发工具：<span id="grok-dev-tools-status">...</span>
+                <span id="grok-dev-tools-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer;">
+                    <input type="checkbox" id="grok-dev-tools-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-dev-tools-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 20px;
+                    "></span>
+                    <span id="grok-dev-tools-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 14px;
+                        width: 14px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
             </div>
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>任务</strong>
@@ -559,6 +606,24 @@
         soraInfoTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(soraInfoTooltipBox);
 
+        // 创建 Grok 开发工具提示框
+        const grokDevToolsTooltipBox = document.createElement("div");
+        grokDevToolsTooltipBox.id = "grok-dev-tools-tooltip-box";
+        grokDevToolsTooltipBox.innerText =
+            "前往 设置 - 开发工具 来访问内部设置，开启开关后刷新页面生效。";
+        grokDevToolsTooltipBox.style.position = "fixed";
+        grokDevToolsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokDevToolsTooltipBox.style.color = "#fff";
+        grokDevToolsTooltipBox.style.padding = "8px 12px";
+        grokDevToolsTooltipBox.style.borderRadius = "5px";
+        grokDevToolsTooltipBox.style.fontSize = "12px";
+        grokDevToolsTooltipBox.style.visibility = "hidden";
+        grokDevToolsTooltipBox.style.zIndex = "10001";
+        grokDevToolsTooltipBox.style.width = "240px";
+        grokDevToolsTooltipBox.style.lineHeight = "1.4";
+        grokDevToolsTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokDevToolsTooltipBox);
+
         // 创建 Grok 高频任务提示框
         const grokFrequentTooltipBox = document.createElement("div");
         grokFrequentTooltipBox.id = "grok-frequent-tooltip-box";
@@ -654,6 +719,7 @@
             bindTooltipEvents("credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
+            bindTooltipEvents("grok-dev-tools-tooltip", grokDevToolsTooltipBox);
             bindTooltipEvents("grok-frequent-tooltip", grokFrequentTooltipBox);
             bindTooltipEvents(
                 "grok-occasional-tooltip",
@@ -661,11 +727,63 @@
             );
         }
 
+        // 绑定 Grok 开发工具开关事件
+        function bindGrokDevToolsToggle() {
+            const toggle = document.getElementById("grok-dev-tools-toggle");
+            const slider = document.getElementById("grok-dev-tools-slider");
+            const sliderDot = document.getElementById(
+                "grok-dev-tools-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            // 设置初始状态
+            toggle.checked = grokDevToolsEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokDevToolsEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokDevToolsEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_DEV_TOOLS_KEY,
+                    grokDevToolsEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokDevToolsEnabled,
+                );
+            });
+        }
+
+        function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
+            if (enabled) {
+                slider.style.backgroundColor = "#4CAF50";
+                sliderDot.style.transform = "translateX(16px)";
+            } else {
+                slider.style.backgroundColor = "#555";
+                sliderDot.style.transform = "translateX(0)";
+            }
+        }
+
+        if (isGrokMode) {
+            setTimeout(bindGrokDevToolsToggle, 100);
+            // 恢复已缓存的开发工具状态显示
+            setTimeout(() => {
+                if (window.applyGrokDevToolsDisplay) {
+                    window.applyGrokDevToolsDisplay();
+                }
+            }, 100);
+        }
+
         // 延迟添加提示事件，因为元素可能在后面动态显示
         setTimeout(bindAllTooltips, 100);
 
         // 在 MutationObserver 中也需要重新绑定事件
         window.rebindCodexEvents = bindAllTooltips;
+        window.rebindGrokToggle = bindGrokDevToolsToggle;
     }
 
     // 创建元素
@@ -680,6 +798,10 @@
         // 重新绑定 Codex 事件
         if (window.rebindCodexEvents) {
             window.rebindCodexEvents();
+        }
+        // 重新绑定 Grok 开关事件
+        if (isGrokMode && window.rebindGrokToggle) {
+            window.rebindGrokToggle();
         }
     });
 
@@ -1266,6 +1388,139 @@
         }
     }
     setInterval(updateSoraCountdown, 1000);
+
+    // 更新 Grok 开发工具状态显示
+    // 使用全局变量以便在 DOM 重建后保留状态
+    let grokDevToolsFetched = false;
+    let grokDevToolsDisplayValue = null; // 实际显示的值（可能是修改后的）
+
+    function updateGrokDevToolsStatus(originalValue, wasModified) {
+        if (!isGrokMode) return;
+        const statusEl = document.getElementById("grok-dev-tools-status");
+        if (!statusEl) return;
+
+        // 如果传入 null/undefined 但已经获取过值，则保留原有值不更新
+        if (
+            (originalValue === null || originalValue === undefined) &&
+            grokDevToolsFetched
+        ) {
+            // 确保 UI 正确显示已缓存的值
+            applyGrokDevToolsDisplay(statusEl);
+            return;
+        }
+
+        // 只有获取到有效值时才更新
+        if (typeof originalValue === "boolean") {
+            grokOriginalShowModelConfigOverride = originalValue;
+            grokDevToolsFetched = true;
+
+            // 如果开关启用且修改成功，显示 True
+            if (wasModified) {
+                grokDevToolsDisplayValue = true;
+            } else {
+                grokDevToolsDisplayValue = originalValue;
+            }
+
+            applyGrokDevToolsDisplay(statusEl);
+        }
+    }
+
+    function applyGrokDevToolsDisplay(statusEl) {
+        if (!statusEl) {
+            statusEl = document.getElementById("grok-dev-tools-status");
+        }
+        if (!statusEl) return;
+
+        if (grokDevToolsDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (grokDevToolsDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 DOM 重建后恢复状态
+    window.applyGrokDevToolsDisplay = applyGrokDevToolsDisplay;
+
+    // 读取并处理 Grok 页面内嵌数据
+    function processGrokServerClientData() {
+        if (!isGrokMode) return;
+
+        const scriptEl = document.getElementById(
+            "server-client-data-experimentation",
+        );
+        if (!scriptEl) return;
+
+        try {
+            const data = JSON.parse(scriptEl.textContent || "{}");
+            const serverConfig = data?.serverConfig;
+            if (serverConfig && typeof serverConfig === "object") {
+                const originalValue = serverConfig.show_model_config_override;
+                let wasModified = false;
+
+                // 如果开关启用，覆盖该值
+                if (
+                    grokDevToolsEnabled &&
+                    typeof originalValue === "boolean" &&
+                    originalValue !== true
+                ) {
+                    serverConfig.show_model_config_override = true;
+                    scriptEl.textContent = JSON.stringify(data);
+                    wasModified = true;
+                    console.log(
+                        "[CheckerNext] 已覆盖 show_model_config_override 为 true",
+                    );
+                }
+
+                updateGrokDevToolsStatus(
+                    typeof originalValue === "boolean" ? originalValue : null,
+                    wasModified,
+                );
+            }
+        } catch (e) {
+            console.error(
+                "[CheckerNext] 处理 Grok server-client-data 出错:",
+                e,
+            );
+        }
+    }
+
+    // 在 DOM 准备好后处理 Grok 数据
+    function initGrokDataProcessing() {
+        if (!isGrokMode) return;
+
+        // 尝试立即处理
+        if (document.getElementById("server-client-data-experimentation")) {
+            processGrokServerClientData();
+        } else {
+            // 等待 DOM 加载
+            const grokObserver = new MutationObserver((mutations, obs) => {
+                if (
+                    document.getElementById(
+                        "server-client-data-experimentation",
+                    )
+                ) {
+                    processGrokServerClientData();
+                    obs.disconnect();
+                }
+            });
+
+            if (document.documentElement) {
+                grokObserver.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true,
+                });
+            } else {
+                document.addEventListener("DOMContentLoaded", () => {
+                    processGrokServerClientData();
+                });
+            }
+        }
+    }
+
+    // 立即初始化 Grok 数据处理
+    initGrokDataProcessing();
 
     // 更新 Grok 任务用量
     let grokFetched = false;
