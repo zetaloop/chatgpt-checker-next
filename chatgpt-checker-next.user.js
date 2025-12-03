@@ -47,6 +47,10 @@
     let grokCountryCode = null;
     let grokUserInfoFetched = false;
 
+    // Grok 可用模型列表
+    let grokAvailableModels = null;
+    let grokModelsFetched = false;
+
     // RSC 缓存需要 spoil 的查询键
     const SPOIL_QUERY_KEYS = ["get-models"];
 
@@ -89,12 +93,7 @@
                             }
                         }
                     }
-
-                    // 只有启用所有模型时才 spoil 相关查询
-                    if (
-                        grokAllModelsEnabled &&
-                        dataString.indexOf('"queries":[') !== -1
-                    ) {
+                    if (dataString.indexOf('"queries":[') !== -1) {
                         // 尝试找到 queries 数组并过滤
                         const queriesStart = dataString.indexOf('"queries":[');
                         // 找到完整的 queries 数组
@@ -380,7 +379,8 @@
                 <strong>Grok</strong>
             </div>
             会员类型：<span id="grok-subscription-type">...</span><br>
-            账号地区：<span id="grok-country-code">...</span>
+            账号地区：<span id="grok-country-code">...</span><br>
+            可用模型：<span id="grok-available-models">...</span>
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>任务</strong>
             </div>
@@ -829,7 +829,7 @@
         const grokAllModelsTooltipBox = document.createElement("div");
         grokAllModelsTooltipBox.id = "grok-all-models-tooltip-box";
         grokAllModelsTooltipBox.innerText =
-            "强制重新请求 models 接口，并在界面上解锁不可用的模型，没什么实际作用。";
+            "在界面上解锁不可用的模型，并没有实际作用。";
         grokAllModelsTooltipBox.style.position = "fixed";
         grokAllModelsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         grokAllModelsTooltipBox.style.color = "#fff";
@@ -997,6 +997,9 @@
                 }
                 if (window.updateGrokUserInfo) {
                     window.updateGrokUserInfo();
+                }
+                if (window.updateGrokModels) {
+                    window.updateGrokModels();
                 }
             }, 100);
         }
@@ -1696,6 +1699,32 @@
 
     // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
     window.updateGrokUserInfo = updateGrokUserInfo;
+
+    // 更新 Grok 可用模型列表
+    function updateGrokModels() {
+        if (!isGrokMode) return;
+
+        const modelsEl = document.getElementById("grok-available-models");
+        if (!modelsEl) return;
+
+        if (grokAvailableModels && Array.isArray(grokAvailableModels)) {
+            // 使用较小字体，并让括号及模型ID呈现灰色
+            const formattedModels = grokAvailableModels.map((model) => {
+                // 匹配 "modeName (modelId)" 格式
+                const match = model.match(/^(.+?)(\s*\([^)]+\))$/);
+                if (match) {
+                    return `${match[1]}<span style="color: #bbbbbb; font-size: 9px;">${match[2]}</span>`;
+                }
+                return model;
+            });
+            modelsEl.innerHTML = `<span style="font-size: 13px;">${formattedModels.join(", ")}</span>`;
+        } else if (!grokModelsFetched) {
+            modelsEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 DOM 重建后恢复
+    window.updateGrokModels = updateGrokModels;
 
     // 读取并处理 Grok 页面内嵌数据
     function processGrokServerClientData() {
@@ -2426,6 +2455,68 @@
                 });
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("grok.com/rest/models") &&
+            finalMethod === "POST" &&
+            response.ok
+        ) {
+            if (!isGrokMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                let data = JSON.parse(bodyText);
+
+                // 如果启用了解锁所有模型，把不可用模型移动到可用列表
+                if (
+                    grokAllModelsEnabled &&
+                    Array.isArray(data.models) &&
+                    Array.isArray(data.unavailableModels) &&
+                    data.unavailableModels.length > 0
+                ) {
+                    data.models = [...data.models, ...data.unavailableModels];
+                    data.unavailableModels = [];
+                    bodyText = JSON.stringify(data);
+                    console.log(
+                        "[CheckerNext] Unlocked unavailable models:",
+                        data.models.map((m) => m.modelId),
+                    );
+                }
+
+                // 解析可用模型列表
+                if (Array.isArray(data.models)) {
+                    grokAvailableModels = data.models.map(
+                        (m) => `${m.modeName} (${m.modelId})`,
+                    );
+                    grokModelsFetched = true;
+                    console.log(
+                        "[CheckerNext] Grok available models:",
+                        grokAvailableModels,
+                    );
+                    if (window.updateGrokModels) {
+                        window.updateGrokModels();
+                    }
+                }
+
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理 Grok models 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
