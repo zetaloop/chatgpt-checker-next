@@ -8,6 +8,7 @@
 // @description  获取 ChatGPT 的服务降级风险等级和各功能可用额度信息。
 // @match        *://chatgpt.com/*
 // @match        *://sora.chatgpt.com/*
+// @match        *://grok.com/*
 // @grant        none
 // @run-at       document-start
 // @downloadURL  https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js
@@ -21,10 +22,12 @@
     const MODE_CHATGPT = "chatgpt";
     const MODE_CODEX = "codex";
     const MODE_SORA = "sora";
+    const MODE_GROK = "grok";
 
     function detectPageMode() {
         const { hostname, pathname } = window.location;
         if (hostname === "sora.chatgpt.com") return MODE_SORA;
+        if (hostname === "grok.com") return MODE_GROK;
         if (hostname === "chatgpt.com" && pathname.startsWith("/codex")) {
             return MODE_CODEX;
         }
@@ -35,6 +38,7 @@
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
     const isSoraMode = currentPageMode === MODE_SORA;
+    const isGrokMode = currentPageMode === MODE_GROK;
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
     // 全局状态：记录弹窗是否正在显示
@@ -244,6 +248,43 @@
                 剩余积分：<span id="sora-credits-detail">...</span>
             </div>
         </div>
+        <div id="grok-section" style="margin-top: 10px; display: none">
+            <div style="margin-bottom: 2px;">
+                <strong>Grok</strong>
+            </div>
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>任务</strong>
+            </div>
+            任务总数：<span id="grok-task-usage">...</span><br>
+            高频任务：<span id="grok-frequent-usage">...</span>
+            <span id="grok-frequent-tooltip" style="
+                cursor: pointer;
+                color: #fff;
+                font-size: 12px;
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                line-height: 14px;
+                text-align: center;
+                border-radius: 50%;
+                border: 1px solid #fff;
+                margin-left: 3px;
+            ">?</span><br>
+            低频任务：<span id="grok-occasional-usage">...</span>
+            <span id="grok-occasional-tooltip" style="
+                cursor: pointer;
+                color: #fff;
+                font-size: 12px;
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                line-height: 14px;
+                text-align: center;
+                border-radius: 50%;
+                border: 1px solid #fff;
+                margin-left: 3px;
+            ">?</span>
+        </div>
         <div style="
             margin-top: 12px;
             padding-top: 8px;
@@ -287,6 +328,7 @@
         );
         const codexSection = document.getElementById("codex-section");
         const soraSection = document.getElementById("sora-section");
+        const grokSection = document.getElementById("grok-section");
 
         if (isCodexMode) {
             if (powSection) powSection.style.display = "none";
@@ -296,6 +338,10 @@
             if (soraSection) {
                 soraSection.style.display = "none";
                 soraSection.style.marginTop = "10px";
+            }
+            if (grokSection) {
+                grokSection.style.display = "none";
+                grokSection.style.marginTop = "10px";
             }
             if (codexSection) {
                 codexSection.style.display = "block";
@@ -310,9 +356,30 @@
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
             }
+            if (grokSection) {
+                grokSection.style.display = "none";
+                grokSection.style.marginTop = "10px";
+            }
             if (soraSection) {
                 soraSection.style.display = "block";
                 soraSection.style.marginTop = "0";
+            }
+        } else if (isGrokMode) {
+            if (powSection) powSection.style.display = "none";
+            if (deepSection) deepSection.style.display = "none";
+            if (odysseySection) odysseySection.style.display = "none";
+            if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (codexSection) {
+                codexSection.style.display = "none";
+                codexSection.style.marginTop = "10px";
+            }
+            if (soraSection) {
+                soraSection.style.display = "none";
+                soraSection.style.marginTop = "10px";
+            }
+            if (grokSection) {
+                grokSection.style.display = "block";
+                grokSection.style.marginTop = "0";
             }
         } else {
             if (codexSection) {
@@ -322,6 +389,10 @@
             if (soraSection) {
                 soraSection.style.display = "none";
                 soraSection.style.marginTop = "10px";
+            }
+            if (grokSection) {
+                grokSection.style.display = "none";
+                grokSection.style.marginTop = "10px";
             }
         }
 
@@ -488,6 +559,41 @@
         soraInfoTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(soraInfoTooltipBox);
 
+        // 创建 Grok 高频任务提示框
+        const grokFrequentTooltipBox = document.createElement("div");
+        grokFrequentTooltipBox.id = "grok-frequent-tooltip-box";
+        grokFrequentTooltipBox.innerText = "每日触发的任务。";
+        grokFrequentTooltipBox.style.position = "fixed";
+        grokFrequentTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokFrequentTooltipBox.style.color = "#fff";
+        grokFrequentTooltipBox.style.padding = "8px 12px";
+        grokFrequentTooltipBox.style.borderRadius = "5px";
+        grokFrequentTooltipBox.style.fontSize = "12px";
+        grokFrequentTooltipBox.style.visibility = "hidden";
+        grokFrequentTooltipBox.style.zIndex = "10001";
+        grokFrequentTooltipBox.style.width = "240px";
+        grokFrequentTooltipBox.style.lineHeight = "1.4";
+        grokFrequentTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokFrequentTooltipBox);
+
+        // 创建 Grok 低频任务提示框
+        const grokOccasionalTooltipBox = document.createElement("div");
+        grokOccasionalTooltipBox.id = "grok-occasional-tooltip-box";
+        grokOccasionalTooltipBox.innerText =
+            "单次、每周、每月、每年触发的任务。";
+        grokOccasionalTooltipBox.style.position = "fixed";
+        grokOccasionalTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokOccasionalTooltipBox.style.color = "#fff";
+        grokOccasionalTooltipBox.style.padding = "8px 12px";
+        grokOccasionalTooltipBox.style.borderRadius = "5px";
+        grokOccasionalTooltipBox.style.fontSize = "12px";
+        grokOccasionalTooltipBox.style.visibility = "hidden";
+        grokOccasionalTooltipBox.style.zIndex = "10001";
+        grokOccasionalTooltipBox.style.width = "240px";
+        grokOccasionalTooltipBox.style.lineHeight = "1.4";
+        grokOccasionalTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokOccasionalTooltipBox);
+
         // 显示提示
         document
             .getElementById("difficulty-tooltip")
@@ -548,6 +654,11 @@
             bindTooltipEvents("credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
+            bindTooltipEvents("grok-frequent-tooltip", grokFrequentTooltipBox);
+            bindTooltipEvents(
+                "grok-occasional-tooltip",
+                grokOccasionalTooltipBox,
+            );
         }
 
         // 延迟添加提示事件，因为元素可能在后面动态显示
@@ -1156,6 +1267,58 @@
     }
     setInterval(updateSoraCountdown, 1000);
 
+    // 更新 Grok 任务用量
+    let grokFetched = false;
+    function updateGrokTaskInfo(taskUsage) {
+        if (!isGrokMode) return;
+        const section = document.getElementById("grok-section");
+        const taskUsageEl = document.getElementById("grok-task-usage");
+        const frequentUsageEl = document.getElementById("grok-frequent-usage");
+        const occasionalUsageEl = document.getElementById(
+            "grok-occasional-usage",
+        );
+
+        if (!section || !taskUsageEl || !frequentUsageEl || !occasionalUsageEl)
+            return;
+
+        if (!taskUsage || typeof taskUsage !== "object") {
+            section.style.display = "none";
+            return;
+        }
+
+        const usage = typeof taskUsage.usage === "number" ? taskUsage.usage : 0;
+        const limit = typeof taskUsage.limit === "number" ? taskUsage.limit : 0;
+        const frequentUsage =
+            typeof taskUsage.frequentUsage === "number"
+                ? taskUsage.frequentUsage
+                : 0;
+        const frequentLimit =
+            typeof taskUsage.frequentLimit === "number"
+                ? taskUsage.frequentLimit
+                : 0;
+        const occasionalUsage =
+            typeof taskUsage.occasionalUsage === "number"
+                ? taskUsage.occasionalUsage
+                : 0;
+        const occasionalLimit =
+            typeof taskUsage.occasionalLimit === "number"
+                ? taskUsage.occasionalLimit
+                : 0;
+
+        taskUsageEl.innerText = `${usage}/${limit}`;
+        frequentUsageEl.innerText = `${frequentUsage}/${frequentLimit}`;
+        occasionalUsageEl.innerText = `${occasionalUsage}/${occasionalLimit}`;
+
+        section.style.display = "block";
+        section.style.marginTop = "0";
+
+        if (!grokFetched) {
+            // Grok 品牌色
+            setIconColors("#000000", "#1D1D1D");
+            grokFetched = true;
+        }
+    }
+
     function isResetTimestampNear(resetAfter, expectedTimestamp) {
         if (!resetAfter || typeof expectedTimestamp !== "number") return false;
         const timestamp = new Date(resetAfter).getTime();
@@ -1751,6 +1914,39 @@
                 });
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("grok.com/rest/tasks") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isGrokMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                if (data && typeof data.taskUsage === "object") {
+                    updateGrokTaskInfo(data.taskUsage);
+                }
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理 Grok 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return new Response(bodyText, {
                         status: response.status,
