@@ -421,7 +421,7 @@
                     border: 1px solid #fff;
                     margin-left: 3px;
                 ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer;">
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
                     <input type="checkbox" id="grok-dev-tools-toggle" style="opacity: 0; width: 0; height: 0;">
                     <span id="grok-dev-tools-slider" style="
                         position: absolute;
@@ -432,13 +432,13 @@
                         bottom: 0;
                         background-color: #555;
                         transition: 0.3s;
-                        border-radius: 20px;
+                        border-radius: 16px;
                     "></span>
                     <span id="grok-dev-tools-slider-dot" style="
                         position: absolute;
                         content: '';
-                        height: 14px;
-                        width: 14px;
+                        height: 10px;
+                        width: 10px;
                         left: 3px;
                         bottom: 3px;
                         background-color: white;
@@ -725,8 +725,7 @@
         // 创建 Grok 开发工具提示框
         const grokDevToolsTooltipBox = document.createElement("div");
         grokDevToolsTooltipBox.id = "grok-dev-tools-tooltip-box";
-        grokDevToolsTooltipBox.innerText =
-            "前往 设置 - 开发工具 来访问内部设置，开启开关后刷新页面生效。";
+        grokDevToolsTooltipBox.innerText = "Grok 设置 - 开发工具。";
         grokDevToolsTooltipBox.style.position = "fixed";
         grokDevToolsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         grokDevToolsTooltipBox.style.color = "#fff";
@@ -877,7 +876,7 @@
         function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
             if (enabled) {
                 slider.style.backgroundColor = "#4CAF50";
-                sliderDot.style.transform = "translateX(16px)";
+                sliderDot.style.transform = "translateX(12px)";
             } else {
                 slider.style.backgroundColor = "#555";
                 sliderDot.style.transform = "translateX(0)";
