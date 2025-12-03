@@ -42,6 +42,11 @@
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
     // --- Grok: Spoil RSC dehydrated data to force client-side refetch ---
+    // --- Grok: Parse user info from RSC data ---
+    let grokSubscriptionType = null;
+    let grokCountryCode = null;
+    let grokUserInfoFetched = false;
+
     if (isGrokMode) {
         const SPOIL_QUERY_KEYS = ["get-models", "user-settings"];
 
@@ -51,6 +56,38 @@
             try {
                 if (args[0] && typeof args[0][1] === "string") {
                     let dataString = args[0][1];
+
+                    // 解析用户信息（xSubscriptionType 和 countryCode）
+                    if (!grokUserInfoFetched) {
+                        // 匹配 xSubscriptionType
+                        const subTypeMatch = dataString.match(
+                            /"xSubscriptionType"\s*:\s*"([^"]*)"/,
+                        );
+                        if (subTypeMatch) {
+                            grokSubscriptionType = subTypeMatch[1];
+                        }
+
+                        // 匹配 countryCode（通常在 user 对象后面）
+                        const countryMatch = dataString.match(
+                            /"countryCode"\s*:\s*"([^"]*)"/,
+                        );
+                        if (countryMatch) {
+                            grokCountryCode = countryMatch[1];
+                        }
+
+                        if (grokSubscriptionType && grokCountryCode) {
+                            grokUserInfoFetched = true;
+                            console.log(
+                                "[CheckerNext] Parsed Grok user info:",
+                                grokSubscriptionType,
+                                grokCountryCode,
+                            );
+                            // 尝试更新 UI
+                            if (window.updateGrokUserInfo) {
+                                window.updateGrokUserInfo();
+                            }
+                        }
+                    }
 
                     // 尝试找到 queries 数组并过滤
                     const queriesStart = dataString.indexOf('"queries":[');
@@ -332,7 +369,44 @@
             <div style="margin-bottom: 2px;">
                 <strong>Grok</strong>
             </div>
-            <div id="grok-dev-tools-container" style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px; margin-bottom: 4px;">
+            会员类型：<span id="grok-subscription-type">...</span><br>
+            账号地区：<span id="grok-country-code">...</span>
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>任务</strong>
+            </div>
+            任务总数：<span id="grok-task-usage">...</span><br>
+            高频任务：<span id="grok-frequent-usage">...</span>
+            <span id="grok-frequent-tooltip" style="
+                cursor: pointer;
+                color: #fff;
+                font-size: 12px;
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                line-height: 14px;
+                text-align: center;
+                border-radius: 50%;
+                border: 1px solid #fff;
+                margin-left: 3px;
+            ">?</span><br>
+            低频任务：<span id="grok-occasional-usage">...</span>
+            <span id="grok-occasional-tooltip" style="
+                cursor: pointer;
+                color: #fff;
+                font-size: 12px;
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                line-height: 14px;
+                text-align: center;
+                border-radius: 50%;
+                border: 1px solid #fff;
+                margin-left: 3px;
+            ">?</span>
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>功能</strong>
+            </div>
+            <div id="grok-dev-tools-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>开发工具：<span id="grok-dev-tools-status">...</span>
                 <span id="grok-dev-tools-tooltip" style="
                     cursor: pointer;
@@ -373,38 +447,6 @@
                     "></span>
                 </label>
             </div>
-            <div style="margin-top: 10px; margin-bottom: 2px;">
-                <strong>任务</strong>
-            </div>
-            任务总数：<span id="grok-task-usage">...</span><br>
-            高频任务：<span id="grok-frequent-usage">...</span>
-            <span id="grok-frequent-tooltip" style="
-                cursor: pointer;
-                color: #fff;
-                font-size: 12px;
-                display: inline-block;
-                width: 14px;
-                height: 14px;
-                line-height: 14px;
-                text-align: center;
-                border-radius: 50%;
-                border: 1px solid #fff;
-                margin-left: 3px;
-            ">?</span><br>
-            低频任务：<span id="grok-occasional-usage">...</span>
-            <span id="grok-occasional-tooltip" style="
-                cursor: pointer;
-                color: #fff;
-                font-size: 12px;
-                display: inline-block;
-                width: 14px;
-                height: 14px;
-                line-height: 14px;
-                text-align: center;
-                border-radius: 50%;
-                border: 1px solid #fff;
-                margin-left: 3px;
-            ">?</span>
         </div>
         <div style="
             margin-top: 12px;
@@ -844,10 +886,13 @@
 
         if (isGrokMode) {
             setTimeout(bindGrokDevToolsToggle, 100);
-            // 恢复已缓存的开发工具状态显示
+            // 恢复已缓存的状态显示
             setTimeout(() => {
                 if (window.applyGrokDevToolsDisplay) {
                     window.applyGrokDevToolsDisplay();
+                }
+                if (window.updateGrokUserInfo) {
+                    window.updateGrokUserInfo();
                 }
             }, 100);
         }
@@ -1517,6 +1562,34 @@
     // 挂载到 window 以便 DOM 重建后恢复状态
     window.applyGrokDevToolsDisplay = applyGrokDevToolsDisplay;
 
+    // 更新 Grok 用户信息（会员类型和账号地区）
+    function updateGrokUserInfo() {
+        if (!isGrokMode) return;
+
+        const subTypeEl = document.getElementById("grok-subscription-type");
+        const countryEl = document.getElementById("grok-country-code");
+
+        // 应用已缓存的值
+        if (subTypeEl) {
+            if (grokSubscriptionType) {
+                subTypeEl.innerText = grokSubscriptionType;
+            } else if (!grokUserInfoFetched) {
+                subTypeEl.innerText = "...";
+            }
+        }
+
+        if (countryEl) {
+            if (grokCountryCode) {
+                countryEl.innerText = grokCountryCode;
+            } else if (!grokUserInfoFetched) {
+                countryEl.innerText = "...";
+            }
+        }
+    }
+
+    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
+    window.updateGrokUserInfo = updateGrokUserInfo;
+
     // 读取并处理 Grok 页面内嵌数据
     function processGrokServerClientData() {
         if (!isGrokMode) return;
@@ -1552,6 +1625,9 @@
                     wasModified,
                 );
             }
+
+            // 尝试更新用户信息（RSC 可能已解析）
+            updateGrokUserInfo();
         } catch (e) {
             console.error(
                 "[CheckerNext] 处理 Grok server-client-data 出错:",
