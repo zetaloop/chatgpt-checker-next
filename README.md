@@ -1,4 +1,4 @@
-> Forked from [KoriIku/chatgpt-degrade-checker](https://github.com/KoriIku/chatgpt-degrade-checker), and fixed some bugs.
+> Forked from [KoriIku/chatgpt-degrade-checker](https://github.com/KoriIku/chatgpt-degrade-checker).
 
 # ChatGPT Checker Next
 
@@ -15,14 +15,13 @@
 - **服务质量**：ChatGPT 网站的 Proof Of Work 难度数值，数值越大通常代表风控越轻，但并不是唯一的判断标准。
 - **默认模型**：用户选择的默认模型。
 - **价格地区**：当前购买会员的价格地区。
-- **是否成年**：账户是否标记为成年。
 - **模型记忆**：记忆已用/总共的 Token 容量。
 - **深度研究**：Deep Research 模式的剩余次数与重置时间。
 - **代理模式**：Agent 模式的剩余次数与重置时间。
 - **文件上传**：文件上传的剩余次数与重置时间。
 - **Codex 用量**：Codex 的每五小时/每周用量进度条与重置时间。
 - **Sora 模型**：当前可用的 Sora 模型，例如 `turbo` 为 Sora 1，`sy_8` 为 Sora 2。
-- **Sora 次数**：Sora 的每日次数与重置时间。
+- **Sora 次数**：Sora 的每日次数、重置时间、并行数量。
 - **积分**：单独购买的积分，可用于 Sora、Codex 等任务。
 - 更多好玩的功能敬请期待
 
