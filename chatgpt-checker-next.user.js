@@ -111,6 +111,19 @@
                         );
                     }
 
+                    // isAsyncChat
+                    if (
+                        grokAsyncChatEnabled &&
+                        dataString.indexOf('"isAsyncChat":false') !== -1
+                    ) {
+                        dataString = dataString.replace(
+                            /"isAsyncChat":false/g,
+                            '"isAsyncChat":true',
+                        );
+                        args[0][1] = dataString;
+                        console.log("[CheckerNext] 已替换 isAsyncChat 为 true");
+                    }
+
                     if (dataString.indexOf('"queries":[') !== -1) {
                         // 尝试找到 queries 数组并过滤
                         const queriesStart = dataString.indexOf('"queries":[');
@@ -189,6 +202,11 @@
     const GROK_EARLY_ACCESS_KEY = "checker-next-grok-early-access";
     let grokEarlyAccessEnabled =
         isGrokMode && localStorage.getItem(GROK_EARLY_ACCESS_KEY) === "true";
+
+    // Grok 异步聊天开关状态存储
+    const GROK_ASYNC_CHAT_KEY = "checker-next-grok-async-chat";
+    let grokAsyncChatEnabled =
+        isGrokMode && localStorage.getItem(GROK_ASYNC_CHAT_KEY) === "true";
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
@@ -480,9 +498,9 @@
                     "></span>
                 </label>
             </div>
-            <div id="grok-all-models-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>解锁所有模型
-                <span id="grok-all-models-tooltip" style="
+            <div id="grok-async-chat-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>异步聊天
+                <span id="grok-async-chat-tooltip" style="
                     cursor: pointer;
                     color: #fff;
                     font-size: 12px;
@@ -496,8 +514,8 @@
                     margin-left: 3px;
                 ">?</span></span>
                 <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="grok-all-models-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="grok-all-models-slider" style="
+                    <input type="checkbox" id="grok-async-chat-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-async-chat-slider" style="
                         position: absolute;
                         cursor: pointer;
                         top: 0;
@@ -508,7 +526,7 @@
                         transition: 0.3s;
                         border-radius: 16px;
                     "></span>
-                    <span id="grok-all-models-slider-dot" style="
+                    <span id="grok-async-chat-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -550,6 +568,47 @@
                         border-radius: 16px;
                     "></span>
                     <span id="grok-early-access-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="grok-all-models-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>解锁所有模型
+                <span id="grok-all-models-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="grok-all-models-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-all-models-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="grok-all-models-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -925,6 +984,24 @@
         grokEarlyAccessTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(grokEarlyAccessTooltipBox);
 
+        // 创建 Grok 异步聊天提示框
+        const grokAsyncChatTooltipBox = document.createElement("div");
+        grokAsyncChatTooltipBox.id = "grok-async-chat-tooltip-box";
+        grokAsyncChatTooltipBox.innerText =
+            "将用户设置里的 isAsyncChat 设为 true。";
+        grokAsyncChatTooltipBox.style.position = "fixed";
+        grokAsyncChatTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokAsyncChatTooltipBox.style.color = "#fff";
+        grokAsyncChatTooltipBox.style.padding = "8px 12px";
+        grokAsyncChatTooltipBox.style.borderRadius = "5px";
+        grokAsyncChatTooltipBox.style.fontSize = "12px";
+        grokAsyncChatTooltipBox.style.visibility = "hidden";
+        grokAsyncChatTooltipBox.style.zIndex = "10001";
+        grokAsyncChatTooltipBox.style.width = "240px";
+        grokAsyncChatTooltipBox.style.lineHeight = "1.4";
+        grokAsyncChatTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokAsyncChatTooltipBox);
+
         // 显示提示
         document
             .getElementById("difficulty-tooltip")
@@ -998,6 +1075,10 @@
             bindTooltipEvents(
                 "grok-early-access-tooltip",
                 grokEarlyAccessTooltipBox,
+            );
+            bindTooltipEvents(
+                "grok-async-chat-tooltip",
+                grokAsyncChatTooltipBox,
             );
         }
 
@@ -1104,10 +1185,42 @@
             });
         }
 
+        // 绑定 Grok 异步聊天开关事件
+        function bindGrokAsyncChatToggle() {
+            const toggle = document.getElementById("grok-async-chat-toggle");
+            const slider = document.getElementById("grok-async-chat-slider");
+            const sliderDot = document.getElementById(
+                "grok-async-chat-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            // 设置初始状态
+            toggle.checked = grokAsyncChatEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokAsyncChatEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokAsyncChatEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_ASYNC_CHAT_KEY,
+                    grokAsyncChatEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokAsyncChatEnabled,
+                );
+            });
+        }
+
         if (isGrokMode) {
             setTimeout(bindGrokDevToolsToggle, 100);
             setTimeout(bindGrokAllModelsToggle, 100);
             setTimeout(bindGrokEarlyAccessToggle, 100);
+            setTimeout(bindGrokAsyncChatToggle, 100);
             // 恢复已缓存的状态显示
             setTimeout(() => {
                 if (window.applyGrokDevToolsDisplay) {
@@ -1131,6 +1244,7 @@
             bindGrokDevToolsToggle();
             bindGrokAllModelsToggle();
             bindGrokEarlyAccessToggle();
+            bindGrokAsyncChatToggle();
         };
     }
 
