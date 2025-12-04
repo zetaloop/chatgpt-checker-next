@@ -380,7 +380,7 @@
             </div>
             会员类型：<span id="grok-subscription-type">...</span><br>
             账号地区：<span id="grok-country-code">...</span><br>
-            <div id="grok-models-line" style="padding-left: 0.5em; text-indent: -0.5em; line-height: 1.4;">可用模型：<span id="grok-available-models">...</span></div>
+            可用模型：<span id="grok-available-models">...</span>
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>任务</strong>
             </div>
@@ -1708,7 +1708,6 @@
         if (!modelsEl) return;
 
         if (grokAvailableModels && Array.isArray(grokAvailableModels)) {
-            // 使用较小字体，并让括号及模型ID呈现灰色
             const formattedModels = grokAvailableModels.map((model) => {
                 // 匹配 "modeName (modelId)" 格式
                 const match = model.match(/^(.+?)(\s*\([^)]+\))$/);
@@ -1717,21 +1716,9 @@
                 }
                 return model;
             });
-            modelsEl.innerHTML = `<span style="font-size: 11px;">${formattedModels.join(", ")}</span>`;
-            // 有数据时应用更紧凑的行高
-            const lineEl = document.getElementById("grok-models-line");
-            if (lineEl) {
-                lineEl.style.lineHeight = "1";
-                lineEl.style.paddingTop = "0.15em";
-            }
+            modelsEl.innerHTML = `<div style="display: block; padding-left: 0.5em; font-size: 12px; line-height: 1.2;">${formattedModels.join("<br>")}</div>`;
         } else if (!grokModelsFetched) {
-            modelsEl.innerText = "...";
-            // 没有数据时恢复正常行高
-            const lineEl = document.getElementById("grok-models-line");
-            if (lineEl) {
-                lineEl.style.lineHeight = "1.4";
-                lineEl.style.paddingTop = "0";
-            }
+            modelsEl.innerHTML = "...";
         }
     }
 
