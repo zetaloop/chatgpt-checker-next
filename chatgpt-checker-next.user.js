@@ -623,6 +623,19 @@
             ">?</span>
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>功能</strong>
+                <span id="grok-feature-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span>
             </div>
             <div id="grok-dev-tools-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>开发工具：<span id="grok-dev-tools-status">...</span>
@@ -1147,6 +1160,23 @@
         soraInfoTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(soraInfoTooltipBox);
 
+        // 创建 Grok 功能提示框
+        const grokFeatureTooltipBox = document.createElement("div");
+        grokFeatureTooltipBox.id = "grok-feature-tooltip-box";
+        grokFeatureTooltipBox.innerText = "刷新页面生效。";
+        grokFeatureTooltipBox.style.position = "fixed";
+        grokFeatureTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokFeatureTooltipBox.style.color = "#fff";
+        grokFeatureTooltipBox.style.padding = "8px 12px";
+        grokFeatureTooltipBox.style.borderRadius = "5px";
+        grokFeatureTooltipBox.style.fontSize = "12px";
+        grokFeatureTooltipBox.style.visibility = "hidden";
+        grokFeatureTooltipBox.style.zIndex = "10001";
+        grokFeatureTooltipBox.style.width = "240px";
+        grokFeatureTooltipBox.style.lineHeight = "1.4";
+        grokFeatureTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokFeatureTooltipBox);
+
         // 创建 Grok 开发工具提示框
         const grokDevToolsTooltipBox = document.createElement("div");
         grokDevToolsTooltipBox.id = "grok-dev-tools-tooltip-box";
@@ -1313,6 +1343,7 @@
             bindTooltipEvents("credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
+            bindTooltipEvents("grok-feature-tooltip", grokFeatureTooltipBox);
             bindTooltipEvents(
                 "grok-all-models-tooltip",
                 grokAllModelsTooltipBox,
