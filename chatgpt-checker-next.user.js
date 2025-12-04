@@ -60,6 +60,14 @@
     let grokAsyncChatDisplayValue = null;
     let grokAsyncChatFetched = false;
 
+    // Grok 假装用户类型状态
+    let grokSuperGrokDisplayValue = null;
+    let grokSuperGrokFetched = false;
+    let grokSuperGrokProDisplayValue = null;
+    let grokSuperGrokProFetched = false;
+    let grokEnterpriseDisplayValue = null;
+    let grokEnterpriseFetched = false;
+
     // RSC 缓存需要 spoil 的查询键
     const SPOIL_QUERY_KEYS = ["get-models"];
 
@@ -185,6 +193,90 @@
                         }
                     }
 
+                    // isSuperGrokUser
+                    if (
+                        grokSuperGrokEnabled &&
+                        dataString.indexOf('"isSuperGrokUser":false') !== -1
+                    ) {
+                        dataString = dataString.replace(
+                            /"isSuperGrokUser":false/g,
+                            '"isSuperGrokUser":true',
+                        );
+                        args[0][1] = dataString;
+                        console.log(
+                            "[CheckerNext] 已替换 isSuperGrokUser 为 true",
+                        );
+                    }
+                    if (!grokSuperGrokFetched) {
+                        const superGrokMatch = dataString.match(
+                            /"isSuperGrokUser":(true|false)/,
+                        );
+                        if (superGrokMatch) {
+                            grokSuperGrokDisplayValue =
+                                superGrokMatch[1] === "true";
+                            grokSuperGrokFetched = true;
+                            if (window.updateGrokSuperGrokStatus) {
+                                window.updateGrokSuperGrokStatus();
+                            }
+                        }
+                    }
+
+                    // isSuperGrokProUser
+                    if (
+                        grokSuperGrokProEnabled &&
+                        dataString.indexOf('"isSuperGrokProUser":false') !== -1
+                    ) {
+                        dataString = dataString.replace(
+                            /"isSuperGrokProUser":false/g,
+                            '"isSuperGrokProUser":true',
+                        );
+                        args[0][1] = dataString;
+                        console.log(
+                            "[CheckerNext] 已替换 isSuperGrokProUser 为 true",
+                        );
+                    }
+                    if (!grokSuperGrokProFetched) {
+                        const superGrokProMatch = dataString.match(
+                            /"isSuperGrokProUser":(true|false)/,
+                        );
+                        if (superGrokProMatch) {
+                            grokSuperGrokProDisplayValue =
+                                superGrokProMatch[1] === "true";
+                            grokSuperGrokProFetched = true;
+                            if (window.updateGrokSuperGrokProStatus) {
+                                window.updateGrokSuperGrokProStatus();
+                            }
+                        }
+                    }
+
+                    // isEnterpriseUser
+                    if (
+                        grokEnterpriseEnabled &&
+                        dataString.indexOf('"isEnterpriseUser":false') !== -1
+                    ) {
+                        dataString = dataString.replace(
+                            /"isEnterpriseUser":false/g,
+                            '"isEnterpriseUser":true',
+                        );
+                        args[0][1] = dataString;
+                        console.log(
+                            "[CheckerNext] 已替换 isEnterpriseUser 为 true",
+                        );
+                    }
+                    if (!grokEnterpriseFetched) {
+                        const enterpriseMatch = dataString.match(
+                            /"isEnterpriseUser":(true|false)/,
+                        );
+                        if (enterpriseMatch) {
+                            grokEnterpriseDisplayValue =
+                                enterpriseMatch[1] === "true";
+                            grokEnterpriseFetched = true;
+                            if (window.updateGrokEnterpriseStatus) {
+                                window.updateGrokEnterpriseStatus();
+                            }
+                        }
+                    }
+
                     if (dataString.indexOf('"queries":[') !== -1) {
                         // 尝试找到 queries 数组并过滤
                         const queriesStart = dataString.indexOf('"queries":[');
@@ -268,6 +360,19 @@
     const GROK_ASYNC_CHAT_KEY = "checker-next-grok-async-chat";
     let grokAsyncChatEnabled =
         isGrokMode && localStorage.getItem(GROK_ASYNC_CHAT_KEY) === "true";
+
+    // Grok 假装用户类型开关状态存储
+    const GROK_SUPER_GROK_KEY = "checker-next-grok-super-grok";
+    let grokSuperGrokEnabled =
+        isGrokMode && localStorage.getItem(GROK_SUPER_GROK_KEY) === "true";
+
+    const GROK_SUPER_GROK_PRO_KEY = "checker-next-grok-super-grok-pro";
+    let grokSuperGrokProEnabled =
+        isGrokMode && localStorage.getItem(GROK_SUPER_GROK_PRO_KEY) === "true";
+
+    const GROK_ENTERPRISE_KEY = "checker-next-grok-enterprise";
+    let grokEnterpriseEnabled =
+        isGrokMode && localStorage.getItem(GROK_ENTERPRISE_KEY) === "true";
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
@@ -671,6 +776,90 @@
                         border-radius: 16px;
                     "></span>
                     <span id="grok-all-models-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="grok-super-grok-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>假装 Super Grok：<span id="grok-super-grok-status">...</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="grok-super-grok-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-super-grok-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="grok-super-grok-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="grok-super-grok-pro-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>假装 SuperGrok Pro：<span id="grok-super-grok-pro-status">...</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="grok-super-grok-pro-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-super-grok-pro-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="grok-super-grok-pro-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="grok-enterprise-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>假装 Enterprise：<span id="grok-enterprise-status">...</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="grok-enterprise-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-enterprise-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="grok-enterprise-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -1278,11 +1467,108 @@
             });
         }
 
+        // 绑定 Grok 假装 Super Grok 开关事件
+        function bindGrokSuperGrokToggle() {
+            const toggle = document.getElementById("grok-super-grok-toggle");
+            const slider = document.getElementById("grok-super-grok-slider");
+            const sliderDot = document.getElementById(
+                "grok-super-grok-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            toggle.checked = grokSuperGrokEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokSuperGrokEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokSuperGrokEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_SUPER_GROK_KEY,
+                    grokSuperGrokEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokSuperGrokEnabled,
+                );
+            });
+        }
+
+        // 绑定 Grok 假装 Super Grok Pro 开关事件
+        function bindGrokSuperGrokProToggle() {
+            const toggle = document.getElementById(
+                "grok-super-grok-pro-toggle",
+            );
+            const slider = document.getElementById(
+                "grok-super-grok-pro-slider",
+            );
+            const sliderDot = document.getElementById(
+                "grok-super-grok-pro-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            toggle.checked = grokSuperGrokProEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokSuperGrokProEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokSuperGrokProEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_SUPER_GROK_PRO_KEY,
+                    grokSuperGrokProEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokSuperGrokProEnabled,
+                );
+            });
+        }
+
+        // 绑定 Grok 假装 Enterprise 开关事件
+        function bindGrokEnterpriseToggle() {
+            const toggle = document.getElementById("grok-enterprise-toggle");
+            const slider = document.getElementById("grok-enterprise-slider");
+            const sliderDot = document.getElementById(
+                "grok-enterprise-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            toggle.checked = grokEnterpriseEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokEnterpriseEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokEnterpriseEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_ENTERPRISE_KEY,
+                    grokEnterpriseEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokEnterpriseEnabled,
+                );
+            });
+        }
+
         if (isGrokMode) {
             setTimeout(bindGrokDevToolsToggle, 100);
             setTimeout(bindGrokAllModelsToggle, 100);
             setTimeout(bindGrokEarlyAccessToggle, 100);
             setTimeout(bindGrokAsyncChatToggle, 100);
+            setTimeout(bindGrokSuperGrokToggle, 100);
+            setTimeout(bindGrokSuperGrokProToggle, 100);
+            setTimeout(bindGrokEnterpriseToggle, 100);
             // 恢复已缓存的状态显示
             setTimeout(() => {
                 if (window.applyGrokDevToolsDisplay) {
@@ -1293,6 +1579,15 @@
                 }
                 if (window.updateGrokAsyncChatStatus) {
                     window.updateGrokAsyncChatStatus();
+                }
+                if (window.updateGrokSuperGrokStatus) {
+                    window.updateGrokSuperGrokStatus();
+                }
+                if (window.updateGrokSuperGrokProStatus) {
+                    window.updateGrokSuperGrokProStatus();
+                }
+                if (window.updateGrokEnterpriseStatus) {
+                    window.updateGrokEnterpriseStatus();
                 }
                 if (window.updateGrokUserInfo) {
                     window.updateGrokUserInfo();
@@ -1313,6 +1608,9 @@
             bindGrokAllModelsToggle();
             bindGrokEarlyAccessToggle();
             bindGrokAsyncChatToggle();
+            bindGrokSuperGrokToggle();
+            bindGrokSuperGrokProToggle();
+            bindGrokEnterpriseToggle();
         };
     }
 
@@ -2008,6 +2306,60 @@
 
     // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
     window.updateGrokAsyncChatStatus = updateGrokAsyncChatStatus;
+
+    // 更新 Grok 假装 Super Grok 状态
+    function updateGrokSuperGrokStatus() {
+        if (!isGrokMode) return;
+        const statusEl = document.getElementById("grok-super-grok-status");
+        if (!statusEl) return;
+
+        if (grokSuperGrokDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (grokSuperGrokDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
+    window.updateGrokSuperGrokStatus = updateGrokSuperGrokStatus;
+
+    // 更新 Grok 假装 Super Grok Pro 状态
+    function updateGrokSuperGrokProStatus() {
+        if (!isGrokMode) return;
+        const statusEl = document.getElementById("grok-super-grok-pro-status");
+        if (!statusEl) return;
+
+        if (grokSuperGrokProDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (grokSuperGrokProDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
+    window.updateGrokSuperGrokProStatus = updateGrokSuperGrokProStatus;
+
+    // 更新 Grok 假装 Enterprise 状态
+    function updateGrokEnterpriseStatus() {
+        if (!isGrokMode) return;
+        const statusEl = document.getElementById("grok-enterprise-status");
+        if (!statusEl) return;
+
+        if (grokEnterpriseDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (grokEnterpriseDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
+    window.updateGrokEnterpriseStatus = updateGrokEnterpriseStatus;
 
     // 更新 Grok 用户信息（Grok订阅、X订阅和账号地区）
     function updateGrokUserInfo() {
