@@ -89,7 +89,7 @@
                             try {
                                 // 解析数组内容
                                 const subsArray = JSON.parse(
-                                    "[" + activeSubsMatch[1] + "]",
+                                    `[${activeSubsMatch[1]}]`,
                                 );
                                 grokActiveSubscriptions = subsArray;
                             } catch (e) {
@@ -903,14 +903,14 @@
         let displayBoxInitialized = false;
         const resizeObserver = new ResizeObserver(() => {
             if (!displayBoxInitialized) return;
-            displayBox.style.height = contentWrapper.offsetHeight + "px";
+            displayBox.style.height = `${contentWrapper.offsetHeight}px`;
         });
         resizeObserver.observe(contentWrapper);
 
         // 如果之前弹窗正在显示，直接恢复显示状态（跳过动画）
         if (isDisplayBoxVisible) {
             displayBox.style.transition = "none";
-            displayBox.style.height = contentWrapper.offsetHeight + "px";
+            displayBox.style.height = `${contentWrapper.offsetHeight}px`;
             displayBox.style.opacity = "1";
             displayBox.style.transform =
                 "translateY(-50%) translateX(0) scale(1)";
