@@ -1061,8 +1061,17 @@
     </svg>`;
         document.body.appendChild(collapsedIndicator);
 
-        // 鼠标悬停事件
-        collapsedIndicator.addEventListener("mouseenter", function () {
+        // 辅助函数
+        function isPointInRect(x, y, rect) {
+            return (
+                x >= rect.left &&
+                x <= rect.right &&
+                y >= rect.top &&
+                y <= rect.bottom
+            );
+        }
+
+        function showDisplayBox() {
             // 打开时先禁用高度动画，设置正确高度
             displayBox.style.transition = "none";
             displayBox.style.height = contentWrapper.offsetHeight + "px";
@@ -1077,9 +1086,9 @@
             displayBoxInitialized = true;
             isDisplayBoxVisible = true;
             collapsedIndicator.style.opacity = "0";
-        });
+        }
 
-        displayBox.addEventListener("mouseleave", function () {
+        function hideDisplayBox() {
             displayBox.style.opacity = "0";
             displayBox.style.transform =
                 "translateY(-50%) translateX(2px) scale(0.98)";
@@ -1087,6 +1096,50 @@
             displayBoxInitialized = false;
             isDisplayBoxVisible = false;
             collapsedIndicator.style.opacity = "1";
+        }
+
+        // 在 window 级别监听 mousemove，仅在鼠标移动时检测
+        // 使用捕获阶段，确保即使其他层阻止冒泡也能收到事件
+        window.addEventListener(
+            "mousemove",
+            function (e) {
+                const indicatorRect =
+                    collapsedIndicator.getBoundingClientRect();
+                const displayBoxRect = displayBox.getBoundingClientRect();
+
+                const overIndicator = isPointInRect(
+                    e.clientX,
+                    e.clientY,
+                    indicatorRect,
+                );
+                const overDisplayBox = isPointInRect(
+                    e.clientX,
+                    e.clientY,
+                    displayBoxRect,
+                );
+
+                if (overIndicator && !isDisplayBoxVisible) {
+                    showDisplayBox();
+                } else if (
+                    !overIndicator &&
+                    !overDisplayBox &&
+                    isDisplayBoxVisible
+                ) {
+                    hideDisplayBox();
+                }
+            },
+            true,
+        );
+
+        // 保留原有事件作为备用
+        collapsedIndicator.addEventListener("mouseenter", function () {
+            if (!isDisplayBoxVisible) {
+                showDisplayBox();
+            }
+        });
+
+        displayBox.addEventListener("mouseleave", function () {
+            hideDisplayBox();
         });
 
         // 创建提示框
