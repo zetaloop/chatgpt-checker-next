@@ -43,7 +43,8 @@
 
     // Spoil RSC dehydrated data to force client-side refetch
     // Parse user info from RSC data
-    let grokSubscriptionType = null;
+    let grokActiveSubscriptions = null;
+    let grokXSubscriptionType = null;
     let grokCountryCode = null;
     let grokUserInfoFetched = false;
 
@@ -70,14 +71,37 @@
                 if (args[0] && typeof args[0][1] === "string") {
                     let dataString = args[0][1];
 
-                    // 解析用户信息（xSubscriptionType 和 countryCode）
+                    // 解析用户信息（activeSubscriptions、xSubscriptionType 和 countryCode）
                     if (!grokUserInfoFetched) {
+                        // 匹配 activeSubscriptions 数组
+                        const activeSubsMatch = dataString.match(
+                            /"activeSubscriptions"\s*:\s*\[([^\]]*)\]/,
+                        );
+                        if (activeSubsMatch) {
+                            try {
+                                // 解析数组内容
+                                const subsArray = JSON.parse(
+                                    "[" + activeSubsMatch[1] + "]",
+                                );
+                                grokActiveSubscriptions = subsArray;
+                            } catch (e) {
+                                // 解析失败时尝试简单匹配字符串
+                                const stringsMatch =
+                                    activeSubsMatch[1].match(/"([^"]+)"/g);
+                                if (stringsMatch) {
+                                    grokActiveSubscriptions = stringsMatch.map(
+                                        (s) => s.replace(/"/g, ""),
+                                    );
+                                }
+                            }
+                        }
+
                         // 匹配 xSubscriptionType
                         const subTypeMatch = dataString.match(
                             /"xSubscriptionType"\s*:\s*"([^"]*)"/,
                         );
                         if (subTypeMatch) {
-                            grokSubscriptionType = subTypeMatch[1];
+                            grokXSubscriptionType = subTypeMatch[1];
                         }
 
                         // 匹配 countryCode（通常在 user 对象后面）
@@ -88,11 +112,12 @@
                             grokCountryCode = countryMatch[1];
                         }
 
-                        if (grokSubscriptionType && grokCountryCode) {
+                        if (grokXSubscriptionType && grokCountryCode) {
                             grokUserInfoFetched = true;
                             console.log(
                                 "[CheckerNext] Parsed Grok user info:",
-                                grokSubscriptionType,
+                                grokActiveSubscriptions,
+                                grokXSubscriptionType,
                                 grokCountryCode,
                             );
                             // 尝试更新 UI
@@ -455,7 +480,8 @@
             <div style="margin-bottom: 2px;">
                 <strong>Grok</strong>
             </div>
-            会员类型：<span id="grok-subscription-type">...</span><br>
+            Grok订阅：<span id="grok-active-subscriptions">...</span><br>
+            X订阅：<span id="grok-x-subscription-type">...</span><br>
             账号地区：<span id="grok-country-code">...</span><br>
             可用模型：<span id="grok-available-models">...</span>
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -1983,17 +2009,35 @@
     // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
     window.updateGrokAsyncChatStatus = updateGrokAsyncChatStatus;
 
-    // 更新 Grok 用户信息（会员类型和账号地区）
+    // 更新 Grok 用户信息（Grok订阅、X订阅和账号地区）
     function updateGrokUserInfo() {
         if (!isGrokMode) return;
 
-        const subTypeEl = document.getElementById("grok-subscription-type");
+        const activeSubsEl = document.getElementById(
+            "grok-active-subscriptions",
+        );
+        const subTypeEl = document.getElementById("grok-x-subscription-type");
         const countryEl = document.getElementById("grok-country-code");
 
         // 应用已缓存的值
+        if (activeSubsEl) {
+            if (
+                grokActiveSubscriptions &&
+                Array.isArray(grokActiveSubscriptions)
+            ) {
+                if (grokActiveSubscriptions.length === 0) {
+                    activeSubsEl.innerText = "无";
+                } else {
+                    activeSubsEl.innerText = grokActiveSubscriptions.join("、");
+                }
+            } else if (!grokUserInfoFetched) {
+                activeSubsEl.innerText = "...";
+            }
+        }
+
         if (subTypeEl) {
-            if (grokSubscriptionType) {
-                subTypeEl.innerText = grokSubscriptionType;
+            if (grokXSubscriptionType) {
+                subTypeEl.innerText = grokXSubscriptionType;
             } else if (!grokUserInfoFetched) {
                 subTypeEl.innerText = "...";
             }
