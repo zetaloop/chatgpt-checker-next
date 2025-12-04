@@ -93,6 +93,24 @@
                             }
                         }
                     }
+
+                    // enableEarlyAccessModels
+                    if (
+                        grokEarlyAccessEnabled &&
+                        dataString.indexOf(
+                            '"enableEarlyAccessModels":false',
+                        ) !== -1
+                    ) {
+                        dataString = dataString.replace(
+                            /"enableEarlyAccessModels":false/g,
+                            '"enableEarlyAccessModels":true',
+                        );
+                        args[0][1] = dataString;
+                        console.log(
+                            "[CheckerNext] 已替换 enableEarlyAccessModels 为 true",
+                        );
+                    }
+
                     if (dataString.indexOf('"queries":[') !== -1) {
                         // 尝试找到 queries 数组并过滤
                         const queriesStart = dataString.indexOf('"queries":[');
@@ -166,6 +184,11 @@
     const GROK_ALL_MODELS_KEY = "checker-next-grok-all-models";
     let grokAllModelsEnabled =
         isGrokMode && localStorage.getItem(GROK_ALL_MODELS_KEY) === "true";
+
+    // Grok 抢先体验模型开关状态存储
+    const GROK_EARLY_ACCESS_KEY = "checker-next-grok-early-access";
+    let grokEarlyAccessEnabled =
+        isGrokMode && localStorage.getItem(GROK_EARLY_ACCESS_KEY) === "true";
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
@@ -486,6 +509,47 @@
                         border-radius: 16px;
                     "></span>
                     <span id="grok-all-models-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="grok-early-access-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>抢先体验模型
+                <span id="grok-early-access-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="grok-early-access-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="grok-early-access-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="grok-early-access-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -843,6 +907,24 @@
         grokAllModelsTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(grokAllModelsTooltipBox);
 
+        // 创建 Grok 抢先体验模型提示框
+        const grokEarlyAccessTooltipBox = document.createElement("div");
+        grokEarlyAccessTooltipBox.id = "grok-early-access-tooltip-box";
+        grokEarlyAccessTooltipBox.innerText =
+            "将用户设置里的 enableEarlyAccessModels 设为 true。";
+        grokEarlyAccessTooltipBox.style.position = "fixed";
+        grokEarlyAccessTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        grokEarlyAccessTooltipBox.style.color = "#fff";
+        grokEarlyAccessTooltipBox.style.padding = "8px 12px";
+        grokEarlyAccessTooltipBox.style.borderRadius = "5px";
+        grokEarlyAccessTooltipBox.style.fontSize = "12px";
+        grokEarlyAccessTooltipBox.style.visibility = "hidden";
+        grokEarlyAccessTooltipBox.style.zIndex = "10001";
+        grokEarlyAccessTooltipBox.style.width = "240px";
+        grokEarlyAccessTooltipBox.style.lineHeight = "1.4";
+        grokEarlyAccessTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(grokEarlyAccessTooltipBox);
+
         // 显示提示
         document
             .getElementById("difficulty-tooltip")
@@ -912,6 +994,10 @@
             bindTooltipEvents(
                 "grok-occasional-tooltip",
                 grokOccasionalTooltipBox,
+            );
+            bindTooltipEvents(
+                "grok-early-access-tooltip",
+                grokEarlyAccessTooltipBox,
             );
         }
 
@@ -987,9 +1073,41 @@
             });
         }
 
+        // 绑定 Grok 抢先体验模型开关事件
+        function bindGrokEarlyAccessToggle() {
+            const toggle = document.getElementById("grok-early-access-toggle");
+            const slider = document.getElementById("grok-early-access-slider");
+            const sliderDot = document.getElementById(
+                "grok-early-access-slider-dot",
+            );
+            if (!toggle || !slider || !sliderDot) return;
+
+            // 设置初始状态
+            toggle.checked = grokEarlyAccessEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                grokEarlyAccessEnabled,
+            );
+
+            toggle.addEventListener("change", function () {
+                grokEarlyAccessEnabled = toggle.checked;
+                localStorage.setItem(
+                    GROK_EARLY_ACCESS_KEY,
+                    grokEarlyAccessEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    grokEarlyAccessEnabled,
+                );
+            });
+        }
+
         if (isGrokMode) {
             setTimeout(bindGrokDevToolsToggle, 100);
             setTimeout(bindGrokAllModelsToggle, 100);
+            setTimeout(bindGrokEarlyAccessToggle, 100);
             // 恢复已缓存的状态显示
             setTimeout(() => {
                 if (window.applyGrokDevToolsDisplay) {
@@ -1012,6 +1130,7 @@
         window.rebindGrokToggle = () => {
             bindGrokDevToolsToggle();
             bindGrokAllModelsToggle();
+            bindGrokEarlyAccessToggle();
         };
     }
 
