@@ -51,6 +51,14 @@
     let grokAvailableModels = null;
     let grokModelsFetched = false;
 
+    // Grok 抢先体验模型状态
+    let grokEarlyAccessDisplayValue = null;
+    let grokEarlyAccessFetched = false;
+
+    // Grok 异步聊天状态
+    let grokAsyncChatDisplayValue = null;
+    let grokAsyncChatFetched = false;
+
     // RSC 缓存需要 spoil 的查询键
     const SPOIL_QUERY_KEYS = ["get-models"];
 
@@ -110,6 +118,20 @@
                             "[CheckerNext] 已替换 enableEarlyAccessModels 为 true",
                         );
                     }
+                    // 在替换之后解析最终值
+                    if (!grokEarlyAccessFetched) {
+                        const earlyAccessMatch = dataString.match(
+                            /"enableEarlyAccessModels":(true|false)/,
+                        );
+                        if (earlyAccessMatch) {
+                            grokEarlyAccessDisplayValue =
+                                earlyAccessMatch[1] === "true";
+                            grokEarlyAccessFetched = true;
+                            if (window.updateGrokEarlyAccessStatus) {
+                                window.updateGrokEarlyAccessStatus();
+                            }
+                        }
+                    }
 
                     // isAsyncChat
                     if (
@@ -122,6 +144,20 @@
                         );
                         args[0][1] = dataString;
                         console.log("[CheckerNext] 已替换 isAsyncChat 为 true");
+                    }
+                    // 在替换之后解析最终值
+                    if (!grokAsyncChatFetched) {
+                        const asyncChatMatch = dataString.match(
+                            /"isAsyncChat":(true|false)/,
+                        );
+                        if (asyncChatMatch) {
+                            grokAsyncChatDisplayValue =
+                                asyncChatMatch[1] === "true";
+                            grokAsyncChatFetched = true;
+                            if (window.updateGrokAsyncChatStatus) {
+                                window.updateGrokAsyncChatStatus();
+                            }
+                        }
                     }
 
                     if (dataString.indexOf('"queries":[') !== -1) {
@@ -499,7 +535,7 @@
                 </label>
             </div>
             <div id="grok-async-chat-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>异步聊天
+                <span>异步聊天：<span id="grok-async-chat-status">...</span>
                 <span id="grok-async-chat-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -540,7 +576,7 @@
                 </label>
             </div>
             <div id="grok-early-access-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>抢先体验模型
+                <span>抢先体验模型：<span id="grok-early-access-status">...</span>
                 <span id="grok-early-access-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -1226,6 +1262,12 @@
                 if (window.applyGrokDevToolsDisplay) {
                     window.applyGrokDevToolsDisplay();
                 }
+                if (window.updateGrokEarlyAccessStatus) {
+                    window.updateGrokEarlyAccessStatus();
+                }
+                if (window.updateGrokAsyncChatStatus) {
+                    window.updateGrokAsyncChatStatus();
+                }
                 if (window.updateGrokUserInfo) {
                     window.updateGrokUserInfo();
                 }
@@ -1904,6 +1946,42 @@
 
     // 挂载到 window 以便 DOM 重建后恢复状态
     window.applyGrokDevToolsDisplay = applyGrokDevToolsDisplay;
+
+    // 更新 Grok 抢先体验模型状态
+    function updateGrokEarlyAccessStatus() {
+        if (!isGrokMode) return;
+        const statusEl = document.getElementById("grok-early-access-status");
+        if (!statusEl) return;
+
+        if (grokEarlyAccessDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (grokEarlyAccessDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
+    window.updateGrokEarlyAccessStatus = updateGrokEarlyAccessStatus;
+
+    // 更新 Grok 异步聊天状态
+    function updateGrokAsyncChatStatus() {
+        if (!isGrokMode) return;
+        const statusEl = document.getElementById("grok-async-chat-status");
+        if (!statusEl) return;
+
+        if (grokAsyncChatDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (grokAsyncChatDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
+    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
+    window.updateGrokAsyncChatStatus = updateGrokAsyncChatStatus;
 
     // 更新 Grok 用户信息（会员类型和账号地区）
     function updateGrokUserInfo() {
