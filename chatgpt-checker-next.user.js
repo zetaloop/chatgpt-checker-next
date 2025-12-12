@@ -3042,9 +3042,11 @@
                     );
                 }
                 updateDefaultModelInfo(
-                    typeof data.default_model_slug === "string"
-                        ? data.default_model_slug
-                        : null,
+                    data.default_model_slug === null
+                        ? "无"
+                        : typeof data.default_model_slug === "string"
+                          ? data.default_model_slug
+                          : null,
                 );
                 return new Response(bodyText, {
                     status: response.status,
