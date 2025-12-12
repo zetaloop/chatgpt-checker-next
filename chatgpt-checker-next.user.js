@@ -2862,9 +2862,11 @@
         const response = await originalFetch(resource, options);
 
         if (
-            (requestUrl.includes("/backend-api/sentinel/chat-requirements") ||
+            (requestUrl.includes(
+                "/backend-api/sentinel/chat-requirements/prepare",
+            ) ||
                 requestUrl.includes(
-                    "/backend-anon/sentinel/chat-requirements",
+                    "/backend-anon/sentinel/chat-requirements/prepare",
                 )) &&
             finalMethod === "POST" &&
             response.ok
