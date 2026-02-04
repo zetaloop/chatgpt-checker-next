@@ -1074,7 +1074,7 @@
         function showDisplayBox() {
             // 打开时先禁用高度动画，设置正确高度
             displayBox.style.transition = "none";
-            displayBox.style.height = contentWrapper.offsetHeight + "px";
+            displayBox.style.height = `${contentWrapper.offsetHeight}px`;
             // 强制重绘后启用所有动画
             displayBox.offsetHeight;
             displayBox.style.transition =
