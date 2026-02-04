@@ -2247,7 +2247,7 @@
 
         if (typeof accessResetsInSeconds === "number") {
             soraLimitWindowSeconds = accessResetsInSeconds;
-            soraTimerNotStarted = accessResetsInSeconds === 86400;
+            soraTimerNotStarted = accessResetsInSeconds >= 86399;
             if (soraTimerNotStarted) {
                 soraResetDeadlineMs = null;
             } else {
