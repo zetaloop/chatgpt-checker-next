@@ -2220,7 +2220,9 @@
             return;
         }
 
-        if (
+        if (rateLimitReached === true) {
+            freeUsageEl.innerText = "已用尽";
+        } else if (
             typeof estimatedVideosRemaining === "number" &&
             typeof estimatedPurchasedVideosRemaining === "number"
         ) {
