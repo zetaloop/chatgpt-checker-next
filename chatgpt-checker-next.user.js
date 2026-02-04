@@ -2247,11 +2247,12 @@
 
         if (typeof accessResetsInSeconds === "number") {
             soraLimitWindowSeconds = accessResetsInSeconds;
-            soraTimerNotStarted = accessResetsInSeconds >= 86399;
+            soraTimerNotStarted = accessResetsInSeconds + 1 >= 86400;
             if (soraTimerNotStarted) {
                 soraResetDeadlineMs = null;
             } else {
-                soraResetDeadlineMs = Date.now() + accessResetsInSeconds * 1000;
+                soraResetDeadlineMs =
+                    Date.now() + (accessResetsInSeconds + 1) * 1000;
             }
         } else {
             soraResetDeadlineMs = null;
