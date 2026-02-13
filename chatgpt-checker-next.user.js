@@ -438,6 +438,7 @@
                 margin-left: 3px;
             ">?</span><br>
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
+            <span id="user-region-container" style="display: block">用户地区：<span id="user-region">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
             <span id="price-region-container" style="display: block">价格地区：<span id="price-region">...</span></span>
         </div>
@@ -2910,6 +2911,27 @@
         container.style.display = "block";
     }
 
+    let userRegionValue = null;
+    function updateUserRegion(country, region) {
+        if (!isChatgptMode) return;
+        const container = document.getElementById("user-region-container");
+        const valueEl = document.getElementById("user-region");
+        if (!container || !valueEl) return;
+
+        if (typeof country === "string" && country.trim()) {
+            const parts = [country.trim()];
+            if (typeof region === "string" && region.trim()) {
+                parts.push(region.trim());
+            }
+            userRegionValue = parts.join(" / ");
+        } else {
+            userRegionValue = null;
+        }
+
+        valueEl.innerText = userRegionValue || "...";
+        container.style.display = "block";
+    }
+
     let priceRegionCode = null;
     function updatePriceRegion(countryCode) {
         if (!isChatgptMode) return;
@@ -3027,6 +3049,40 @@
 
                 if (typeof responseBodyText === "string") {
                     return new Response(responseBodyText, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.endsWith("/backend-api/me") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) {
+                return response;
+            }
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+                updateUserRegion(
+                    typeof data?.country === "string" ? data.country : null,
+                    typeof data?.region === "string" ? data.region : null,
+                );
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理用户地区响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return new Response(bodyText, {
                         status: response.status,
                         statusText: response.statusText,
                         headers: response.headers,
