@@ -455,6 +455,13 @@
             剩余次数：<span id="odyssey-usage">...</span><br>
             重置时间：<span id="odyssey-reset-time">...</span>
         </div>
+        <div id="image-gen-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>图片生成</strong>
+            </div>
+            剩余次数：<span id="image-gen-usage">...</span><br>
+            重置时间：<span id="image-gen-reset-time">...</span>
+        </div>
         <div id="file-upload-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>文件上传</strong>
@@ -468,13 +475,6 @@
             </div>
             剩余次数：<span id="paste-text-to-file-usage">...</span><br>
             重置时间：<span id="paste-text-to-file-reset-time">...</span>
-        </div>
-        <div id="image-gen-section" style="margin-top: 10px; display: none">
-            <div style="margin-top: 10px; margin-bottom: 2px;">
-                <strong>图片生成</strong>
-            </div>
-            剩余次数：<span id="image-gen-usage">...</span><br>
-            重置时间：<span id="image-gen-reset-time">...</span>
         </div>
         <div id="memory-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
