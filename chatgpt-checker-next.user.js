@@ -462,6 +462,20 @@
             剩余次数：<span id="file-upload-usage">...</span><br>
             重置时间：<span id="file-upload-reset-time">...</span>
         </div>
+        <div id="paste-text-to-file-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>粘贴文本为文件</strong>
+            </div>
+            剩余次数：<span id="paste-text-to-file-usage">...</span><br>
+            重置时间：<span id="paste-text-to-file-reset-time">...</span>
+        </div>
+        <div id="image-gen-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>图片生成</strong>
+            </div>
+            剩余次数：<span id="image-gen-usage">...</span><br>
+            重置时间：<span id="image-gen-reset-time">...</span>
+        </div>
         <div id="memory-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>模型记忆</strong>
@@ -927,6 +941,10 @@
         const fileUploadSection = document.getElementById(
             "file-upload-section",
         );
+        const pasteTextToFileSection = document.getElementById(
+            "paste-text-to-file-section",
+        );
+        const imageGenSection = document.getElementById("image-gen-section");
         const codexSection = document.getElementById("codex-section");
         const soraSection = document.getElementById("sora-section");
         const grokSection = document.getElementById("grok-section");
@@ -936,6 +954,9 @@
             if (deepSection) deepSection.style.display = "none";
             if (odysseySection) odysseySection.style.display = "none";
             if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (pasteTextToFileSection)
+                pasteTextToFileSection.style.display = "none";
+            if (imageGenSection) imageGenSection.style.display = "none";
             if (soraSection) {
                 soraSection.style.display = "none";
                 soraSection.style.marginTop = "10px";
@@ -953,6 +974,9 @@
             if (deepSection) deepSection.style.display = "none";
             if (odysseySection) odysseySection.style.display = "none";
             if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (pasteTextToFileSection)
+                pasteTextToFileSection.style.display = "none";
+            if (imageGenSection) imageGenSection.style.display = "none";
             if (codexSection) {
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
@@ -970,6 +994,9 @@
             if (deepSection) deepSection.style.display = "none";
             if (odysseySection) odysseySection.style.display = "none";
             if (fileUploadSection) fileUploadSection.style.display = "none";
+            if (pasteTextToFileSection)
+                pasteTextToFileSection.style.display = "none";
+            if (imageGenSection) imageGenSection.style.display = "none";
             if (codexSection) {
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
@@ -2673,6 +2700,12 @@
         // 如果获取的时间接近当前的三小时后，认定为计数未开始
     }
 
+    function isImageGenResetNotStarted(resetAfter) {
+        const oneDayLater = Date.now() + 24 * 60 * 60 * 1000;
+        return isResetTimestampNear(resetAfter, oneDayLater);
+        // 如果获取的时间接近当前的一天后，认定为计数未开始
+    }
+
     // 更新深度研究次数
     let researchRemaining = null;
     let researchReset = null;
@@ -2776,6 +2809,82 @@
 
         if (uploadReset) {
             const date = new Date(uploadReset);
+            resetEl.innerText = date
+                .toLocaleString("zh-CN", { hour12: false })
+                .replace(/\//g, "-");
+        } else {
+            resetEl.innerText = "...";
+        }
+    }
+
+    // 更新粘贴文本为文件次数
+    let pasteTextRemaining = null;
+    let pasteTextReset = null;
+    function updatePasteTextToFileInfo(remaining, resetAfter) {
+        if (!isChatgptMode) return;
+        const section = document.getElementById("paste-text-to-file-section");
+        const usageEl = document.getElementById("paste-text-to-file-usage");
+        const resetEl = document.getElementById(
+            "paste-text-to-file-reset-time",
+        );
+
+        if (!section || !usageEl || !resetEl) return;
+
+        if (typeof remaining !== "number") {
+            section.style.display = "none";
+            return;
+        }
+
+        pasteTextRemaining = remaining;
+        pasteTextReset = resetAfter || null;
+
+        section.style.display = "block";
+        section.style.marginTop = powFetched ? "10px" : "0";
+        if (isFileUploadResetNotStarted(resetAfter)) {
+            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
+        } else {
+            usageEl.innerText = `${remaining}次`;
+        }
+
+        if (pasteTextReset) {
+            const date = new Date(pasteTextReset);
+            resetEl.innerText = date
+                .toLocaleString("zh-CN", { hour12: false })
+                .replace(/\//g, "-");
+        } else {
+            resetEl.innerText = "...";
+        }
+    }
+
+    // 更新图片生成次数
+    let imageGenRemaining = null;
+    let imageGenReset = null;
+    function updateImageGenInfo(remaining, resetAfter) {
+        if (!isChatgptMode) return;
+        const section = document.getElementById("image-gen-section");
+        const usageEl = document.getElementById("image-gen-usage");
+        const resetEl = document.getElementById("image-gen-reset-time");
+
+        if (!section || !usageEl || !resetEl) return;
+
+        if (typeof remaining !== "number") {
+            section.style.display = "none";
+            return;
+        }
+
+        imageGenRemaining = remaining;
+        imageGenReset = resetAfter || null;
+
+        section.style.display = "block";
+        section.style.marginTop = powFetched ? "10px" : "0";
+        if (isImageGenResetNotStarted(resetAfter)) {
+            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
+        } else {
+            usageEl.innerText = `${remaining}次`;
+        }
+
+        if (imageGenReset) {
+            const date = new Date(imageGenReset);
             resetEl.innerText = date
                 .toLocaleString("zh-CN", { hour12: false })
                 .replace(/\//g, "-");
@@ -3029,6 +3138,16 @@
                           (i) => i.feature_name === "file_upload",
                       )
                     : null;
+                const paste_text_to_file = Array.isArray(data.limits_progress)
+                    ? data.limits_progress.find(
+                          (i) => i.feature_name === "paste_text_to_file",
+                      )
+                    : null;
+                const image_gen = Array.isArray(data.limits_progress)
+                    ? data.limits_progress.find(
+                          (i) => i.feature_name === "image_gen",
+                      )
+                    : null;
                 if (deep_research) {
                     updateDeepResearchInfo(
                         deep_research.remaining,
@@ -3042,6 +3161,18 @@
                     updateFileUploadInfo(
                         file_upload.remaining,
                         file_upload.reset_after,
+                    );
+                }
+                if (paste_text_to_file) {
+                    updatePasteTextToFileInfo(
+                        paste_text_to_file.remaining,
+                        paste_text_to_file.reset_after,
+                    );
+                }
+                if (image_gen) {
+                    updateImageGenInfo(
+                        image_gen.remaining,
+                        image_gen.reset_after,
                     );
                 }
                 updateDefaultModelInfo(
