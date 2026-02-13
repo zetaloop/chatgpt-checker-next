@@ -2691,19 +2691,16 @@
         const monthLater = new Date(Date.now());
         monthLater.setMonth(monthLater.getMonth() + 1);
         return isResetTimestampNear(resetAfter, monthLater.getTime());
-        // 如果获取的时间接近当前的一个月后，认定为计数未开始
     }
 
-    function isFileUploadResetNotStarted(resetAfter) {
-        const threeHoursLater = Date.now() + 3 * 60 * 60 * 1000;
-        return isResetTimestampNear(resetAfter, threeHoursLater);
-        // 如果获取的时间接近当前的三小时后，认定为计数未开始
-    }
-
-    function isImageGenResetNotStarted(resetAfter) {
+    function isDailyResetNotStarted(resetAfter) {
         const oneDayLater = Date.now() + 24 * 60 * 60 * 1000;
         return isResetTimestampNear(resetAfter, oneDayLater);
-        // 如果获取的时间接近当前的一天后，认定为计数未开始
+    }
+
+    function isThreeHourResetNotStarted(resetAfter) {
+        const threeHoursLater = Date.now() + 3 * 60 * 60 * 1000;
+        return isResetTimestampNear(resetAfter, threeHoursLater);
     }
 
     // 更新深度研究次数
@@ -2801,7 +2798,7 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        if (isFileUploadResetNotStarted(resetAfter)) {
+        if (isThreeHourResetNotStarted(resetAfter)) {
             usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
         } else {
             usageEl.innerText = `${remaining}次`;
@@ -2840,7 +2837,7 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        if (isFileUploadResetNotStarted(resetAfter)) {
+        if (isThreeHourResetNotStarted(resetAfter)) {
             usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
         } else {
             usageEl.innerText = `${remaining}次`;
@@ -2877,7 +2874,7 @@
 
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        if (isImageGenResetNotStarted(resetAfter)) {
+        if (isDailyResetNotStarted(resetAfter)) {
             usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
         } else {
             usageEl.innerText = `${remaining}次`;
