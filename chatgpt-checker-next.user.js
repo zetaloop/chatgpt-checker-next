@@ -2273,13 +2273,13 @@
         soraCreditsAvailable = hasCredits;
 
         if (typeof accessResetsInSeconds === "number") {
-            soraLimitWindowSeconds = accessResetsInSeconds;
-            soraTimerNotStarted = accessResetsInSeconds + 1 >= 86400;
+            soraLimitWindowSeconds = accessResetsInSeconds + 1;
+            soraTimerNotStarted = soraLimitWindowSeconds >= 86400;
             if (soraTimerNotStarted) {
                 soraResetDeadlineMs = null;
             } else {
                 soraResetDeadlineMs =
-                    Date.now() + (accessResetsInSeconds + 1) * 1000;
+                    Date.now() + soraLimitWindowSeconds * 1000;
             }
         } else {
             soraResetDeadlineMs = null;
