@@ -396,6 +396,78 @@
     let chatgptCitronModeFetched = false;
     let chatgptCitronModeDisplayValue = null;
 
+    const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
+    const CHATGPT_FAKE_PLAN_ENABLED_KEY =
+        "checker-next-chatgpt-fake-plan-enabled";
+    let chatgptFakePlanValue = isChatgptMode
+        ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
+        : "pro";
+    let chatgptFakePlanEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
+
+    // Patch Promise.then
+    const PLAN_PATCHED = Symbol.for("checker-next.Promise.then.patched");
+    function installPlanTypePatcher() {
+        if (Promise.prototype.then[PLAN_PATCHED]) return;
+        const ORIGINAL_THEN = Promise.prototype.then;
+        Object.defineProperty(ORIGINAL_THEN, PLAN_PATCHED, { value: true });
+
+        let patchSeen = new WeakSet();
+
+        function patchPlanType(obj, depth) {
+            if (!obj || typeof obj !== "object" || depth > 200) return 0;
+            if (patchSeen.has(obj)) return 0;
+            patchSeen.add(obj);
+            let changed = 0;
+            if (Array.isArray(obj)) {
+                for (let i = 0; i < obj.length; i++) {
+                    const v = obj[i];
+                    if (v && typeof v === "object")
+                        changed += patchPlanType(v, depth + 1);
+                }
+                return changed;
+            }
+            for (const k of Object.keys(obj)) {
+                try {
+                    const v = obj[k];
+                    if (v && typeof v === "object") {
+                        changed += patchPlanType(v, depth + 1);
+                    } else if (
+                        k === "planType" &&
+                        typeof v === "string" &&
+                        v !== chatgptFakePlanValue
+                    ) {
+                        obj[k] = chatgptFakePlanValue;
+                        changed++;
+                    }
+                } catch {}
+            }
+            return changed;
+        }
+
+        // biome-ignore lint/suspicious/noThenProperty: Promise.then monkey-patch
+        Promise.prototype.then = function (onFulfilled, onRejected) {
+            const wrap = (fn) =>
+                function (v) {
+                    try {
+                        if (
+                            chatgptFakePlanEnabled &&
+                            chatgptFakePlanValue &&
+                            v &&
+                            typeof v === "object"
+                        ) {
+                            patchSeen = new WeakSet();
+                            patchPlanType(v, 0);
+                        }
+                    } catch {}
+                    return typeof fn === "function" ? fn(v) : v;
+                };
+            return ORIGINAL_THEN.call(this, wrap(onFulfilled), onRejected);
+        };
+    }
+    if (isChatgptMode) installPlanTypePatcher();
+
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
 
@@ -1038,6 +1110,62 @@
                         border-radius: 16px;
                     "></span>
                     <span id="chatgpt-citron-mode-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="chatgpt-fake-plan-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>假装
+                <select id="chatgpt-fake-plan-select" style="
+                    background-color: #333;
+                    color: #fff;
+                    border: 0px;
+                    border-radius: 4px;
+                    padding: 4px 24px 4px 12px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    outline: none;
+                    line-height: 1em;
+                ">
+                    <option value="guest">Guest</option>
+                    <option value="free">Free</option>
+                    <option value="go">Go</option>
+                    <option value="plus">Plus</option>
+                    <option value="prolite">Pro Lite</option>
+                    <option value="pro">Pro</option>
+                    <option value="free_workspace">Free Workspace</option>
+                    <option value="team">Team</option>
+                    <option value="business">Business</option>
+                    <option value="hc">HC</option>
+                    <option value="finserv">Finserv</option>
+                    <option value="education">Education</option>
+                    <option value="quorum">Quorum</option>
+                    <option value="enterprise">Enterprise (弃用)</option>
+                    <option value="edu">Edu (弃用)</option>
+                    <option value="k12">K12</option>
+                </select></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-fake-plan-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-fake-plan-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-fake-plan-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -1847,6 +1975,47 @@
             });
         }
 
+        function bindChatgptFakePlanSelect() {
+            const select = document.getElementById("chatgpt-fake-plan-select");
+            const toggle = document.getElementById("chatgpt-fake-plan-toggle");
+            const slider = document.getElementById("chatgpt-fake-plan-slider");
+            const sliderDot = document.getElementById(
+                "chatgpt-fake-plan-slider-dot",
+            );
+            if (!select || !toggle || !slider || !sliderDot) return;
+
+            select.value = chatgptFakePlanValue;
+            toggle.checked = chatgptFakePlanEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                chatgptFakePlanEnabled,
+            );
+
+            if (select.dataset.checkerNextBound === "1") return;
+            select.dataset.checkerNextBound = "1";
+
+            select.addEventListener("change", function () {
+                chatgptFakePlanValue = select.value;
+                localStorage.setItem(
+                    CHATGPT_FAKE_PLAN_KEY,
+                    chatgptFakePlanValue,
+                );
+            });
+            toggle.addEventListener("change", function () {
+                chatgptFakePlanEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_FAKE_PLAN_ENABLED_KEY,
+                    chatgptFakePlanEnabled ? "true" : "false",
+                );
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    chatgptFakePlanEnabled,
+                );
+            });
+        }
+
         // 绑定 Grok 所有模型开关事件
         function bindGrokAllModelsToggle() {
             const toggle = document.getElementById("grok-all-models-toggle");
@@ -2075,12 +2244,14 @@
             setTimeout(bindChatgptResearchToTextToggle, 100);
             setTimeout(bindChatgptAgeVerificationSettingToggle, 100);
             setTimeout(bindChatgptCitronModeToggle, 100);
+            setTimeout(bindChatgptFakePlanSelect, 100);
         }
 
         window.rebindChatgptToggle = () => {
             bindChatgptResearchToTextToggle();
             bindChatgptAgeVerificationSettingToggle();
             bindChatgptCitronModeToggle();
+            bindChatgptFakePlanSelect();
         };
         // 延迟添加提示事件，因为元素可能在后面动态显示
         setTimeout(bindAllTooltips, 100);
