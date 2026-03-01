@@ -1134,47 +1134,6 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            <div id="chatgpt-research-to-text-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>研究报告转文本
-                <span id="chatgpt-research-to-text-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-research-to-text-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-research-to-text-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-research-to-text-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
             <div id="chatgpt-age-verification-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>年龄验证：<span id="chatgpt-age-verification-status">...</span>
                 <span id="chatgpt-age-verification-tooltip" style="
@@ -1217,7 +1176,20 @@
                 </label>
             </div>
             <div id="chatgpt-citron-mode-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>成人模式：<span id="chatgpt-citron-mode-status">...</span></span>
+                <span>成人模式：<span id="chatgpt-citron-mode-status">...</span>
+                <span id="chatgpt-citron-mode-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
                 <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
                     <input type="checkbox" id="chatgpt-citron-mode-toggle" style="opacity: 0; width: 0; height: 0;">
                     <span id="chatgpt-citron-mode-slider" style="
@@ -1244,6 +1216,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-research-to-text-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>研究报告转文本
+                <span id="chatgpt-research-to-text-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-research-to-text-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-research-to-text-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-research-to-text-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-fake-plan-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>假装
                 <select id="chatgpt-fake-plan-select" style="
@@ -1251,7 +1264,7 @@
                     color: #fff;
                     border: 0px;
                     border-radius: 4px;
-                    padding: 4px 24px 4px 12px;
+                    padding: 4px 8px 4px 8px;
                     font-size: 11px;
                     cursor: pointer;
                     outline: none;
@@ -1273,7 +1286,21 @@
                     <option value="enterprise">Enterprise (弃用)</option>
                     <option value="edu">Edu (弃用)</option>
                     <option value="k12">K12</option>
-                </select></span>
+                </select>
+                <span id="chatgpt-fake-plan-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                    margin-right: 2px;
+                ">?</span></span>
                 <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
                     <input type="checkbox" id="chatgpt-fake-plan-toggle" style="opacity: 0; width: 0; height: 0;">
                     <span id="chatgpt-fake-plan-slider" style="
@@ -1749,7 +1776,7 @@
         chatgptAgeVerificationSettingTooltipBox.id =
             "chatgpt-age-verification-tooltip-box";
         chatgptAgeVerificationSettingTooltipBox.innerText =
-            "ChatGPT 设置 - 账户 - 年龄验证，可以扫脸验证成人，没加载出来的话进入对话可以触发加载。";
+            "ChatGPT 设置 - 账户 - 年龄验证，可以扫脸验证成人，没看到 True/False 的话请进入对话/设置来触发加载此配置。";
         chatgptAgeVerificationSettingTooltipBox.style.position = "fixed";
         chatgptAgeVerificationSettingTooltipBox.style.backgroundColor =
             "rgba(0, 0, 0, 0.8)";
@@ -1763,6 +1790,43 @@
         chatgptAgeVerificationSettingTooltipBox.style.lineHeight = "1.4";
         chatgptAgeVerificationSettingTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(chatgptAgeVerificationSettingTooltipBox);
+
+        // 创建成人模式提示框
+        const chatgptCitronModeTooltipBox = document.createElement("div");
+        chatgptCitronModeTooltipBox.id = "chatgpt-citron-mode-tooltip-box";
+        chatgptCitronModeTooltipBox.innerText =
+            "Citron Mode，暂未发现实际作用。";
+        chatgptCitronModeTooltipBox.style.position = "fixed";
+        chatgptCitronModeTooltipBox.style.backgroundColor =
+            "rgba(0, 0, 0, 0.8)";
+        chatgptCitronModeTooltipBox.style.color = "#fff";
+        chatgptCitronModeTooltipBox.style.padding = "8px 12px";
+        chatgptCitronModeTooltipBox.style.borderRadius = "5px";
+        chatgptCitronModeTooltipBox.style.fontSize = "12px";
+        chatgptCitronModeTooltipBox.style.visibility = "hidden";
+        chatgptCitronModeTooltipBox.style.zIndex = "10001";
+        chatgptCitronModeTooltipBox.style.width = "240px";
+        chatgptCitronModeTooltipBox.style.lineHeight = "1.4";
+        chatgptCitronModeTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(chatgptCitronModeTooltipBox);
+
+        // 创建假装会员提示框
+        const chatgptFakePlanTooltipBox = document.createElement("div");
+        chatgptFakePlanTooltipBox.id = "chatgpt-fake-plan-tooltip-box";
+        chatgptFakePlanTooltipBox.innerText =
+            "不稳定，可能导致功能异常或一直刷新，页面20秒内刷新5次将自动关闭此功能。";
+        chatgptFakePlanTooltipBox.style.position = "fixed";
+        chatgptFakePlanTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        chatgptFakePlanTooltipBox.style.color = "#fff";
+        chatgptFakePlanTooltipBox.style.padding = "8px 12px";
+        chatgptFakePlanTooltipBox.style.borderRadius = "5px";
+        chatgptFakePlanTooltipBox.style.fontSize = "12px";
+        chatgptFakePlanTooltipBox.style.visibility = "hidden";
+        chatgptFakePlanTooltipBox.style.zIndex = "10001";
+        chatgptFakePlanTooltipBox.style.width = "240px";
+        chatgptFakePlanTooltipBox.style.lineHeight = "1.4";
+        chatgptFakePlanTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(chatgptFakePlanTooltipBox);
 
         grokOccasionalTooltipBox.style.position = "fixed";
         grokOccasionalTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
@@ -1905,6 +1969,14 @@
             bindTooltipEvents(
                 "chatgpt-age-verification-tooltip",
                 chatgptAgeVerificationSettingTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-citron-mode-tooltip",
+                chatgptCitronModeTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-fake-plan-tooltip",
+                chatgptFakePlanTooltipBox,
             );
             bindTooltipEvents(
                 "grok-early-access-tooltip",
