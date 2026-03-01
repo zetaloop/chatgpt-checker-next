@@ -399,8 +399,44 @@
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
         "checker-next-chatgpt-fake-plan-enabled";
+    const CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP = Object.freeze({
+        guest: "chatgptguestplan",
+        free: "chatgptfreeplan",
+        go: "chatgptgoplan",
+        plus: "chatgptplusplan",
+        prolite: "chatgptprolite",
+        pro: "chatgptpro",
+        free_workspace: "chatgptfreeworkspaceplan",
+        team: "chatgptteamplan",
+        business: "chatgptbusiness_flat",
+        hc: "chatgpthc_flat",
+        finserv: "chatgptfinserv_flat",
+        education: "chatgpteducation_flat",
+        quorum: "chatgptquorumplan",
+        enterprise: "chatgptenterpriseplan",
+        edu: "chatgpteduplan",
+        k12: "chatgptk12plan",
+    });
+
+    function normalizeChatgptFakePlanType(value) {
+        if (
+            typeof value === "string" &&
+            Object.hasOwn(CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP, value)
+        ) {
+            return value;
+        }
+        return "pro";
+    }
+
+    function getFakeSubscriptionPlanByPlanType(planType) {
+        const normalizedPlanType = normalizeChatgptFakePlanType(planType);
+        return CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP[normalizedPlanType];
+    }
+
     let chatgptFakePlanValue = isChatgptMode
-        ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
+        ? normalizeChatgptFakePlanType(
+              localStorage.getItem(CHATGPT_FAKE_PLAN_KEY),
+          )
         : "pro";
     let chatgptFakePlanEnabled =
         isChatgptMode &&
@@ -1984,6 +2020,8 @@
             );
             if (!select || !toggle || !slider || !sliderDot) return;
 
+            chatgptFakePlanValue =
+                normalizeChatgptFakePlanType(chatgptFakePlanValue);
             select.value = chatgptFakePlanValue;
             toggle.checked = chatgptFakePlanEnabled;
             updateGrokDevToolsSliderStyle(
@@ -1996,7 +2034,10 @@
             select.dataset.checkerNextBound = "1";
 
             select.addEventListener("change", function () {
-                chatgptFakePlanValue = select.value;
+                chatgptFakePlanValue = normalizeChatgptFakePlanType(
+                    select.value,
+                );
+                select.value = chatgptFakePlanValue;
                 localStorage.setItem(
                     CHATGPT_FAKE_PLAN_KEY,
                     chatgptFakePlanValue,
@@ -3937,6 +3978,113 @@
                 return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 settings/user 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return recreateResponseText(bodyText, response);
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend-api/subscriptions") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) return response;
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                if (!chatgptFakePlanEnabled) {
+                    return recreateResponseText(bodyText, response);
+                }
+                const data = JSON.parse(bodyText);
+                const targetPlanType =
+                    normalizeChatgptFakePlanType(chatgptFakePlanValue);
+
+                if (
+                    data &&
+                    typeof data === "object" &&
+                    data.plan_type !== targetPlanType
+                ) {
+                    data.plan_type = targetPlanType;
+                    return new Response(JSON.stringify(data), {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return recreateResponseText(bodyText, response);
+            } catch (e) {
+                console.error("[CheckerNext] 处理 subscriptions 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return recreateResponseText(bodyText, response);
+                }
+                return response;
+            }
+        }
+
+        if (
+            requestUrl.includes("/backend-api/accounts/check/v4-") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) return response;
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                if (!chatgptFakePlanEnabled) {
+                    return recreateResponseText(bodyText, response);
+                }
+                const data = JSON.parse(bodyText);
+                let modified = false;
+
+                const targetPlanType =
+                    normalizeChatgptFakePlanType(chatgptFakePlanValue);
+                const targetSubscriptionPlan =
+                    getFakeSubscriptionPlanByPlanType(targetPlanType);
+
+                if (
+                    data &&
+                    typeof data === "object" &&
+                    data.accounts &&
+                    typeof data.accounts === "object"
+                ) {
+                    for (const accountId of Object.keys(data.accounts)) {
+                        const item = data.accounts[accountId];
+                        if (!item || typeof item !== "object") continue;
+
+                        if (
+                            item.account &&
+                            typeof item.account === "object" &&
+                            item.account.plan_type !== targetPlanType
+                        ) {
+                            item.account.plan_type = targetPlanType;
+                            modified = true;
+                        }
+
+                        if (
+                            item.entitlement &&
+                            typeof item.entitlement === "object" &&
+                            item.entitlement.subscription_plan !==
+                                targetSubscriptionPlan
+                        ) {
+                            item.entitlement.subscription_plan =
+                                targetSubscriptionPlan;
+                            modified = true;
+                        }
+                    }
+                }
+
+                if (modified) {
+                    return new Response(JSON.stringify(data), {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                return recreateResponseText(bodyText, response);
+            } catch (e) {
+                console.error("[CheckerNext] 处理 accounts/check 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return recreateResponseText(bodyText, response);
                 }
