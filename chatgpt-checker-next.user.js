@@ -379,6 +379,22 @@
     let chatgptResearchToTextEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_RESEARCH_TO_TEXT_KEY) === "true";
+    const CHATGPT_AGE_VERIFICATION_KEY =
+        "checker-next-chatgpt-age-verification";
+    let chatgptAgeVerificationEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_AGE_VERIFICATION_KEY) === "true";
+
+    const CHATGPT_ADULT_MODE_KEY = "checker-next-chatgpt-adult-mode";
+    let chatgptAdultModeEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_ADULT_MODE_KEY) === "true";
+
+    let chatgptAgeVerificationFetched = false;
+    let chatgptAgeVerificationDisplayValue = null;
+
+    let chatgptAdultModeFetched = false;
+    let chatgptAdultModeDisplayValue = null;
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
@@ -965,6 +981,75 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-age-verification-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>年龄验证：<span id="chatgpt-age-verification-status">...</span>
+                <span id="chatgpt-age-verification-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-age-verification-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-age-verification-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-age-verification-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="chatgpt-adult-mode-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>成人模式：<span id="chatgpt-adult-mode-status">...</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-adult-mode-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-adult-mode-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-adult-mode-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
         </div>
         <div style="
             margin-top: 12px;
@@ -1384,12 +1469,12 @@
         featuresTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(featuresTooltipBox);
 
-        // 创建研究转文本提示框
+        // 创建研究报告转文本提示框
         const chatgptResearchToTextTooltipBox = document.createElement("div");
         chatgptResearchToTextTooltipBox.id =
             "chatgpt-research-to-text-tooltip-box";
         chatgptResearchToTextTooltipBox.innerText =
-            "将传统深度研究的结果转为普通文本消息，以便复制。";
+            "传统深度研究中，将结果转为普通的文本消息以便复制。";
         chatgptResearchToTextTooltipBox.style.position = "fixed";
         chatgptResearchToTextTooltipBox.style.backgroundColor =
             "rgba(0, 0, 0, 0.8)";
@@ -1408,6 +1493,26 @@
         grokOccasionalTooltipBox.id = "grok-occasional-tooltip-box";
         grokOccasionalTooltipBox.innerText =
             "单次、每周、每月、每年触发的任务。";
+        // 创建年龄验证提示框
+        const chatgptAgeVerificationTooltipBox = document.createElement("div");
+        chatgptAgeVerificationTooltipBox.id =
+            "chatgpt-age-verification-tooltip-box";
+        chatgptAgeVerificationTooltipBox.innerText =
+            "设置 - 账户 - 年龄验证，可以扫脸验证成人。偶尔没加载出来的话，进入对话或者进入设置可以触发加载。";
+        chatgptAgeVerificationTooltipBox.style.position = "fixed";
+        chatgptAgeVerificationTooltipBox.style.backgroundColor =
+            "rgba(0, 0, 0, 0.8)";
+        chatgptAgeVerificationTooltipBox.style.color = "#fff";
+        chatgptAgeVerificationTooltipBox.style.padding = "8px 12px";
+        chatgptAgeVerificationTooltipBox.style.borderRadius = "5px";
+        chatgptAgeVerificationTooltipBox.style.fontSize = "12px";
+        chatgptAgeVerificationTooltipBox.style.visibility = "hidden";
+        chatgptAgeVerificationTooltipBox.style.zIndex = "10001";
+        chatgptAgeVerificationTooltipBox.style.width = "240px";
+        chatgptAgeVerificationTooltipBox.style.lineHeight = "1.4";
+        chatgptAgeVerificationTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(chatgptAgeVerificationTooltipBox);
+
         grokOccasionalTooltipBox.style.position = "fixed";
         grokOccasionalTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         grokOccasionalTooltipBox.style.color = "#fff";
@@ -1547,6 +1652,10 @@
                 grokOccasionalTooltipBox,
             );
             bindTooltipEvents(
+                "chatgpt-age-verification-tooltip",
+                chatgptAgeVerificationTooltipBox,
+            );
+            bindTooltipEvents(
                 "grok-early-access-tooltip",
                 grokEarlyAccessTooltipBox,
             );
@@ -1636,6 +1745,96 @@
                 localStorage.setItem(
                     CHATGPT_RESEARCH_TO_TEXT_KEY,
                     chatgptResearchToTextEnabled ? "true" : "false",
+                );
+                apply();
+            });
+        }
+        function bindChatgptAgeVerificationToggle() {
+            const container = document.getElementById(
+                "chatgpt-age-verification-container",
+            );
+            const toggle = document.getElementById(
+                "chatgpt-age-verification-toggle",
+            );
+            const slider = document.getElementById(
+                "chatgpt-age-verification-slider",
+            );
+            const sliderDot = document.getElementById(
+                "chatgpt-age-verification-slider-dot",
+            );
+            const statusEl = document.getElementById(
+                "chatgpt-age-verification-status",
+            );
+            if (!container || !toggle || !slider || !sliderDot || !statusEl)
+                return;
+
+            function apply() {
+                if (
+                    typeof window.applyChatgptAgeVerificationDisplay ===
+                    "function"
+                ) {
+                    window.applyChatgptAgeVerificationDisplay(statusEl);
+                }
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    chatgptAgeVerificationEnabled,
+                );
+            }
+
+            toggle.checked = chatgptAgeVerificationEnabled;
+            apply();
+
+            if (toggle.dataset.checkerNextBound === "1") return;
+            toggle.dataset.checkerNextBound = "1";
+
+            toggle.addEventListener("change", function () {
+                chatgptAgeVerificationEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_AGE_VERIFICATION_KEY,
+                    chatgptAgeVerificationEnabled ? "true" : "false",
+                );
+                apply();
+            });
+        }
+
+        function bindChatgptAdultModeToggle() {
+            const container = document.getElementById(
+                "chatgpt-adult-mode-container",
+            );
+            const toggle = document.getElementById("chatgpt-adult-mode-toggle");
+            const slider = document.getElementById("chatgpt-adult-mode-slider");
+            const sliderDot = document.getElementById(
+                "chatgpt-adult-mode-slider-dot",
+            );
+            const statusEl = document.getElementById(
+                "chatgpt-adult-mode-status",
+            );
+            if (!container || !toggle || !slider || !sliderDot || !statusEl)
+                return;
+
+            function apply() {
+                if (typeof window.applyChatgptAdultModeDisplay === "function") {
+                    window.applyChatgptAdultModeDisplay(statusEl);
+                }
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    chatgptAdultModeEnabled,
+                );
+            }
+
+            toggle.checked = chatgptAdultModeEnabled;
+            apply();
+
+            if (toggle.dataset.checkerNextBound === "1") return;
+            toggle.dataset.checkerNextBound = "1";
+
+            toggle.addEventListener("change", function () {
+                chatgptAdultModeEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_ADULT_MODE_KEY,
+                    chatgptAdultModeEnabled ? "true" : "false",
                 );
                 apply();
             });
@@ -1867,8 +2066,15 @@
 
         if (isChatgptMode) {
             setTimeout(bindChatgptResearchToTextToggle, 100);
+            setTimeout(bindChatgptAgeVerificationToggle, 100);
+            setTimeout(bindChatgptAdultModeToggle, 100);
         }
 
+        window.rebindChatgptToggle = () => {
+            bindChatgptResearchToTextToggle();
+            bindChatgptAgeVerificationToggle();
+            bindChatgptAdultModeToggle();
+        };
         // 延迟添加提示事件，因为元素可能在后面动态显示
         setTimeout(bindAllTooltips, 100);
 
@@ -2490,6 +2696,88 @@
         }
     }
     setInterval(updateSoraCountdown, 1000);
+
+    // 更新 ChatGPT 各自的开关状态显示
+    function updateChatgptAgeVerificationStatus(originalValue, wasModified) {
+        if (!isChatgptMode) return;
+        const statusEl = document.getElementById(
+            "chatgpt-age-verification-status",
+        );
+        if (!statusEl) return;
+
+        if (
+            (originalValue === null || originalValue === undefined) &&
+            chatgptAgeVerificationFetched
+        ) {
+            applyChatgptAgeVerificationDisplay(statusEl);
+            return;
+        }
+        if (typeof originalValue === "boolean") {
+            chatgptAgeVerificationFetched = true;
+            if (wasModified) {
+                chatgptAgeVerificationDisplayValue = true;
+            } else {
+                chatgptAgeVerificationDisplayValue = originalValue;
+            }
+            applyChatgptAgeVerificationDisplay(statusEl);
+        }
+    }
+
+    function applyChatgptAgeVerificationDisplay(statusEl) {
+        if (!statusEl) {
+            statusEl = document.getElementById(
+                "chatgpt-age-verification-status",
+            );
+        }
+        if (!statusEl) return;
+        if (chatgptAgeVerificationDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (chatgptAgeVerificationDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+    window.applyChatgptAgeVerificationDisplay =
+        applyChatgptAgeVerificationDisplay;
+
+    function updateChatgptAdultModeStatus(originalValue, wasModified) {
+        if (!isChatgptMode) return;
+        const statusEl = document.getElementById("chatgpt-adult-mode-status");
+        if (!statusEl) return;
+
+        if (
+            (originalValue === null || originalValue === undefined) &&
+            chatgptAdultModeFetched
+        ) {
+            applyChatgptAdultModeDisplay(statusEl);
+            return;
+        }
+        if (typeof originalValue === "boolean") {
+            chatgptAdultModeFetched = true;
+            if (wasModified) {
+                chatgptAdultModeDisplayValue = true;
+            } else {
+                chatgptAdultModeDisplayValue = originalValue;
+            }
+            applyChatgptAdultModeDisplay(statusEl);
+        }
+    }
+
+    function applyChatgptAdultModeDisplay(statusEl) {
+        if (!statusEl) {
+            statusEl = document.getElementById("chatgpt-adult-mode-status");
+        }
+        if (!statusEl) return;
+        if (chatgptAdultModeDisplayValue === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (chatgptAdultModeDisplayValue === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+    window.applyChatgptAdultModeDisplay = applyChatgptAdultModeDisplay;
 
     // 更新 Grok 开发工具状态显示
     // 使用全局变量以便在 DOM 重建后保留状态
@@ -3413,9 +3701,100 @@
                 return response;
             }
         }
+        if (
+            requestUrl.includes("/backend-api/settings/is_adult") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) return response;
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+
+                let originalValue = data.show_age_verification_setting === true;
+                let modified = false;
+
+                if (
+                    chatgptAgeVerificationEnabled &&
+                    data.show_age_verification_setting !== true
+                ) {
+                    data.show_age_verification_setting = true;
+                    modified = true;
+                }
+
+                updateChatgptAgeVerificationStatus(originalValue, modified);
+
+                if (modified) {
+                    return new Response(JSON.stringify(data), {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                // 返回新的 response，因为 body 已经被 consumed 了
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理 is_adult 响应出错:", e);
+                return response;
+            }
+        }
 
         if (
-            chatgptResearchToTextEnabled &&
+            requestUrl.includes("/backend-api/settings/user") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) return response;
+            let bodyText;
+            try {
+                bodyText = await response.text();
+                const data = JSON.parse(bodyText);
+
+                let originalValue = false;
+                if (
+                    data.settings &&
+                    typeof data.settings === "object" &&
+                    data.settings.citron_mode_enabled === true
+                ) {
+                    originalValue = true;
+                }
+
+                let modified = false;
+                if (chatgptAdultModeEnabled && !originalValue) {
+                    if (!data.settings || typeof data.settings !== "object") {
+                        data.settings = {};
+                    }
+                    data.settings.citron_mode_enabled = true;
+                    modified = true;
+                }
+
+                updateChatgptAdultModeStatus(originalValue, modified);
+
+                if (modified) {
+                    return new Response(JSON.stringify(data), {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                    });
+                }
+                // 返回新的 response，因为 body 已经被 consumed
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理 settings/user 响应出错:", e);
+                return response;
+            }
+        }
+
+        if (
             requestUrl.includes("/backend-api/conversation/") &&
             !requestUrl.includes("/backend-api/conversation/init") &&
             finalMethod === "GET" &&
@@ -3458,6 +3837,7 @@
 
                 const data = JSON.parse(bodyText);
                 let modified = false;
+                let hasResearchAndOriginallyNotText = false;
 
                 if (data && typeof data === "object" && data.mapping) {
                     const mapping = data.mapping;
@@ -3470,15 +3850,24 @@
                                 continue;
 
                             if (
-                                metadata.is_async_task_result_message === true
+                                metadata.is_async_task_result_message ===
+                                    true ||
+                                metadata.b1de6e2_rm === true
                             ) {
-                                metadata.is_async_task_result_message = false;
-                                modified = true;
-                            }
-
-                            if (metadata.b1de6e2_rm === true) {
-                                metadata.b1de6e2_rm = false;
-                                modified = true;
+                                hasResearchAndOriginallyNotText = true;
+                                if (chatgptResearchToTextEnabled) {
+                                    if (
+                                        metadata.is_async_task_result_message ===
+                                        true
+                                    ) {
+                                        metadata.is_async_task_result_message = false;
+                                        modified = true;
+                                    }
+                                    if (metadata.b1de6e2_rm === true) {
+                                        metadata.b1de6e2_rm = false;
+                                        modified = true;
+                                    }
+                                }
                             }
                         }
                     }
@@ -3486,8 +3875,6 @@
 
                 if (modified) {
                     bodyText = JSON.stringify(data);
-                } else {
-                    return response;
                 }
 
                 return new Response(bodyText, {
