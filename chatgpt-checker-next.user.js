@@ -374,6 +374,12 @@
     let grokEnterpriseEnabled =
         isGrokMode && localStorage.getItem(GROK_ENTERPRISE_KEY) === "true";
 
+    const CHATGPT_RESEARCH_TO_TEXT_KEY =
+        "checker-next-chatgpt-research-to-text";
+    let chatgptResearchToTextEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_RESEARCH_TO_TEXT_KEY) === "true";
+
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
 
@@ -441,6 +447,34 @@
             <span id="user-region-container" style="display: block">用户地区：<span id="user-region">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
             <span id="price-region-container" style="display: block">价格地区：<span id="price-region">...</span></span>
+            <div id="chatgpt-research-to-text-container" style="display: none; align-items: center; justify-content: space-between; margin-top: 8px;">
+                <span>研究转文本：<span id="chatgpt-research-to-text-status">...</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-research-to-text-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-research-to-text-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-research-to-text-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -1486,6 +1520,52 @@
             }
         }
 
+        function bindChatgptResearchToTextToggle() {
+            const container = document.getElementById(
+                "chatgpt-research-to-text-container",
+            );
+            const toggle = document.getElementById(
+                "chatgpt-research-to-text-toggle",
+            );
+            const slider = document.getElementById(
+                "chatgpt-research-to-text-slider",
+            );
+            const sliderDot = document.getElementById(
+                "chatgpt-research-to-text-slider-dot",
+            );
+            const statusEl = document.getElementById(
+                "chatgpt-research-to-text-status",
+            );
+            if (!container || !toggle || !slider || !sliderDot || !statusEl)
+                return;
+
+            container.style.display = "flex";
+
+            function apply() {
+                statusEl.innerText = chatgptResearchToTextEnabled ? "开" : "关";
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    chatgptResearchToTextEnabled,
+                );
+            }
+
+            toggle.checked = chatgptResearchToTextEnabled;
+            apply();
+
+            if (toggle.dataset.checkerNextBound === "1") return;
+            toggle.dataset.checkerNextBound = "1";
+
+            toggle.addEventListener("change", function () {
+                chatgptResearchToTextEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_RESEARCH_TO_TEXT_KEY,
+                    chatgptResearchToTextEnabled ? "true" : "false",
+                );
+                apply();
+            });
+        }
+
         // 绑定 Grok 所有模型开关事件
         function bindGrokAllModelsToggle() {
             const toggle = document.getElementById("grok-all-models-toggle");
@@ -1708,6 +1788,10 @@
                     window.updateGrokModels();
                 }
             }, 100);
+        }
+
+        if (isChatgptMode) {
+            setTimeout(bindChatgptResearchToTextToggle, 100);
         }
 
         // 延迟添加提示事件，因为元素可能在后面动态显示
@@ -3251,6 +3335,93 @@
                         headers: response.headers,
                     });
                 }
+                return response;
+            }
+        }
+
+        if (
+            chatgptResearchToTextEnabled &&
+            requestUrl.includes("/backend-api/conversation/") &&
+            !requestUrl.includes("/backend-api/conversation/init") &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode) {
+                return response;
+            }
+
+            let bodyText;
+            try {
+                if (
+                    !/\/backend-api\/conversation\/[0-9a-f-]+(?:[/?#]|$)/i.test(
+                        requestUrl,
+                    )
+                ) {
+                    return response;
+                }
+
+                const contentType = response.headers.get("content-type") || "";
+                if (contentType.indexOf("application/json") === -1) {
+                    return response;
+                }
+
+                bodyText = await response.text();
+
+                if (
+                    bodyText.indexOf('"async_task_type"') === -1 ||
+                    bodyText.indexOf('"research"') === -1
+                ) {
+                    return response;
+                }
+
+                if (
+                    bodyText.indexOf('"is_async_task_result_message"') === -1 &&
+                    bodyText.indexOf('"b1de6e2_rm"') === -1
+                ) {
+                    return response;
+                }
+
+                const data = JSON.parse(bodyText);
+                let modified = false;
+
+                if (data && typeof data === "object" && data.mapping) {
+                    const mapping = data.mapping;
+                    if (mapping && typeof mapping === "object") {
+                        for (const id of Object.keys(mapping)) {
+                            const metadata = mapping?.[id]?.message?.metadata;
+                            if (!metadata || typeof metadata !== "object")
+                                continue;
+                            if (metadata.async_task_type !== "research")
+                                continue;
+
+                            if (
+                                metadata.is_async_task_result_message === true
+                            ) {
+                                metadata.is_async_task_result_message = false;
+                                modified = true;
+                            }
+
+                            if (metadata.b1de6e2_rm === true) {
+                                metadata.b1de6e2_rm = false;
+                                modified = true;
+                            }
+                        }
+                    }
+                }
+
+                if (modified) {
+                    bodyText = JSON.stringify(data);
+                } else {
+                    return response;
+                }
+
+                return new Response(bodyText, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers,
+                });
+            } catch (e) {
+                console.error("[CheckerNext] 处理 conversation 响应出错:", e);
                 return response;
             }
         }
