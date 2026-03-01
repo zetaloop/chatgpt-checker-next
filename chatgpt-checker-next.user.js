@@ -399,6 +399,10 @@
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
         "checker-next-chatgpt-fake-plan-enabled";
+    const CHATGPT_FAKE_PLAN_SAFETY_KEY =
+        "checker-next-chatgpt-fake-plan-safety";
+    const CHATGPT_FAKE_PLAN_SAFETY_WINDOW_MS = 20 * 1000;
+    const CHATGPT_FAKE_PLAN_SAFETY_RELOAD_LIMIT = 5;
     const CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP = Object.freeze({
         guest: "chatgptguestplan",
         free: "chatgptfreeplan",
@@ -441,6 +445,82 @@
     let chatgptFakePlanEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
+
+    function getNavigationType() {
+        const entries = performance.getEntriesByType("navigation");
+        if (
+            Array.isArray(entries) &&
+            entries.length > 0 &&
+            typeof entries[0]?.type === "string"
+        ) {
+            return entries[0].type;
+        }
+
+        if (performance.navigation) {
+            if (performance.navigation.type === 1) return "reload";
+            if (performance.navigation.type === 0) return "navigate";
+        }
+
+        return "";
+    }
+
+    function updateChatgptFakePlanSafetyState() {
+        if (!isChatgptMode) return;
+        try {
+            const now = Date.now();
+            const navType = getNavigationType();
+            const rawState = sessionStorage.getItem(
+                CHATGPT_FAKE_PLAN_SAFETY_KEY,
+            );
+            const parsed =
+                rawState && rawState.trim().length > 0
+                    ? JSON.parse(rawState)
+                    : {};
+
+            const previousTimestamps = Array.isArray(parsed?.reloadTimestamps)
+                ? parsed.reloadTimestamps
+                : [];
+            const reloadTimestamps = previousTimestamps
+                .filter((value) => Number.isFinite(value))
+                .filter(
+                    (value) =>
+                        now - value <= CHATGPT_FAKE_PLAN_SAFETY_WINDOW_MS,
+                );
+
+            if (navType === "reload") {
+                reloadTimestamps.push(now);
+            }
+
+            const triggered =
+                navType === "reload" &&
+                reloadTimestamps.length >=
+                    CHATGPT_FAKE_PLAN_SAFETY_RELOAD_LIMIT;
+            if (triggered) {
+                reloadTimestamps.length = 0;
+            }
+
+            sessionStorage.setItem(
+                CHATGPT_FAKE_PLAN_SAFETY_KEY,
+                JSON.stringify({
+                    reloadTimestamps,
+                }),
+            );
+
+            if (triggered) {
+                chatgptFakePlanEnabled = false;
+                localStorage.setItem(CHATGPT_FAKE_PLAN_ENABLED_KEY, "false");
+                alert("20秒内重载5次，触发安全模式，已关闭假装会员功能");
+            }
+        } catch {}
+    }
+
+    function isChatgptFakePlanRuntimeEnabled() {
+        return chatgptFakePlanEnabled && chatgptFakePlanValue;
+    }
+
+    if (chatgptFakePlanEnabled) {
+        updateChatgptFakePlanSafetyState();
+    }
 
     // Patch Promise.then
     const PLAN_PATCHED = Symbol.for("checker-next.Promise.then.patched");
@@ -492,7 +572,7 @@
 
         // biome-ignore lint/suspicious/noThenProperty: Promise.then monkey-patch
         Promise.prototype.then = function (onFulfilled, onRejected) {
-            if (!chatgptFakePlanEnabled || !chatgptFakePlanValue) {
+            if (!isChatgptFakePlanRuntimeEnabled()) {
                 return ORIGINAL_THEN.call(this, onFulfilled, onRejected);
             }
             const wrappedOnFulfilled = function (v) {
@@ -2033,7 +2113,7 @@
             updateGrokDevToolsSliderStyle(
                 slider,
                 sliderDot,
-                chatgptFakePlanEnabled,
+                isChatgptFakePlanRuntimeEnabled(),
             );
 
             if (select.dataset.checkerNextBound === "1") return;
@@ -4000,7 +4080,7 @@
             let bodyText;
             try {
                 bodyText = await response.text();
-                if (!chatgptFakePlanEnabled) {
+                if (!isChatgptFakePlanRuntimeEnabled()) {
                     return recreateResponseText(bodyText, response);
                 }
                 const data = JSON.parse(bodyText);
@@ -4038,7 +4118,7 @@
             let bodyText;
             try {
                 bodyText = await response.text();
-                if (!chatgptFakePlanEnabled) {
+                if (!isChatgptFakePlanRuntimeEnabled()) {
                     return recreateResponseText(bodyText, response);
                 }
                 const data = JSON.parse(bodyText);
