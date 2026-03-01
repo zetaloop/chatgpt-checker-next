@@ -449,10 +449,8 @@
         const ORIGINAL_THEN = Promise.prototype.then;
         Object.defineProperty(ORIGINAL_THEN, PLAN_PATCHED, { value: true });
 
-        let patchSeen = new WeakSet();
-
-        function patchPlanType(obj, depth) {
-            if (!obj || typeof obj !== "object" || depth > 200) return 0;
+        function patchPlanType(obj, depth, targetPlanType, patchSeen) {
+            if (!obj || typeof obj !== "object" || depth > 50) return 0;
             if (patchSeen.has(obj)) return 0;
             patchSeen.add(obj);
             let changed = 0;
@@ -460,7 +458,12 @@
                 for (let i = 0; i < obj.length; i++) {
                     const v = obj[i];
                     if (v && typeof v === "object")
-                        changed += patchPlanType(v, depth + 1);
+                        changed += patchPlanType(
+                            v,
+                            depth + 1,
+                            targetPlanType,
+                            patchSeen,
+                        );
                 }
                 return changed;
             }
@@ -468,13 +471,18 @@
                 try {
                     const v = obj[k];
                     if (v && typeof v === "object") {
-                        changed += patchPlanType(v, depth + 1);
+                        changed += patchPlanType(
+                            v,
+                            depth + 1,
+                            targetPlanType,
+                            patchSeen,
+                        );
                     } else if (
                         k === "planType" &&
                         typeof v === "string" &&
-                        v !== chatgptFakePlanValue
+                        v !== targetPlanType
                     ) {
-                        obj[k] = chatgptFakePlanValue;
+                        obj[k] = targetPlanType;
                         changed++;
                     }
                 } catch {}
@@ -484,22 +492,20 @@
 
         // biome-ignore lint/suspicious/noThenProperty: Promise.then monkey-patch
         Promise.prototype.then = function (onFulfilled, onRejected) {
-            const wrap = (fn) =>
-                function (v) {
-                    try {
-                        if (
-                            chatgptFakePlanEnabled &&
-                            chatgptFakePlanValue &&
-                            v &&
-                            typeof v === "object"
-                        ) {
-                            patchSeen = new WeakSet();
-                            patchPlanType(v, 0);
-                        }
-                    } catch {}
-                    return typeof fn === "function" ? fn(v) : v;
-                };
-            return ORIGINAL_THEN.call(this, wrap(onFulfilled), onRejected);
+            if (!chatgptFakePlanEnabled || !chatgptFakePlanValue) {
+                return ORIGINAL_THEN.call(this, onFulfilled, onRejected);
+            }
+            const wrappedOnFulfilled = function (v) {
+                try {
+                    if (v && typeof v === "object") {
+                        const targetPlanType =
+                            normalizeChatgptFakePlanType(chatgptFakePlanValue);
+                        patchPlanType(v, 0, targetPlanType, new WeakSet());
+                    }
+                } catch {}
+                return typeof onFulfilled === "function" ? onFulfilled(v) : v;
+            };
+            return ORIGINAL_THEN.call(this, wrappedOnFulfilled, onRejected);
         };
     }
     if (isChatgptMode) installPlanTypePatcher();
