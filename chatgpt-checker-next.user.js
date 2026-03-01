@@ -3426,6 +3426,14 @@
         }
     }
 
+    function recreateResponseText(text, response) {
+        return new Response(text, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+        });
+    }
+
     // 拦截 fetch 请求
     const originalFetch = window.fetch;
     window.fetch = async function (resource, options = {}) {
@@ -3480,11 +3488,7 @@
                 }
                 updateDifficultyIndicator(difficulty);
 
-                return new Response(responseBodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(responseBodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理响应或重新创建响应时出错:", e);
                 const difficultyElement = document.getElementById("difficulty");
@@ -3494,11 +3498,7 @@
                 if (personaElement) personaElement.innerText = "...";
 
                 if (typeof responseBodyText === "string") {
-                    return new Response(responseBodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(responseBodyText, response);
                 }
                 return response;
             }
@@ -3520,19 +3520,11 @@
                     typeof data?.country === "string" ? data.country : null,
                     typeof data?.region === "string" ? data.region : null,
                 );
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理用户地区响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -3557,19 +3549,11 @@
                         ? data.country_code
                         : null,
                 );
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理价格地区响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -3595,19 +3579,11 @@
                         ? data.memory_max_tokens
                         : null,
                 );
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理记忆用量响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -3681,22 +3657,14 @@
                           ? data.default_model_slug
                           : null,
                 );
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error(
                     "[CheckerNext] 处理 Deep Research 与 Agent 响应出错:",
                     e,
                 );
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -3733,13 +3701,12 @@
                     });
                 }
                 // 返回新的 response，因为 body 已经被 consumed 了
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 is_adult 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return recreateResponseText(bodyText, response);
+                }
                 return response;
             }
         }
@@ -3783,13 +3750,12 @@
                     });
                 }
                 // 返回新的 response，因为 body 已经被 consumed
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 settings/user 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return recreateResponseText(bodyText, response);
+                }
                 return response;
             }
         }
@@ -3825,14 +3791,14 @@
                     bodyText.indexOf('"async_task_type"') === -1 ||
                     bodyText.indexOf('"research"') === -1
                 ) {
-                    return response;
+                    return recreateResponseText(bodyText, response);
                 }
 
                 if (
                     bodyText.indexOf('"is_async_task_result_message"') === -1 &&
                     bodyText.indexOf('"b1de6e2_rm"') === -1
                 ) {
-                    return response;
+                    return recreateResponseText(bodyText, response);
                 }
 
                 const data = JSON.parse(bodyText);
@@ -3877,13 +3843,12 @@
                     bodyText = JSON.stringify(data);
                 }
 
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 conversation 响应出错:", e);
+                if (typeof bodyText === "string") {
+                    return recreateResponseText(bodyText, response);
+                }
                 return response;
             }
         }
@@ -3921,19 +3886,11 @@
                             : null,
                     );
                 }
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 Sora 响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -3956,19 +3913,11 @@
                 } else {
                     updateSoraModels(null);
                 }
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 Sora 模型响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -3991,19 +3940,11 @@
                         ? data.max_relaxed_concurrent_gens
                         : null,
                 );
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 Sora 参数响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -4061,19 +4002,11 @@
                     );
                     updateCodexCredits(data.credits);
                 }
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -4123,19 +4056,11 @@
                     }
                 }
 
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 Grok models 响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
@@ -4156,19 +4081,11 @@
                 if (data && typeof data.taskUsage === "object") {
                     updateGrokTaskInfo(data.taskUsage);
                 }
-                return new Response(bodyText, {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: response.headers,
-                });
+                return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 Grok 响应出错:", e);
                 if (typeof bodyText === "string") {
-                    return new Response(bodyText, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(bodyText, response);
                 }
                 return response;
             }
