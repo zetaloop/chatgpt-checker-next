@@ -379,6 +379,11 @@
     let chatgptResearchToTextEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_RESEARCH_TO_TEXT_KEY) === "true";
+    const CHATGPT_UNLOCK_THEME_COLORS_KEY =
+        "checker-next-chatgpt-unlock-theme-colors";
+    let chatgptUnlockThemeColorsEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true";
     const CHATGPT_AGE_VERIFICATION_SETTING_KEY =
         "checker-next-chatgpt-age-verification-setting";
     let chatgptAgeVerificationSettingEnabled =
@@ -389,6 +394,153 @@
     let chatgptCitronModeEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_CITRON_MODE_KEY) === "true";
+
+    function tryGetScriptNonce() {
+        const withNonce = document.querySelector("script[nonce]");
+        if (!withNonce) return null;
+        const nonce = withNonce.nonce || withNonce.getAttribute("nonce");
+        return typeof nonce === "string" && nonce.length > 0 ? nonce : null;
+    }
+
+    function patchChatgptUnlockThemeColorsAssetSource(
+        sourceText,
+        assetUrl,
+        assetBaseUrl,
+    ) {
+        const themeListPattern =
+            /const\s+([A-Za-z$_][\w$]*)=\["default","blue","green","yellow","pink","orange","custom"\],\s*([A-Za-z$_][\w$]*)=\["purple"\],\s*([A-Za-z$_][\w$]*)=\["black"\]/;
+        if (!themeListPattern.test(sourceText)) return null;
+
+        let patched = sourceText.replace(
+            themeListPattern,
+            (_match, baseVarName, purpleVarName, blackVarName) =>
+                `const ${baseVarName}=["default","blue","green","yellow","pink","orange","custom","purple","black"],${purpleVarName}=[],${blackVarName}=[]`,
+        );
+
+        patched = patched.replaceAll(
+            "import.meta.url",
+            JSON.stringify(assetUrl),
+        );
+        patched = patched.replaceAll('from"./', `from"${assetBaseUrl}/`);
+        patched = patched.replaceAll("from'./", `from'${assetBaseUrl}/`);
+        patched = patched.replaceAll('import"./', `import"${assetBaseUrl}/`);
+        patched = patched.replaceAll("import'./", `import'${assetBaseUrl}/`);
+        patched = patched.replaceAll('import("./', `import("${assetBaseUrl}/`);
+        patched = patched.replaceAll("import('./", `import('${assetBaseUrl}/`);
+
+        const normalizedBase = assetBaseUrl.endsWith("/")
+            ? assetBaseUrl
+            : `${assetBaseUrl}/`;
+        const normalizedAssetBase = assetBaseUrl.endsWith("/")
+            ? assetBaseUrl.slice(0, -1)
+            : assetBaseUrl;
+        patched = patched.replaceAll(
+            'from"assets/',
+            `from"${normalizedAssetBase}/assets/`,
+        );
+        patched = patched.replaceAll(
+            "from'assets/",
+            `from'${normalizedAssetBase}/assets/`,
+        );
+        patched = patched.replaceAll(
+            'import"assets/',
+            `import"${normalizedAssetBase}/assets/`,
+        );
+        patched = patched.replaceAll(
+            "import'assets/",
+            `import'${normalizedAssetBase}/assets/`,
+        );
+        patched = patched.replaceAll(
+            'import("assets/',
+            `import("${normalizedAssetBase}/assets/`,
+        );
+        patched = patched.replaceAll(
+            "import('assets/",
+            `import('${normalizedAssetBase}/assets/`,
+        );
+        patched = patched.replaceAll(
+            'new URL("assets/',
+            `new URL("${normalizedBase}assets/`,
+        );
+        patched = patched.replaceAll(
+            "new URL('assets/",
+            `new URL('${normalizedBase}assets/`,
+        );
+
+        return patched;
+    }
+
+    function createSyncTextRequest(url) {
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", url, false);
+            xhr.send(null);
+            if (xhr.status >= 200 && xhr.status < 300) {
+                return xhr.responseText;
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
+    function injectImportMap(importMapJson) {
+        const script = document.createElement("script");
+        script.type = "importmap";
+        const nonce = tryGetScriptNonce();
+        if (nonce) script.setAttribute("nonce", nonce);
+        script.textContent = JSON.stringify(importMapJson);
+        const head =
+            document.head || document.getElementsByTagName("head")[0] || null;
+        if (head) {
+            head.insertBefore(script, head.firstChild);
+            return;
+        }
+        document.documentElement.insertBefore(
+            script,
+            document.documentElement.firstChild,
+        );
+    }
+
+    function installChatgptUnlockThemeColorsPatch() {
+        if (!isChatgptMode) return;
+        if (!chatgptUnlockThemeColorsEnabled) return;
+        if (window.__checkerNextUnlockThemeColorsInstalled) return;
+        window.__checkerNextUnlockThemeColorsInstalled = true;
+
+        const assetUrl =
+            "https://chatgpt.com/cdn/assets/4813494d-e2mhuu21qatycmmf.js";
+        const assetBaseUrl = "https://chatgpt.com/cdn/assets";
+
+        const sourceText = createSyncTextRequest(assetUrl);
+        if (typeof sourceText !== "string" || sourceText.length === 0) return;
+
+        const patchedText = patchChatgptUnlockThemeColorsAssetSource(
+            sourceText,
+            assetUrl,
+            assetBaseUrl,
+        );
+        if (typeof patchedText !== "string" || patchedText.length === 0) return;
+
+        const blobUrl = URL.createObjectURL(
+            new Blob([patchedText], { type: "text/javascript" }),
+        );
+
+        injectImportMap({
+            imports: {
+                [assetUrl]: blobUrl,
+            },
+            scopes: {
+                [`${assetBaseUrl}/`]: {
+                    "./4813494d-e2mhuu21qatycmmf.js": blobUrl,
+                },
+            },
+        });
+    }
+
+    if (chatgptUnlockThemeColorsEnabled) {
+        installChatgptUnlockThemeColorsPatch();
+    }
 
     let chatgptAgeVerificationSettingFetched = false;
     let chatgptAgeVerificationSettingDisplayValue = null;
@@ -1257,6 +1409,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-unlock-theme-colors-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>解锁所有主题色
+                <span id="chatgpt-unlock-theme-colors-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-unlock-theme-colors-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-unlock-theme-colors-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-unlock-theme-colors-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-fake-plan-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>假装
                 <select id="chatgpt-fake-plan-select" style="
@@ -1765,11 +1958,34 @@
         chatgptResearchToTextTooltipBox.style.lineHeight = "1.4";
         chatgptResearchToTextTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(chatgptResearchToTextTooltipBox);
+
+        // 创建解锁主题色提示框
+        const chatgptUnlockThemeColorsTooltipBox =
+            document.createElement("div");
+        chatgptUnlockThemeColorsTooltipBox.id =
+            "chatgpt-unlock-theme-colors-tooltip-box";
+        chatgptUnlockThemeColorsTooltipBox.innerText =
+            "解锁紫色 (Plus) 和黑色 (Pro)。";
+        chatgptUnlockThemeColorsTooltipBox.style.position = "fixed";
+        chatgptUnlockThemeColorsTooltipBox.style.backgroundColor =
+            "rgba(0, 0, 0, 0.8)";
+        chatgptUnlockThemeColorsTooltipBox.style.color = "#fff";
+        chatgptUnlockThemeColorsTooltipBox.style.padding = "8px 12px";
+        chatgptUnlockThemeColorsTooltipBox.style.borderRadius = "5px";
+        chatgptUnlockThemeColorsTooltipBox.style.fontSize = "12px";
+        chatgptUnlockThemeColorsTooltipBox.style.visibility = "hidden";
+        chatgptUnlockThemeColorsTooltipBox.style.zIndex = "10001";
+        chatgptUnlockThemeColorsTooltipBox.style.width = "240px";
+        chatgptUnlockThemeColorsTooltipBox.style.lineHeight = "1.4";
+        chatgptUnlockThemeColorsTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(chatgptUnlockThemeColorsTooltipBox);
+
         // 创建 Grok 低频任务提示框
         const grokOccasionalTooltipBox = document.createElement("div");
         grokOccasionalTooltipBox.id = "grok-occasional-tooltip-box";
         grokOccasionalTooltipBox.innerText =
             "单次、每周、每月、每年触发的任务。";
+
         // 创建年龄验证提示框
         const chatgptAgeVerificationSettingTooltipBox =
             document.createElement("div");
@@ -1991,6 +2207,10 @@
                 "chatgpt-research-to-text-tooltip",
                 chatgptResearchToTextTooltipBox,
             );
+            bindTooltipEvents(
+                "chatgpt-unlock-theme-colors-tooltip",
+                chatgptUnlockThemeColorsTooltipBox,
+            );
         }
 
         // 绑定 Grok 开发工具开关事件
@@ -2068,6 +2288,45 @@
                 localStorage.setItem(
                     CHATGPT_RESEARCH_TO_TEXT_KEY,
                     chatgptResearchToTextEnabled ? "true" : "false",
+                );
+                apply();
+            });
+        }
+
+        function bindChatgptUnlockThemeColorsToggle() {
+            const container = document.getElementById(
+                "chatgpt-unlock-theme-colors-container",
+            );
+            const toggle = document.getElementById(
+                "chatgpt-unlock-theme-colors-toggle",
+            );
+            const slider = document.getElementById(
+                "chatgpt-unlock-theme-colors-slider",
+            );
+            const sliderDot = document.getElementById(
+                "chatgpt-unlock-theme-colors-slider-dot",
+            );
+            if (!container || !toggle || !slider || !sliderDot) return;
+
+            function apply() {
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    chatgptUnlockThemeColorsEnabled,
+                );
+            }
+
+            toggle.checked = chatgptUnlockThemeColorsEnabled;
+            apply();
+
+            if (toggle.dataset.checkerNextBound === "1") return;
+            toggle.dataset.checkerNextBound = "1";
+
+            toggle.addEventListener("change", function () {
+                chatgptUnlockThemeColorsEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_UNLOCK_THEME_COLORS_KEY,
+                    chatgptUnlockThemeColorsEnabled ? "true" : "false",
                 );
                 apply();
             });
@@ -2441,6 +2700,7 @@
 
         if (isChatgptMode) {
             setTimeout(bindChatgptResearchToTextToggle, 100);
+            setTimeout(bindChatgptUnlockThemeColorsToggle, 100);
             setTimeout(bindChatgptAgeVerificationSettingToggle, 100);
             setTimeout(bindChatgptCitronModeToggle, 100);
             setTimeout(bindChatgptFakePlanSelect, 100);
@@ -2448,6 +2708,7 @@
 
         window.rebindChatgptToggle = () => {
             bindChatgptResearchToTextToggle();
+            bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
             bindChatgptCitronModeToggle();
             bindChatgptFakePlanSelect();
