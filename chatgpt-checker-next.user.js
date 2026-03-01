@@ -2689,9 +2689,8 @@
     }
 
     function isMonthlyResetNotStarted(resetAfter) {
-        const monthLater = new Date(Date.now());
-        monthLater.setMonth(monthLater.getMonth() + 1);
-        return isResetTimestampNear(resetAfter, monthLater.getTime());
+        const thirtyDaysLater = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        return isResetTimestampNear(resetAfter, thirtyDaysLater);
     }
 
     function isDailyResetNotStarted(resetAfter) {
