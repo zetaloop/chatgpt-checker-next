@@ -447,34 +447,6 @@
             <span id="user-region-container" style="display: block">用户地区：<span id="user-region">...</span></span>
             <span id="default-model-container" style="display: block">默认模型：<span id="default-model">...</span></span>
             <span id="price-region-container" style="display: block">价格地区：<span id="price-region">...</span></span>
-            <div id="chatgpt-research-to-text-container" style="display: none; align-items: center; justify-content: space-between; margin-top: 8px;">
-                <span>研究转文本：<span id="chatgpt-research-to-text-status">...</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-research-to-text-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-research-to-text-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-research-to-text-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -935,6 +907,65 @@
                 </label>
             </div>
         </div>
+        <div id="features-section" style="margin-top: 10px; display: none">
+            <div style="margin-top: 10px; margin-bottom: 2px;">
+                <strong>功能</strong>
+                <span id="features-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span>
+            </div>
+            <div id="chatgpt-research-to-text-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>研究报告转文本
+                <span id="chatgpt-research-to-text-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-research-to-text-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-research-to-text-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-research-to-text-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+        </div>
         <div style="
             margin-top: 12px;
             padding-top: 8px;
@@ -992,6 +1023,8 @@
             if (pasteTextToFileSection)
                 pasteTextToFileSection.style.display = "none";
             if (imageGenSection) imageGenSection.style.display = "none";
+            const featuresSection = document.getElementById("features-section");
+            if (featuresSection) featuresSection.style.display = "none";
             if (soraSection) {
                 soraSection.style.display = "none";
                 soraSection.style.marginTop = "10px";
@@ -1012,6 +1045,8 @@
             if (pasteTextToFileSection)
                 pasteTextToFileSection.style.display = "none";
             if (imageGenSection) imageGenSection.style.display = "none";
+            const featuresSection = document.getElementById("features-section");
+            if (featuresSection) featuresSection.style.display = "none";
             if (codexSection) {
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
@@ -1032,6 +1067,8 @@
             if (pasteTextToFileSection)
                 pasteTextToFileSection.style.display = "none";
             if (imageGenSection) imageGenSection.style.display = "none";
+            const featuresSection = document.getElementById("features-section");
+            if (featuresSection) featuresSection.style.display = "none";
             if (codexSection) {
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
@@ -1045,6 +1082,10 @@
                 grokSection.style.marginTop = "0";
             }
         } else {
+            const featuresSection = document.getElementById("features-section");
+            if (featuresSection) {
+                featuresSection.style.display = "block";
+            }
             if (codexSection) {
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
@@ -1326,6 +1367,42 @@
         grokFrequentTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(grokFrequentTooltipBox);
 
+        // 创建功能提示框
+        const featuresTooltipBox = document.createElement("div");
+        featuresTooltipBox.id = "features-tooltip-box";
+        featuresTooltipBox.innerText = "刷新页面生效。";
+        featuresTooltipBox.style.position = "fixed";
+        featuresTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+        featuresTooltipBox.style.color = "#fff";
+        featuresTooltipBox.style.padding = "8px 12px";
+        featuresTooltipBox.style.borderRadius = "5px";
+        featuresTooltipBox.style.fontSize = "12px";
+        featuresTooltipBox.style.visibility = "hidden";
+        featuresTooltipBox.style.zIndex = "10001";
+        featuresTooltipBox.style.width = "240px";
+        featuresTooltipBox.style.lineHeight = "1.4";
+        featuresTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(featuresTooltipBox);
+
+        // 创建研究转文本提示框
+        const chatgptResearchToTextTooltipBox = document.createElement("div");
+        chatgptResearchToTextTooltipBox.id =
+            "chatgpt-research-to-text-tooltip-box";
+        chatgptResearchToTextTooltipBox.innerText =
+            "将传统深度研究的结果转为普通文本消息，以便复制。";
+        chatgptResearchToTextTooltipBox.style.position = "fixed";
+        chatgptResearchToTextTooltipBox.style.backgroundColor =
+            "rgba(0, 0, 0, 0.8)";
+        chatgptResearchToTextTooltipBox.style.color = "#fff";
+        chatgptResearchToTextTooltipBox.style.padding = "8px 12px";
+        chatgptResearchToTextTooltipBox.style.borderRadius = "5px";
+        chatgptResearchToTextTooltipBox.style.fontSize = "12px";
+        chatgptResearchToTextTooltipBox.style.visibility = "hidden";
+        chatgptResearchToTextTooltipBox.style.zIndex = "10001";
+        chatgptResearchToTextTooltipBox.style.width = "240px";
+        chatgptResearchToTextTooltipBox.style.lineHeight = "1.4";
+        chatgptResearchToTextTooltipBox.style.pointerEvents = "none";
+        document.body.appendChild(chatgptResearchToTextTooltipBox);
         // 创建 Grok 低频任务提示框
         const grokOccasionalTooltipBox = document.createElement("div");
         grokOccasionalTooltipBox.id = "grok-occasional-tooltip-box";
@@ -1477,6 +1554,11 @@
                 "grok-async-chat-tooltip",
                 grokAsyncChatTooltipBox,
             );
+            bindTooltipEvents("features-tooltip", featuresTooltipBox);
+            bindTooltipEvents(
+                "chatgpt-research-to-text-tooltip",
+                chatgptResearchToTextTooltipBox,
+            );
         }
 
         // 绑定 Grok 开发工具开关事件
@@ -1533,16 +1615,9 @@
             const sliderDot = document.getElementById(
                 "chatgpt-research-to-text-slider-dot",
             );
-            const statusEl = document.getElementById(
-                "chatgpt-research-to-text-status",
-            );
-            if (!container || !toggle || !slider || !sliderDot || !statusEl)
-                return;
-
-            container.style.display = "flex";
+            if (!container || !toggle || !slider || !sliderDot) return;
 
             function apply() {
-                statusEl.innerText = chatgptResearchToTextEnabled ? "开" : "关";
                 updateGrokDevToolsSliderStyle(
                     slider,
                     sliderDot,
