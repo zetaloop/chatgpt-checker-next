@@ -402,21 +402,8 @@
         return typeof nonce === "string" && nonce.length > 0 ? nonce : null;
     }
 
-    function patchChatgptUnlockThemeColorsAssetSource(
-        sourceText,
-        assetUrl,
-        assetBaseUrl,
-    ) {
-        const themeListPattern =
-            /const\s+([A-Za-z$_][\w$]*)=\["default","blue","green","yellow","pink","orange","custom"\],\s*([A-Za-z$_][\w$]*)=\["purple"\],\s*([A-Za-z$_][\w$]*)=\["black"\]/;
-        if (!themeListPattern.test(sourceText)) return null;
-
-        let patched = sourceText.replace(
-            themeListPattern,
-            (_match, baseVarName, purpleVarName, blackVarName) =>
-                `const ${baseVarName}=["default","blue","green","yellow","pink","orange","custom","purple","black"],${purpleVarName}=[],${blackVarName}=[]`,
-        );
-
+    function rewriteModuleImports(sourceText, assetUrl, assetBaseUrl) {
+        let patched = sourceText;
         patched = patched.replaceAll(
             "import.meta.url",
             JSON.stringify(assetUrl),
@@ -465,6 +452,51 @@
         patched = patched.replaceAll(
             "new URL('assets/",
             `new URL('${normalizedBase}assets/`,
+        );
+        return patched;
+    }
+
+    function patchChatgptUnlockThemeColorsAssetSource(sourceText) {
+        const themeListPattern =
+            /const\s+([A-Za-z$_][\w$]*)=\["default","blue","green","yellow","pink","orange","custom"\],\s*([A-Za-z$_][\w$]*)=\["purple"\],\s*([A-Za-z$_][\w$]*)=\["black"\]/;
+        if (!themeListPattern.test(sourceText)) return null;
+        return sourceText.replace(
+            themeListPattern,
+            (_match, baseVarName, purpleVarName, blackVarName) =>
+                `const ${baseVarName}=["default","blue","green","yellow","pink","orange","custom","purple","black"],${purpleVarName}=[],${blackVarName}=[]`,
+        );
+    }
+
+    function patchChatgptFakePlanAssetSource(sourceText) {
+        const targetPlanType =
+            normalizeChatgptFakePlanType(chatgptFakePlanValue);
+        const targetSubscriptionPlan =
+            getFakeSubscriptionPlanByPlanType(targetPlanType);
+        const hasPaid =
+            targetPlanType !== "guest" &&
+            targetPlanType !== "free" &&
+            targetPlanType !== "free_workspace";
+
+        let patched = sourceText;
+
+        patched = patched.replace(
+            /planType:\s*\(\w+\s*=\s*e\.account\.plan_type\)\s*!=\s*null\s*\?\s*\w+\s*:\s*\w+/,
+            `planType: "${targetPlanType}"`,
+        );
+
+        patched = patched.replace(
+            /hasPaidSubscription:\s*\(\w+\s*=\s*e\.entitlement\.has_active_subscription\)\s*!=\s*null\s*\?\s*\w+\s*:\s*!1/,
+            `hasPaidSubscription: ${hasPaid ? "!0" : "!1"}`,
+        );
+
+        patched = patched.replace(
+            /subscriptionPlan:\s*\(\w+\s*=\s*e\.entitlement\.subscription_plan\)\s*!=\s*null\s*\?\s*\w+\s*:\s*void 0/,
+            `subscriptionPlan: "${targetSubscriptionPlan}"`,
+        );
+
+        patched = patched.replace(
+            /return this\.data\.lightAccount\.planType/,
+            `return "${targetPlanType}"`,
         );
 
         return patched;
@@ -521,11 +553,20 @@
         return importMatch[1];
     }
 
-    function installChatgptUnlockThemeColorsPatch() {
+    function installImportMapPatches() {
         if (!isChatgptMode) return;
-        if (!chatgptUnlockThemeColorsEnabled) return;
-        if (window.__checkerNextUnlockThemeColorsInstalled) return;
-        window.__checkerNextUnlockThemeColorsInstalled = true;
+        if (window.__checkerNextImportMapInstalled) return;
+
+        const patchFns = [];
+        if (chatgptUnlockThemeColorsEnabled) {
+            patchFns.push(patchChatgptUnlockThemeColorsAssetSource);
+        }
+        if (isChatgptFakePlanRuntimeEnabled()) {
+            patchFns.push(patchChatgptFakePlanAssetSource);
+        }
+        if (patchFns.length === 0) return;
+
+        window.__checkerNextImportMapInstalled = true;
 
         const assetBaseUrl = "https://chatgpt.com/cdn/assets";
         const assetFilename = discoverAssetFilename("93527649", "4813494d");
@@ -533,15 +574,21 @@
 
         const assetUrl = `${assetBaseUrl}/${assetFilename}`;
 
-        const sourceText = createSyncTextRequest(assetUrl);
+        let sourceText = createSyncTextRequest(assetUrl);
         if (typeof sourceText !== "string" || sourceText.length === 0) return;
 
-        const patchedText = patchChatgptUnlockThemeColorsAssetSource(
+        for (const fn of patchFns) {
+            const result = fn(sourceText);
+            if (typeof result === "string" && result.length > 0) {
+                sourceText = result;
+            }
+        }
+
+        const patchedText = rewriteModuleImports(
             sourceText,
             assetUrl,
             assetBaseUrl,
         );
-        if (typeof patchedText !== "string" || patchedText.length === 0) return;
 
         const blobUrl = URL.createObjectURL(
             new Blob([patchedText], { type: "text/javascript" }),
@@ -557,10 +604,6 @@
                 },
             },
         });
-    }
-
-    if (chatgptUnlockThemeColorsEnabled) {
-        installChatgptUnlockThemeColorsPatch();
     }
 
     let chatgptAgeVerificationSettingFetched = false;
@@ -695,73 +738,49 @@
         updateChatgptFakePlanSafetyState();
     }
 
-    // Patch Promise.then
-    const PLAN_PATCHED = Symbol.for("checker-next.Promise.then.patched");
-    function installPlanTypePatcher() {
-        if (Promise.prototype.then[PLAN_PATCHED]) return;
-        const ORIGINAL_THEN = Promise.prototype.then;
-        Object.defineProperty(ORIGINAL_THEN, PLAN_PATCHED, { value: true });
+    installImportMapPatches();
 
-        function patchPlanType(obj, depth, targetPlanType, patchSeen) {
-            if (!obj || typeof obj !== "object" || depth > 50) return 0;
-            if (patchSeen.has(obj)) return 0;
-            patchSeen.add(obj);
-            let changed = 0;
-            if (Array.isArray(obj)) {
-                for (let i = 0; i < obj.length; i++) {
-                    const v = obj[i];
-                    if (v && typeof v === "object")
-                        changed += patchPlanType(
-                            v,
-                            depth + 1,
-                            targetPlanType,
-                            patchSeen,
-                        );
+    function patchChatgptBootstrapJson() {
+        if (!isChatgptMode) return;
+        if (!isChatgptFakePlanRuntimeEnabled()) return;
+
+        const targetPlanType =
+            normalizeChatgptFakePlanType(chatgptFakePlanValue);
+
+        const patchScriptElement = (script) => {
+            try {
+                const data = JSON.parse(script.textContent);
+                if (data?.session?.account?.planType) {
+                    data.session.account.planType = targetPlanType;
+                    script.textContent = JSON.stringify(data);
                 }
-                return changed;
-            }
-            for (const k of Object.keys(obj)) {
-                try {
-                    const v = obj[k];
-                    if (v && typeof v === "object") {
-                        changed += patchPlanType(
-                            v,
-                            depth + 1,
-                            targetPlanType,
-                            patchSeen,
-                        );
-                    } else if (
-                        k === "planType" &&
-                        typeof v === "string" &&
-                        v !== targetPlanType
-                    ) {
-                        obj[k] = targetPlanType;
-                        changed++;
-                    }
-                } catch {}
-            }
-            return changed;
+            } catch {}
+        };
+
+        const existing = document.getElementById("client-bootstrap");
+        if (existing) {
+            patchScriptElement(existing);
+            return;
         }
 
-        // biome-ignore lint/suspicious/noThenProperty: Promise.then monkey-patch
-        Promise.prototype.then = function (onFulfilled, onRejected) {
-            if (!isChatgptFakePlanRuntimeEnabled()) {
-                return ORIGINAL_THEN.call(this, onFulfilled, onRejected);
-            }
-            const wrappedOnFulfilled = function (v) {
-                try {
-                    if (v && typeof v === "object") {
-                        const targetPlanType =
-                            normalizeChatgptFakePlanType(chatgptFakePlanValue);
-                        patchPlanType(v, 0, targetPlanType, new WeakSet());
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.id === "client-bootstrap") {
+                        observer.disconnect();
+                        patchScriptElement(node);
+                        return;
                     }
-                } catch {}
-                return typeof onFulfilled === "function" ? onFulfilled(v) : v;
-            };
-            return ORIGINAL_THEN.call(this, wrappedOnFulfilled, onRejected);
-        };
+                }
+            }
+        });
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+        });
     }
-    if (isChatgptMode) installPlanTypePatcher();
+
+    patchChatgptBootstrapJson();
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
