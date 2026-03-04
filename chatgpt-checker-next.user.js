@@ -2040,7 +2040,7 @@
         const chatgptFakePlanTooltipBox = document.createElement("div");
         chatgptFakePlanTooltipBox.id = "chatgpt-fake-plan-tooltip-box";
         chatgptFakePlanTooltipBox.innerText =
-            "不稳定，可能导致功能异常或一直刷新，页面20秒内刷新5次将自动关闭此功能。";
+            "可能导致功能异常，不影响模型列表。";
         chatgptFakePlanTooltipBox.style.position = "fixed";
         chatgptFakePlanTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         chatgptFakePlanTooltipBox.style.color = "#fff";
