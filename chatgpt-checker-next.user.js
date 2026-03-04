@@ -499,6 +499,18 @@
             `return "${targetPlanType}"`,
         );
 
+        patched = patched.replace(
+            /window\.location\.href\s*=\s*(\w+)\s*!=\s*null\s*\?\s*\1\s*:\s*"\/\?refresh_account=true"/,
+            (match, varName) =>
+                `(console.warn("[CheckerNext] refresh_account redirect triggered",{target:${varName}??"/?refresh_account=true",stack:new Error().stack}),${match})`,
+        );
+
+        patched = patched.replace(
+            /function (\w+)\(\)\s*\{\s*return (\w+)\((\w+)\(\),\s*"missing clientBootstrap"\)/,
+            (match, fnName, assertFn, cacheFn) =>
+                `function ${fnName}(){const _b=${assertFn}(${cacheFn}(),"missing clientBootstrap");if(_b?.session?.account)_b.session.account.planType="${targetPlanType}";return _b`,
+        );
+
         return patched;
     }
 
@@ -566,8 +578,6 @@
         }
         if (patchFns.length === 0) return;
 
-        window.__checkerNextImportMapInstalled = true;
-
         const assetBaseUrl = "https://chatgpt.com/cdn/assets";
         const assetFilename = discoverAssetFilename("93527649", "4813494d");
         if (!assetFilename) return;
@@ -604,6 +614,8 @@
                 },
             },
         });
+
+        window.__checkerNextImportMapInstalled = true;
     }
 
     let chatgptAgeVerificationSettingFetched = false;
@@ -739,48 +751,6 @@
     }
 
     installImportMapPatches();
-
-    function patchChatgptBootstrapJson() {
-        if (!isChatgptMode) return;
-        if (!isChatgptFakePlanRuntimeEnabled()) return;
-
-        const targetPlanType =
-            normalizeChatgptFakePlanType(chatgptFakePlanValue);
-
-        const patchScriptElement = (script) => {
-            try {
-                const data = JSON.parse(script.textContent);
-                if (data?.session?.account?.planType) {
-                    data.session.account.planType = targetPlanType;
-                    script.textContent = JSON.stringify(data);
-                }
-            } catch {}
-        };
-
-        const existing = document.getElementById("client-bootstrap");
-        if (existing) {
-            patchScriptElement(existing);
-            return;
-        }
-
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                for (const node of mutation.addedNodes) {
-                    if (node.id === "client-bootstrap") {
-                        observer.disconnect();
-                        patchScriptElement(node);
-                        return;
-                    }
-                }
-            }
-        });
-        observer.observe(document.documentElement, {
-            childList: true,
-            subtree: true,
-        });
-    }
-
-    patchChatgptBootstrapJson();
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
