@@ -502,15 +502,36 @@
         );
     }
 
+    function discoverAssetFilename(loaderPrefix, targetPrefix) {
+        const html = document.documentElement.innerHTML;
+        const loaderPattern = new RegExp(
+            `/cdn/assets/${loaderPrefix}-[\\w]+\\.js`,
+        );
+        const loaderMatch = html.match(loaderPattern);
+        if (!loaderMatch) return null;
+
+        const loaderUrl = `https://chatgpt.com${loaderMatch[0]}`;
+        const loaderSource = createSyncTextRequest(loaderUrl);
+        if (typeof loaderSource !== "string") return null;
+
+        const importPattern = new RegExp(`\\./(${targetPrefix}-[\\w]+\\.js)`);
+        const importMatch = loaderSource.match(importPattern);
+        if (!importMatch) return null;
+
+        return importMatch[1];
+    }
+
     function installChatgptUnlockThemeColorsPatch() {
         if (!isChatgptMode) return;
         if (!chatgptUnlockThemeColorsEnabled) return;
         if (window.__checkerNextUnlockThemeColorsInstalled) return;
         window.__checkerNextUnlockThemeColorsInstalled = true;
 
-        const assetUrl =
-            "https://chatgpt.com/cdn/assets/4813494d-e2mhuu21qatycmmf.js";
         const assetBaseUrl = "https://chatgpt.com/cdn/assets";
+        const assetFilename = discoverAssetFilename("93527649", "4813494d");
+        if (!assetFilename) return;
+
+        const assetUrl = `${assetBaseUrl}/${assetFilename}`;
 
         const sourceText = createSyncTextRequest(assetUrl);
         if (typeof sourceText !== "string" || sourceText.length === 0) return;
@@ -532,7 +553,7 @@
             },
             scopes: {
                 [`${assetBaseUrl}/`]: {
-                    "./4813494d-e2mhuu21qatycmmf.js": blobUrl,
+                    [`./${assetFilename}`]: blobUrl,
                 },
             },
         });
