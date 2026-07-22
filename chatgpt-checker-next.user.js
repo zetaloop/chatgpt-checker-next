@@ -476,38 +476,59 @@
             targetPlanType !== "free" &&
             targetPlanType !== "free_workspace";
 
+        const planTypePattern =
+            /planType:\s*[A-Za-z$_][\w$]*\.account\.plan_type\?\?[A-Za-z$_][\w$]*/;
+        const hasPaidSubscriptionPattern =
+            /hasPaidSubscription:\s*[A-Za-z$_][\w$]*\.entitlement\.has_active_subscription\?\?!1/;
+        const subscriptionPlanPattern =
+            /subscriptionPlan:\s*[A-Za-z$_][\w$]*\.entitlement\.subscription_plan\?\?void 0/;
+        const lightAccountPlanTypePattern =
+            /return this\.data\.lightAccount\.planType/;
+        const sessionAccountPattern =
+            /([A-Za-z$_][\w$]*)=[A-Za-z$_][\w$]*\.session\?\.account;/;
+        const requiredPatterns = [
+            planTypePattern,
+            hasPaidSubscriptionPattern,
+            subscriptionPlanPattern,
+            lightAccountPlanTypePattern,
+            sessionAccountPattern,
+        ];
+        if (
+            requiredPatterns.some(
+                (pattern) =>
+                    [...sourceText.matchAll(new RegExp(pattern.source, "g"))]
+                        .length !== 1,
+            )
+        ) {
+            return null;
+        }
+
         let patched = sourceText;
 
         patched = patched.replace(
-            /planType:\s*\(\w+\s*=\s*e\.account\.plan_type\)\s*!=\s*null\s*\?\s*\w+\s*:\s*\w+/,
-            `planType: "${targetPlanType}"`,
+            planTypePattern,
+            `planType:"${targetPlanType}"`,
         );
 
         patched = patched.replace(
-            /hasPaidSubscription:\s*\(\w+\s*=\s*e\.entitlement\.has_active_subscription\)\s*!=\s*null\s*\?\s*\w+\s*:\s*!1/,
-            `hasPaidSubscription: ${hasPaid ? "!0" : "!1"}`,
+            hasPaidSubscriptionPattern,
+            `hasPaidSubscription:${hasPaid ? "!0" : "!1"}`,
         );
 
         patched = patched.replace(
-            /subscriptionPlan:\s*\(\w+\s*=\s*e\.entitlement\.subscription_plan\)\s*!=\s*null\s*\?\s*\w+\s*:\s*void 0/,
-            `subscriptionPlan: "${targetSubscriptionPlan}"`,
+            subscriptionPlanPattern,
+            `subscriptionPlan:"${targetSubscriptionPlan}"`,
         );
 
         patched = patched.replace(
-            /return this\.data\.lightAccount\.planType/,
+            lightAccountPlanTypePattern,
             `return "${targetPlanType}"`,
         );
 
         patched = patched.replace(
-            /window\.location\.href\s*=\s*(\w+)\s*!=\s*null\s*\?\s*\1\s*:\s*"\/\?refresh_account=true"/,
-            (match, varName) =>
-                `(console.warn("[CheckerNext] refresh_account redirect triggered",{target:${varName}??"/?refresh_account=true",stack:new Error().stack}),${match})`,
-        );
-
-        patched = patched.replace(
-            /function (\w+)\(\)\s*\{\s*return (\w+)\((\w+)\(\),\s*"missing clientBootstrap"\)/,
-            (match, fnName, assertFn, cacheFn) =>
-                `function ${fnName}(){const _b=${assertFn}(${cacheFn}(),"missing clientBootstrap");if(_b?.session?.account)_b.session.account.planType="${targetPlanType}";return _b`,
+            sessionAccountPattern,
+            (match, accountVariable) =>
+                `${match}${accountVariable}&&(${accountVariable}.planType="${targetPlanType}");`,
         );
 
         return patched;
@@ -2203,6 +2224,7 @@
                     CHATGPT_FAKE_PLAN_KEY,
                     chatgptFakePlanValue,
                 );
+                void prepareChatgptImportMapPatchCache();
             });
             toggle.addEventListener("change", function () {
                 chatgptFakePlanEnabled = toggle.checked;
@@ -2215,6 +2237,7 @@
                     sliderDot,
                     chatgptFakePlanEnabled,
                 );
+                void prepareChatgptImportMapPatchCache();
             });
         }
 
