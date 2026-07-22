@@ -2925,10 +2925,8 @@
             if (!isChatgptMode) {
                 return response;
             }
-            let responseBodyText;
             try {
-                responseBodyText = await response.text();
-                const data = JSON.parse(responseBodyText);
+                const data = await response.clone().json();
                 const difficulty = data.proofofwork
                     ? data.proofofwork.difficulty
                     : "...";
@@ -2954,7 +2952,7 @@
                 }
                 updateDifficultyIndicator(difficulty);
 
-                return recreateResponseText(responseBodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理响应或重新创建响应时出错:", e);
                 const difficultyElement = document.getElementById("difficulty");
@@ -2963,9 +2961,6 @@
                 const personaElement = document.getElementById("persona");
                 if (personaElement) personaElement.innerText = "...";
 
-                if (typeof responseBodyText === "string") {
-                    return recreateResponseText(responseBodyText, response);
-                }
                 return response;
             }
         }
@@ -2978,20 +2973,15 @@
             if (!isChatgptMode) {
                 return response;
             }
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
                 updateUserRegion(
                     typeof data?.country === "string" ? data.country : null,
                     typeof data?.region === "string" ? data.region : null,
                 );
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理用户地区响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3006,21 +2996,16 @@
             if (!isChatgptMode) {
                 return response;
             }
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
                 updatePriceRegion(
                     typeof data?.country_code === "string"
                         ? data.country_code
                         : null,
                 );
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理价格地区响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3033,10 +3018,8 @@
             if (!isChatgptMode) {
                 return response;
             }
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
                 updateMemoryUsage(
                     typeof data?.memory_num_tokens === "number"
                         ? data.memory_num_tokens
@@ -3045,12 +3028,9 @@
                         ? data.memory_max_tokens
                         : null,
                 );
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理记忆用量响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3060,10 +3040,8 @@
             finalMethod === "POST" &&
             response.ok
         ) {
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
                 if (Array.isArray(data.limits_progress)) {
                     for (const limit of data.limits_progress) {
                         const config =
@@ -3084,12 +3062,9 @@
                           ? data.default_model_slug
                           : null,
                 );
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理功能用量响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3100,12 +3075,11 @@
             response.ok
         ) {
             if (!isChatgptMode) return response;
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
 
-                let originalValue = data.show_age_verification_setting === true;
+                const originalValue =
+                    data.show_age_verification_setting === true;
                 let modified = false;
 
                 if (
@@ -3122,19 +3096,11 @@
                 );
 
                 if (modified) {
-                    return new pageWindow.Response(JSON.stringify(data), {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
+                    return recreateResponseText(JSON.stringify(data), response);
                 }
-                // 返回新的 response，因为 body 已经被 consumed 了
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 is_adult 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3149,7 +3115,6 @@
                 return response;
             }
 
-            let bodyText;
             try {
                 if (
                     !/\/backend-api\/conversation\/[0-9a-f-]+(?:[/?#]|$)/i.test(
@@ -3164,25 +3129,24 @@
                     return response;
                 }
 
-                bodyText = await response.text();
+                const bodyText = await response.clone().text();
 
                 if (
                     bodyText.indexOf('"async_task_type"') === -1 ||
                     bodyText.indexOf('"research"') === -1
                 ) {
-                    return recreateResponseText(bodyText, response);
+                    return response;
                 }
 
                 if (
                     bodyText.indexOf('"is_async_task_result_message"') === -1 &&
                     bodyText.indexOf('"b1de6e2_rm"') === -1
                 ) {
-                    return recreateResponseText(bodyText, response);
+                    return response;
                 }
 
                 const data = JSON.parse(bodyText);
                 let modified = false;
-                let hasResearchAndOriginallyNotText = false;
 
                 if (data && typeof data === "object" && data.mapping) {
                     const mapping = data.mapping;
@@ -3199,7 +3163,6 @@
                                     true ||
                                 metadata.b1de6e2_rm === true
                             ) {
-                                hasResearchAndOriginallyNotText = true;
                                 if (chatgptResearchToTextEnabled) {
                                     if (
                                         metadata.is_async_task_result_message ===
@@ -3218,16 +3181,11 @@
                     }
                 }
 
-                if (modified) {
-                    bodyText = JSON.stringify(data);
-                }
-
-                return recreateResponseText(bodyText, response);
+                return modified
+                    ? recreateResponseText(JSON.stringify(data), response)
+                    : response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 conversation 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3237,10 +3195,8 @@
             finalMethod === "GET" &&
             response.ok
         ) {
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
                 if (
                     location.pathname.startsWith("/codex") &&
                     data &&
@@ -3284,12 +3240,9 @@
                     );
                     updateCodexCredits(data.credits);
                 }
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3302,10 +3255,9 @@
             if (!isGrokMode) {
                 return response;
             }
-            let bodyText;
             try {
-                bodyText = await response.text();
-                let data = JSON.parse(bodyText);
+                const data = await response.clone().json();
+                let modified = false;
 
                 // 如果启用了解锁所有模型，把不可用模型移动到可用列表
                 if (
@@ -3316,7 +3268,7 @@
                 ) {
                     data.models = [...data.models, ...data.unavailableModels];
                     data.unavailableModels = [];
-                    bodyText = JSON.stringify(data);
+                    modified = true;
                     console.log(
                         "[CheckerNext] Unlocked unavailable models:",
                         data.models.map((m) => m.modelId),
@@ -3336,12 +3288,11 @@
                     updateGrokModels();
                 }
 
-                return recreateResponseText(bodyText, response);
+                return modified
+                    ? recreateResponseText(JSON.stringify(data), response)
+                    : response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 Grok models 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
@@ -3354,19 +3305,14 @@
             if (!isGrokMode) {
                 return response;
             }
-            let bodyText;
             try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
+                const data = await response.clone().json();
                 if (data && typeof data.taskUsage === "object") {
                     updateGrokTaskInfo(data.taskUsage);
                 }
-                return recreateResponseText(bodyText, response);
+                return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 Grok 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
                 return response;
             }
         }
