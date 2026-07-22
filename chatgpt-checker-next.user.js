@@ -386,11 +386,6 @@
         isChatgptMode &&
         localStorage.getItem(CHATGPT_AGE_VERIFICATION_SETTING_KEY) === "true";
 
-    const CHATGPT_CITRON_MODE_KEY = "checker-next-chatgpt-citron-mode";
-    let chatgptCitronModeEnabled =
-        isChatgptMode &&
-        localStorage.getItem(CHATGPT_CITRON_MODE_KEY) === "true";
-
     function tryGetScriptNonce() {
         const withNonce = document.querySelector("script[nonce]");
         if (!withNonce) return null;
@@ -616,9 +611,6 @@
 
     let chatgptAgeVerificationSettingFetched = false;
     let chatgptAgeVerificationSettingDisplayValue = null;
-
-    let chatgptCitronModeFetched = false;
-    let chatgptCitronModeDisplayValue = null;
 
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
@@ -1189,47 +1181,6 @@
                         border-radius: 16px;
                     "></span>
                     <span id="chatgpt-age-verification-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
-            <div id="chatgpt-citron-mode-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>成人模式：<span id="chatgpt-citron-mode-status">...</span>
-                <span id="chatgpt-citron-mode-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-citron-mode-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-citron-mode-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-citron-mode-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -1824,25 +1775,6 @@
         chatgptAgeVerificationSettingTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(chatgptAgeVerificationSettingTooltipBox);
 
-        // 创建成人模式提示框
-        const chatgptCitronModeTooltipBox = document.createElement("div");
-        chatgptCitronModeTooltipBox.id = "chatgpt-citron-mode-tooltip-box";
-        chatgptCitronModeTooltipBox.innerText =
-            "Citron Mode，暂未发现实际作用。";
-        chatgptCitronModeTooltipBox.style.position = "fixed";
-        chatgptCitronModeTooltipBox.style.backgroundColor =
-            "rgba(0, 0, 0, 0.8)";
-        chatgptCitronModeTooltipBox.style.color = "#fff";
-        chatgptCitronModeTooltipBox.style.padding = "8px 12px";
-        chatgptCitronModeTooltipBox.style.borderRadius = "5px";
-        chatgptCitronModeTooltipBox.style.fontSize = "12px";
-        chatgptCitronModeTooltipBox.style.visibility = "hidden";
-        chatgptCitronModeTooltipBox.style.zIndex = "10001";
-        chatgptCitronModeTooltipBox.style.width = "240px";
-        chatgptCitronModeTooltipBox.style.lineHeight = "1.4";
-        chatgptCitronModeTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(chatgptCitronModeTooltipBox);
-
         // 创建假装会员提示框
         const chatgptFakePlanTooltipBox = document.createElement("div");
         chatgptFakePlanTooltipBox.id = "chatgpt-fake-plan-tooltip-box";
@@ -2000,10 +1932,6 @@
             bindTooltipEvents(
                 "chatgpt-age-verification-tooltip",
                 chatgptAgeVerificationSettingTooltipBox,
-            );
-            bindTooltipEvents(
-                "chatgpt-citron-mode-tooltip",
-                chatgptCitronModeTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-fake-plan-tooltip",
@@ -2190,54 +2118,6 @@
                 localStorage.setItem(
                     CHATGPT_AGE_VERIFICATION_SETTING_KEY,
                     chatgptAgeVerificationSettingEnabled ? "true" : "false",
-                );
-                apply();
-            });
-        }
-
-        function bindChatgptCitronModeToggle() {
-            const container = document.getElementById(
-                "chatgpt-citron-mode-container",
-            );
-            const toggle = document.getElementById(
-                "chatgpt-citron-mode-toggle",
-            );
-            const slider = document.getElementById(
-                "chatgpt-citron-mode-slider",
-            );
-            const sliderDot = document.getElementById(
-                "chatgpt-citron-mode-slider-dot",
-            );
-            const statusEl = document.getElementById(
-                "chatgpt-citron-mode-status",
-            );
-            if (!container || !toggle || !slider || !sliderDot || !statusEl)
-                return;
-
-            function apply() {
-                if (
-                    typeof window.applyChatgptCitronModeDisplay === "function"
-                ) {
-                    window.applyChatgptCitronModeDisplay(statusEl);
-                }
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    chatgptCitronModeEnabled,
-                );
-            }
-
-            toggle.checked = chatgptCitronModeEnabled;
-            apply();
-
-            if (toggle.dataset.checkerNextBound === "1") return;
-            toggle.dataset.checkerNextBound = "1";
-
-            toggle.addEventListener("change", function () {
-                chatgptCitronModeEnabled = toggle.checked;
-                localStorage.setItem(
-                    CHATGPT_CITRON_MODE_KEY,
-                    chatgptCitronModeEnabled ? "true" : "false",
                 );
                 apply();
             });
@@ -2517,7 +2397,6 @@
             setTimeout(bindChatgptResearchToTextToggle, 100);
             setTimeout(bindChatgptUnlockThemeColorsToggle, 100);
             setTimeout(bindChatgptAgeVerificationSettingToggle, 100);
-            setTimeout(bindChatgptCitronModeToggle, 100);
             setTimeout(bindChatgptFakePlanSelect, 100);
         }
 
@@ -2525,7 +2404,6 @@
             bindChatgptResearchToTextToggle();
             bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
-            bindChatgptCitronModeToggle();
             bindChatgptFakePlanSelect();
         };
         // 延迟添加提示事件，因为元素可能在后面动态显示
@@ -3006,44 +2884,6 @@
     }
     window.applyChatgptAgeVerificationSettingDisplay =
         applyChatgptAgeVerificationSettingDisplay;
-
-    function updateChatgptCitronModeStatus(originalValue, wasModified) {
-        if (!isChatgptMode) return;
-        const statusEl = document.getElementById("chatgpt-citron-mode-status");
-        if (!statusEl) return;
-
-        if (
-            (originalValue === null || originalValue === undefined) &&
-            chatgptCitronModeFetched
-        ) {
-            applyChatgptCitronModeDisplay(statusEl);
-            return;
-        }
-        if (typeof originalValue === "boolean") {
-            chatgptCitronModeFetched = true;
-            if (wasModified) {
-                chatgptCitronModeDisplayValue = true;
-            } else {
-                chatgptCitronModeDisplayValue = originalValue;
-            }
-            applyChatgptCitronModeDisplay(statusEl);
-        }
-    }
-
-    function applyChatgptCitronModeDisplay(statusEl) {
-        if (!statusEl) {
-            statusEl = document.getElementById("chatgpt-citron-mode-status");
-        }
-        if (!statusEl) return;
-        if (chatgptCitronModeDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (chatgptCitronModeDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-    window.applyChatgptCitronModeDisplay = applyChatgptCitronModeDisplay;
 
     // 更新 Grok 开发工具状态显示
     // 使用全局变量以便在 DOM 重建后保留状态
@@ -3925,55 +3765,6 @@
                 return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 is_adult 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend-api/settings/user") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isChatgptMode) return response;
-            let bodyText;
-            try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
-
-                let originalValue = false;
-                if (
-                    data.settings &&
-                    typeof data.settings === "object" &&
-                    data.settings.citron_mode_enabled === true
-                ) {
-                    originalValue = true;
-                }
-
-                let modified = false;
-                if (chatgptCitronModeEnabled && !originalValue) {
-                    if (!data.settings || typeof data.settings !== "object") {
-                        data.settings = {};
-                    }
-                    data.settings.citron_mode_enabled = true;
-                    modified = true;
-                }
-
-                updateChatgptCitronModeStatus(originalValue, modified);
-
-                if (modified) {
-                    return new Response(JSON.stringify(data), {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                    });
-                }
-                // 返回新的 response，因为 body 已经被 consumed
-                return recreateResponseText(bodyText, response);
-            } catch (e) {
-                console.error("[CheckerNext] 处理 settings/user 响应出错:", e);
                 if (typeof bodyText === "string") {
                     return recreateResponseText(bodyText, response);
                 }
