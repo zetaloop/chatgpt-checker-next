@@ -64,6 +64,10 @@
     let grokAvailableModels = null;
     let grokModelsFetched = false;
 
+    // Grok 开发工具状态
+    let grokDevToolsFetched = false;
+    let grokDevToolsDisplayValue = null;
+
     // Grok 抢先体验模型状态
     let grokEarlyAccessDisplayValue = null;
     let grokEarlyAccessFetched = false;
@@ -140,10 +144,7 @@
                                 grokXSubscriptionType,
                                 grokCountryCode,
                             );
-                            // 尝试更新 UI
-                            if (window.updateGrokUserInfo) {
-                                window.updateGrokUserInfo();
-                            }
+                            updateGrokUserInfo();
                         }
                     }
 
@@ -172,9 +173,10 @@
                             grokEarlyAccessDisplayValue =
                                 earlyAccessMatch[1] === "true";
                             grokEarlyAccessFetched = true;
-                            if (window.updateGrokEarlyAccessStatus) {
-                                window.updateGrokEarlyAccessStatus();
-                            }
+                            updateBooleanStatus(
+                                "grok-early-access-status",
+                                grokEarlyAccessDisplayValue,
+                            );
                         }
                     }
 
@@ -199,9 +201,10 @@
                             grokAsyncChatDisplayValue =
                                 asyncChatMatch[1] === "true";
                             grokAsyncChatFetched = true;
-                            if (window.updateGrokAsyncChatStatus) {
-                                window.updateGrokAsyncChatStatus();
-                            }
+                            updateBooleanStatus(
+                                "grok-async-chat-status",
+                                grokAsyncChatDisplayValue,
+                            );
                         }
                     }
 
@@ -227,9 +230,10 @@
                             grokSuperGrokDisplayValue =
                                 superGrokMatch[1] === "true";
                             grokSuperGrokFetched = true;
-                            if (window.updateGrokSuperGrokStatus) {
-                                window.updateGrokSuperGrokStatus();
-                            }
+                            updateBooleanStatus(
+                                "grok-super-grok-status",
+                                grokSuperGrokDisplayValue,
+                            );
                         }
                     }
 
@@ -255,9 +259,10 @@
                             grokSuperGrokProDisplayValue =
                                 superGrokProMatch[1] === "true";
                             grokSuperGrokProFetched = true;
-                            if (window.updateGrokSuperGrokProStatus) {
-                                window.updateGrokSuperGrokProStatus();
-                            }
+                            updateBooleanStatus(
+                                "grok-super-grok-pro-status",
+                                grokSuperGrokProDisplayValue,
+                            );
                         }
                     }
 
@@ -283,9 +288,10 @@
                             grokEnterpriseDisplayValue =
                                 enterpriseMatch[1] === "true";
                             grokEnterpriseFetched = true;
-                            if (window.updateGrokEnterpriseStatus) {
-                                window.updateGrokEnterpriseStatus();
-                            }
+                            updateBooleanStatus(
+                                "grok-enterprise-status",
+                                grokEnterpriseDisplayValue,
+                            );
                         }
                     }
 
@@ -356,7 +362,6 @@
     const GROK_DEV_TOOLS_KEY = "checker-next-grok-dev-tools";
     let grokDevToolsEnabled =
         isGrokMode && localStorage.getItem(GROK_DEV_TOOLS_KEY) === "true";
-    let grokOriginalShowModelConfigOverride = null;
 
     // Grok 所有模型开关状态存储
     const GROK_ALL_MODELS_KEY = "checker-next-grok-all-models";
@@ -1787,37 +1792,6 @@
             );
         }
 
-        // 绑定 Grok 开发工具开关事件
-        function bindGrokDevToolsToggle() {
-            const toggle = document.getElementById("grok-dev-tools-toggle");
-            const slider = document.getElementById("grok-dev-tools-slider");
-            const sliderDot = document.getElementById(
-                "grok-dev-tools-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            // 设置初始状态
-            toggle.checked = grokDevToolsEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokDevToolsEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokDevToolsEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_DEV_TOOLS_KEY,
-                    grokDevToolsEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokDevToolsEnabled,
-                );
-            });
-        }
-
         function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
             if (enabled) {
                 slider.style.backgroundColor = "#4CAF50";
@@ -1826,6 +1800,25 @@
                 slider.style.backgroundColor = "#555";
                 sliderDot.style.transform = "translateX(0)";
             }
+        }
+
+        function bindGrokToggle(id, enabled, storageKey, setEnabled) {
+            const toggle = document.getElementById(`${id}-toggle`);
+            const slider = document.getElementById(`${id}-slider`);
+            const sliderDot = document.getElementById(`${id}-slider-dot`);
+            if (!toggle || !slider || !sliderDot) return;
+
+            toggle.checked = enabled;
+            updateGrokDevToolsSliderStyle(slider, sliderDot, enabled);
+            toggle.addEventListener("change", function () {
+                setEnabled(toggle.checked);
+                localStorage.setItem(storageKey, String(toggle.checked));
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    toggle.checked,
+                );
+            });
         }
 
         function bindChatgptResearchToTextToggle() {
@@ -1853,9 +1846,6 @@
 
             toggle.checked = chatgptResearchToTextEnabled;
             apply();
-
-            if (toggle.dataset.checkerNextBound === "1") return;
-            toggle.dataset.checkerNextBound = "1";
 
             toggle.addEventListener("change", function () {
                 chatgptResearchToTextEnabled = toggle.checked;
@@ -1893,9 +1883,6 @@
             toggle.checked = chatgptUnlockThemeColorsEnabled;
             apply();
 
-            if (toggle.dataset.checkerNextBound === "1") return;
-            toggle.dataset.checkerNextBound = "1";
-
             toggle.addEventListener("change", function () {
                 chatgptUnlockThemeColorsEnabled = toggle.checked;
                 localStorage.setItem(
@@ -1926,12 +1913,10 @@
                 return;
 
             function apply() {
-                if (
-                    typeof window.applyChatgptAgeVerificationSettingDisplay ===
-                    "function"
-                ) {
-                    window.applyChatgptAgeVerificationSettingDisplay(statusEl);
-                }
+                updateBooleanStatus(
+                    statusEl,
+                    chatgptAgeVerificationSettingDisplayValue,
+                );
                 updateGrokDevToolsSliderStyle(
                     slider,
                     sliderDot,
@@ -1941,9 +1926,6 @@
 
             toggle.checked = chatgptAgeVerificationSettingEnabled;
             apply();
-
-            if (toggle.dataset.checkerNextBound === "1") return;
-            toggle.dataset.checkerNextBound = "1";
 
             toggle.addEventListener("change", function () {
                 chatgptAgeVerificationSettingEnabled = toggle.checked;
@@ -1974,9 +1956,6 @@
                 isChatgptFakePlanRuntimeEnabled(),
             );
 
-            if (select.dataset.checkerNextBound === "1") return;
-            select.dataset.checkerNextBound = "1";
-
             select.addEventListener("change", function () {
                 chatgptFakePlanValue = normalizeChatgptFakePlanType(
                     select.value,
@@ -2003,275 +1982,107 @@
             });
         }
 
-        // 绑定 Grok 所有模型开关事件
-        function bindGrokAllModelsToggle() {
-            const toggle = document.getElementById("grok-all-models-toggle");
-            const slider = document.getElementById("grok-all-models-slider");
-            const sliderDot = document.getElementById(
-                "grok-all-models-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            // 设置初始状态
-            toggle.checked = grokAllModelsEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokAllModelsEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokAllModelsEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_ALL_MODELS_KEY,
-                    grokAllModelsEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokAllModelsEnabled,
-                );
-            });
-        }
-
-        // 绑定 Grok 抢先体验模型开关事件
-        function bindGrokEarlyAccessToggle() {
-            const toggle = document.getElementById("grok-early-access-toggle");
-            const slider = document.getElementById("grok-early-access-slider");
-            const sliderDot = document.getElementById(
-                "grok-early-access-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            // 设置初始状态
-            toggle.checked = grokEarlyAccessEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokEarlyAccessEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokEarlyAccessEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_EARLY_ACCESS_KEY,
-                    grokEarlyAccessEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokEarlyAccessEnabled,
-                );
-            });
-        }
-
-        // 绑定 Grok 异步聊天开关事件
-        function bindGrokAsyncChatToggle() {
-            const toggle = document.getElementById("grok-async-chat-toggle");
-            const slider = document.getElementById("grok-async-chat-slider");
-            const sliderDot = document.getElementById(
-                "grok-async-chat-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            // 设置初始状态
-            toggle.checked = grokAsyncChatEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokAsyncChatEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokAsyncChatEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_ASYNC_CHAT_KEY,
-                    grokAsyncChatEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokAsyncChatEnabled,
-                );
-            });
-        }
-
-        // 绑定 Grok 假装 Super Grok 开关事件
-        function bindGrokSuperGrokToggle() {
-            const toggle = document.getElementById("grok-super-grok-toggle");
-            const slider = document.getElementById("grok-super-grok-slider");
-            const sliderDot = document.getElementById(
-                "grok-super-grok-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            toggle.checked = grokSuperGrokEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokSuperGrokEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokSuperGrokEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_SUPER_GROK_KEY,
-                    grokSuperGrokEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokSuperGrokEnabled,
-                );
-            });
-        }
-
-        // 绑定 Grok 假装 Super Grok Pro 开关事件
-        function bindGrokSuperGrokProToggle() {
-            const toggle = document.getElementById(
-                "grok-super-grok-pro-toggle",
-            );
-            const slider = document.getElementById(
-                "grok-super-grok-pro-slider",
-            );
-            const sliderDot = document.getElementById(
-                "grok-super-grok-pro-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            toggle.checked = grokSuperGrokProEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokSuperGrokProEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokSuperGrokProEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_SUPER_GROK_PRO_KEY,
-                    grokSuperGrokProEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokSuperGrokProEnabled,
-                );
-            });
-        }
-
-        // 绑定 Grok 假装 Enterprise 开关事件
-        function bindGrokEnterpriseToggle() {
-            const toggle = document.getElementById("grok-enterprise-toggle");
-            const slider = document.getElementById("grok-enterprise-slider");
-            const sliderDot = document.getElementById(
-                "grok-enterprise-slider-dot",
-            );
-            if (!toggle || !slider || !sliderDot) return;
-
-            toggle.checked = grokEnterpriseEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                grokEnterpriseEnabled,
-            );
-
-            toggle.addEventListener("change", function () {
-                grokEnterpriseEnabled = toggle.checked;
-                localStorage.setItem(
-                    GROK_ENTERPRISE_KEY,
-                    grokEnterpriseEnabled ? "true" : "false",
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    grokEnterpriseEnabled,
-                );
-            });
-        }
-
         if (isGrokMode) {
-            setTimeout(bindGrokDevToolsToggle, 100);
-            setTimeout(bindGrokAllModelsToggle, 100);
-            setTimeout(bindGrokEarlyAccessToggle, 100);
-            setTimeout(bindGrokAsyncChatToggle, 100);
-            setTimeout(bindGrokSuperGrokToggle, 100);
-            setTimeout(bindGrokSuperGrokProToggle, 100);
-            setTimeout(bindGrokEnterpriseToggle, 100);
-            // 恢复已缓存的状态显示
-            setTimeout(() => {
-                if (window.applyGrokDevToolsDisplay) {
-                    window.applyGrokDevToolsDisplay();
-                }
-                if (window.updateGrokEarlyAccessStatus) {
-                    window.updateGrokEarlyAccessStatus();
-                }
-                if (window.updateGrokAsyncChatStatus) {
-                    window.updateGrokAsyncChatStatus();
-                }
-                if (window.updateGrokSuperGrokStatus) {
-                    window.updateGrokSuperGrokStatus();
-                }
-                if (window.updateGrokSuperGrokProStatus) {
-                    window.updateGrokSuperGrokProStatus();
-                }
-                if (window.updateGrokEnterpriseStatus) {
-                    window.updateGrokEnterpriseStatus();
-                }
-                if (window.updateGrokUserInfo) {
-                    window.updateGrokUserInfo();
-                }
-                if (window.updateGrokModels) {
-                    window.updateGrokModels();
-                }
-            }, 100);
+            bindGrokToggle(
+                "grok-dev-tools",
+                grokDevToolsEnabled,
+                GROK_DEV_TOOLS_KEY,
+                (value) => {
+                    grokDevToolsEnabled = value;
+                },
+            );
+            bindGrokToggle(
+                "grok-all-models",
+                grokAllModelsEnabled,
+                GROK_ALL_MODELS_KEY,
+                (value) => {
+                    grokAllModelsEnabled = value;
+                },
+            );
+            bindGrokToggle(
+                "grok-early-access",
+                grokEarlyAccessEnabled,
+                GROK_EARLY_ACCESS_KEY,
+                (value) => {
+                    grokEarlyAccessEnabled = value;
+                },
+            );
+            bindGrokToggle(
+                "grok-async-chat",
+                grokAsyncChatEnabled,
+                GROK_ASYNC_CHAT_KEY,
+                (value) => {
+                    grokAsyncChatEnabled = value;
+                },
+            );
+            bindGrokToggle(
+                "grok-super-grok",
+                grokSuperGrokEnabled,
+                GROK_SUPER_GROK_KEY,
+                (value) => {
+                    grokSuperGrokEnabled = value;
+                },
+            );
+            bindGrokToggle(
+                "grok-super-grok-pro",
+                grokSuperGrokProEnabled,
+                GROK_SUPER_GROK_PRO_KEY,
+                (value) => {
+                    grokSuperGrokProEnabled = value;
+                },
+            );
+            bindGrokToggle(
+                "grok-enterprise",
+                grokEnterpriseEnabled,
+                GROK_ENTERPRISE_KEY,
+                (value) => {
+                    grokEnterpriseEnabled = value;
+                },
+            );
+            updateBooleanStatus(
+                "grok-dev-tools-status",
+                grokDevToolsDisplayValue,
+            );
+            updateBooleanStatus(
+                "grok-early-access-status",
+                grokEarlyAccessDisplayValue,
+            );
+            updateBooleanStatus(
+                "grok-async-chat-status",
+                grokAsyncChatDisplayValue,
+            );
+            updateBooleanStatus(
+                "grok-super-grok-status",
+                grokSuperGrokDisplayValue,
+            );
+            updateBooleanStatus(
+                "grok-super-grok-pro-status",
+                grokSuperGrokProDisplayValue,
+            );
+            updateBooleanStatus(
+                "grok-enterprise-status",
+                grokEnterpriseDisplayValue,
+            );
+            updateGrokUserInfo();
+            updateGrokModels();
         }
 
         if (isChatgptMode) {
-            setTimeout(bindChatgptResearchToTextToggle, 100);
-            setTimeout(bindChatgptUnlockThemeColorsToggle, 100);
-            setTimeout(bindChatgptAgeVerificationSettingToggle, 100);
-            setTimeout(bindChatgptFakePlanSelect, 100);
-        }
-
-        window.rebindChatgptToggle = () => {
             bindChatgptResearchToTextToggle();
             bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
             bindChatgptFakePlanSelect();
-        };
-        // 延迟添加提示事件，因为元素可能在后面动态显示
-        setTimeout(bindAllTooltips, 100);
-
-        // 在 MutationObserver 中也需要重新绑定事件
-        window.rebindCodexEvents = bindAllTooltips;
-        window.rebindGrokToggle = () => {
-            bindGrokDevToolsToggle();
-            bindGrokAllModelsToggle();
-            bindGrokEarlyAccessToggle();
-            bindGrokAsyncChatToggle();
-            bindGrokSuperGrokToggle();
-            bindGrokSuperGrokProToggle();
-            bindGrokEnterpriseToggle();
-        };
+        }
+        bindAllTooltips();
     }
 
     // 创建元素
     createElements();
 
     // 使用 MutationObserver 观测 DOM 改动
-    const observer = new MutationObserver((mutationsList, observer) => {
-        // 保持检测器元素
+    const observer = new MutationObserver(() => {
         if (!document.getElementById("checker-next-displayBox")) {
             createElements();
-        }
-        // 重新绑定 Codex 事件
-        if (window.rebindCodexEvents) {
-            window.rebindCodexEvents();
-        }
-        // 重新绑定 Grok 开关事件
-        if (isGrokMode && window.rebindGrokToggle) {
-            window.rebindGrokToggle();
         }
     });
 
@@ -2672,6 +2483,21 @@
     }
     setInterval(updateCodexCountdown, 1000);
 
+    function updateBooleanStatus(target, value) {
+        const statusEl =
+            typeof target === "string"
+                ? document.getElementById(target)
+                : target;
+        if (!statusEl) return;
+        if (value === true) {
+            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
+        } else if (value === false) {
+            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
+        } else {
+            statusEl.innerText = "...";
+        }
+    }
+
     // 更新 ChatGPT 各自的开关状态显示
     function updateChatgptAgeVerificationSettingStatus(
         originalValue,
@@ -2687,7 +2513,10 @@
             (originalValue === null || originalValue === undefined) &&
             chatgptAgeVerificationSettingFetched
         ) {
-            applyChatgptAgeVerificationSettingDisplay(statusEl);
+            updateBooleanStatus(
+                statusEl,
+                chatgptAgeVerificationSettingDisplayValue,
+            );
             return;
         }
         if (typeof originalValue === "boolean") {
@@ -2697,32 +2526,12 @@
             } else {
                 chatgptAgeVerificationSettingDisplayValue = originalValue;
             }
-            applyChatgptAgeVerificationSettingDisplay(statusEl);
-        }
-    }
-
-    function applyChatgptAgeVerificationSettingDisplay(statusEl) {
-        if (!statusEl) {
-            statusEl = document.getElementById(
-                "chatgpt-age-verification-status",
+            updateBooleanStatus(
+                statusEl,
+                chatgptAgeVerificationSettingDisplayValue,
             );
         }
-        if (!statusEl) return;
-        if (chatgptAgeVerificationSettingDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (chatgptAgeVerificationSettingDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
     }
-    window.applyChatgptAgeVerificationSettingDisplay =
-        applyChatgptAgeVerificationSettingDisplay;
-
-    // 更新 Grok 开发工具状态显示
-    // 使用全局变量以便在 DOM 重建后保留状态
-    let grokDevToolsFetched = false;
-    let grokDevToolsDisplayValue = null; // 实际显示的值（可能是修改后的）
 
     function updateGrokDevToolsStatus(originalValue, wasModified) {
         if (!isGrokMode) return;
@@ -2734,14 +2543,12 @@
             (originalValue === null || originalValue === undefined) &&
             grokDevToolsFetched
         ) {
-            // 确保 UI 正确显示已缓存的值
-            applyGrokDevToolsDisplay(statusEl);
+            updateBooleanStatus(statusEl, grokDevToolsDisplayValue);
             return;
         }
 
         // 只有获取到有效值时才更新
         if (typeof originalValue === "boolean") {
-            grokOriginalShowModelConfigOverride = originalValue;
             grokDevToolsFetched = true;
 
             // 如果开关启用且修改成功，显示 True
@@ -2751,117 +2558,9 @@
                 grokDevToolsDisplayValue = originalValue;
             }
 
-            applyGrokDevToolsDisplay(statusEl);
+            updateBooleanStatus(statusEl, grokDevToolsDisplayValue);
         }
     }
-
-    function applyGrokDevToolsDisplay(statusEl) {
-        if (!statusEl) {
-            statusEl = document.getElementById("grok-dev-tools-status");
-        }
-        if (!statusEl) return;
-
-        if (grokDevToolsDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (grokDevToolsDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    // 挂载到 window 以便 DOM 重建后恢复状态
-    window.applyGrokDevToolsDisplay = applyGrokDevToolsDisplay;
-
-    // 更新 Grok 抢先体验模型状态
-    function updateGrokEarlyAccessStatus() {
-        if (!isGrokMode) return;
-        const statusEl = document.getElementById("grok-early-access-status");
-        if (!statusEl) return;
-
-        if (grokEarlyAccessDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (grokEarlyAccessDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
-    window.updateGrokEarlyAccessStatus = updateGrokEarlyAccessStatus;
-
-    // 更新 Grok 异步聊天状态
-    function updateGrokAsyncChatStatus() {
-        if (!isGrokMode) return;
-        const statusEl = document.getElementById("grok-async-chat-status");
-        if (!statusEl) return;
-
-        if (grokAsyncChatDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (grokAsyncChatDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
-    window.updateGrokAsyncChatStatus = updateGrokAsyncChatStatus;
-
-    // 更新 Grok 假装 Super Grok 状态
-    function updateGrokSuperGrokStatus() {
-        if (!isGrokMode) return;
-        const statusEl = document.getElementById("grok-super-grok-status");
-        if (!statusEl) return;
-
-        if (grokSuperGrokDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (grokSuperGrokDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
-    window.updateGrokSuperGrokStatus = updateGrokSuperGrokStatus;
-
-    // 更新 Grok 假装 Super Grok Pro 状态
-    function updateGrokSuperGrokProStatus() {
-        if (!isGrokMode) return;
-        const statusEl = document.getElementById("grok-super-grok-pro-status");
-        if (!statusEl) return;
-
-        if (grokSuperGrokProDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (grokSuperGrokProDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
-    window.updateGrokSuperGrokProStatus = updateGrokSuperGrokProStatus;
-
-    // 更新 Grok 假装 Enterprise 状态
-    function updateGrokEnterpriseStatus() {
-        if (!isGrokMode) return;
-        const statusEl = document.getElementById("grok-enterprise-status");
-        if (!statusEl) return;
-
-        if (grokEnterpriseDisplayValue === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (grokEnterpriseDisplayValue === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
-    window.updateGrokEnterpriseStatus = updateGrokEnterpriseStatus;
 
     // 更新 Grok 用户信息（Grok订阅、X订阅和账号地区）
     function updateGrokUserInfo() {
@@ -2906,9 +2605,6 @@
         }
     }
 
-    // 挂载到 window 以便 RSC 解析后调用及 DOM 重建后恢复
-    window.updateGrokUserInfo = updateGrokUserInfo;
-
     // 更新 Grok 可用模型列表
     function updateGrokModels() {
         if (!isGrokMode) return;
@@ -2930,9 +2626,6 @@
             modelsEl.innerHTML = "...";
         }
     }
-
-    // 挂载到 window 以便 DOM 重建后恢复
-    window.updateGrokModels = updateGrokModels;
 
     // 读取并处理 Grok 页面内嵌数据
     function processGrokServerClientData() {
@@ -3801,9 +3494,7 @@
                         "[CheckerNext] Grok available models:",
                         grokAvailableModels,
                     );
-                    if (window.updateGrokModels) {
-                        window.updateGrokModels();
-                    }
+                    updateGrokModels();
                 }
 
                 return recreateResponseText(bodyText, response);
