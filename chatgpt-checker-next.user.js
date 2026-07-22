@@ -2768,30 +2768,19 @@
         return Math.abs(timestamp - expectedTimestamp) <= 5000;
     }
 
-    function isMonthlyResetNotStarted(resetAfter) {
-        const thirtyDaysLater = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        return isResetTimestampNear(resetAfter, thirtyDaysLater);
-    }
+    const CHATGPT_FEATURE_LIMITS = {
+        deep_research: ["deep-research", 30 * 24 * 60 * 60 * 1000],
+        file_upload: ["file-upload", 3 * 60 * 60 * 1000],
+        paste_text_to_file: ["paste-text-to-file", 3 * 60 * 60 * 1000],
+        image_gen: ["image-gen", 24 * 60 * 60 * 1000],
+    };
 
-    function isDailyResetNotStarted(resetAfter) {
-        const oneDayLater = Date.now() + 24 * 60 * 60 * 1000;
-        return isResetTimestampNear(resetAfter, oneDayLater);
-    }
-
-    function isThreeHourResetNotStarted(resetAfter) {
-        const threeHoursLater = Date.now() + 3 * 60 * 60 * 1000;
-        return isResetTimestampNear(resetAfter, threeHoursLater);
-    }
-
-    // 更新深度研究次数
-    let researchRemaining = null;
-    let researchReset = null;
-    function updateDeepResearchInfo(remaining, resetAfter) {
+    function updateChatgptFeatureLimit(config, remaining, resetAfter) {
         if (!isChatgptMode) return;
-        const section = document.getElementById("deep-research-section");
-        const usageEl = document.getElementById("deep-research-usage");
-        const resetEl = document.getElementById("deep-research-reset-time");
-
+        const [id, resetPeriod] = config;
+        const section = document.getElementById(`${id}-section`);
+        const usageEl = document.getElementById(`${id}-usage`);
+        const resetEl = document.getElementById(`${id}-reset-time`);
         if (!section || !usageEl || !resetEl) return;
 
         if (typeof remaining !== "number") {
@@ -2799,138 +2788,19 @@
             return;
         }
 
-        researchRemaining = remaining;
-        researchReset = resetAfter || null;
-
         section.style.display = "block";
         section.style.marginTop = powFetched ? "10px" : "0";
-        if (isMonthlyResetNotStarted(resetAfter)) {
+        if (isResetTimestampNear(resetAfter, Date.now() + resetPeriod)) {
             usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
         } else {
             usageEl.innerText = `${remaining}次`;
         }
 
-        if (researchReset) {
-            const date = new Date(researchReset);
-            resetEl.innerText = date
-                .toLocaleString("zh-CN", { hour12: false })
-                .replace(/\//g, "-");
-        } else {
-            resetEl.innerText = "...";
-        }
-    }
-
-    // 更新文件上传次数
-    let uploadRemaining = null;
-    let uploadReset = null;
-    function updateFileUploadInfo(remaining, resetAfter) {
-        if (!isChatgptMode) return;
-        const section = document.getElementById("file-upload-section");
-        const usageEl = document.getElementById("file-upload-usage");
-        const resetEl = document.getElementById("file-upload-reset-time");
-
-        if (!section || !usageEl || !resetEl) return;
-
-        if (typeof remaining !== "number") {
-            section.style.display = "none";
-            return;
-        }
-
-        uploadRemaining = remaining;
-        uploadReset = resetAfter || null;
-
-        section.style.display = "block";
-        section.style.marginTop = powFetched ? "10px" : "0";
-        if (isThreeHourResetNotStarted(resetAfter)) {
-            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
-        } else {
-            usageEl.innerText = `${remaining}次`;
-        }
-
-        if (uploadReset) {
-            const date = new Date(uploadReset);
-            resetEl.innerText = date
-                .toLocaleString("zh-CN", { hour12: false })
-                .replace(/\//g, "-");
-        } else {
-            resetEl.innerText = "...";
-        }
-    }
-
-    // 更新粘贴文本为文件次数
-    let pasteTextRemaining = null;
-    let pasteTextReset = null;
-    function updatePasteTextToFileInfo(remaining, resetAfter) {
-        if (!isChatgptMode) return;
-        const section = document.getElementById("paste-text-to-file-section");
-        const usageEl = document.getElementById("paste-text-to-file-usage");
-        const resetEl = document.getElementById(
-            "paste-text-to-file-reset-time",
-        );
-
-        if (!section || !usageEl || !resetEl) return;
-
-        if (typeof remaining !== "number") {
-            section.style.display = "none";
-            return;
-        }
-
-        pasteTextRemaining = remaining;
-        pasteTextReset = resetAfter || null;
-
-        section.style.display = "block";
-        section.style.marginTop = powFetched ? "10px" : "0";
-        if (isThreeHourResetNotStarted(resetAfter)) {
-            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
-        } else {
-            usageEl.innerText = `${remaining}次`;
-        }
-
-        if (pasteTextReset) {
-            const date = new Date(pasteTextReset);
-            resetEl.innerText = date
-                .toLocaleString("zh-CN", { hour12: false })
-                .replace(/\//g, "-");
-        } else {
-            resetEl.innerText = "...";
-        }
-    }
-
-    // 更新图片生成次数
-    let imageGenRemaining = null;
-    let imageGenReset = null;
-    function updateImageGenInfo(remaining, resetAfter) {
-        if (!isChatgptMode) return;
-        const section = document.getElementById("image-gen-section");
-        const usageEl = document.getElementById("image-gen-usage");
-        const resetEl = document.getElementById("image-gen-reset-time");
-
-        if (!section || !usageEl || !resetEl) return;
-
-        if (typeof remaining !== "number") {
-            section.style.display = "none";
-            return;
-        }
-
-        imageGenRemaining = remaining;
-        imageGenReset = resetAfter || null;
-
-        section.style.display = "block";
-        section.style.marginTop = powFetched ? "10px" : "0";
-        if (isDailyResetNotStarted(resetAfter)) {
-            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
-        } else {
-            usageEl.innerText = `${remaining}次`;
-        }
-
-        if (imageGenReset) {
-            const date = new Date(imageGenReset);
-            resetEl.innerText = date
-                .toLocaleString("zh-CN", { hour12: false })
-                .replace(/\//g, "-");
-        } else {
-            resetEl.innerText = "...";
-        }
+        resetEl.innerText = resetAfter
+            ? new Date(resetAfter)
+                  .toLocaleString("zh-CN", { hour12: false })
+                  .replace(/\//g, "-")
+            : "...";
     }
 
     // 更新默认模型
@@ -3194,49 +3064,18 @@
             try {
                 bodyText = await response.text();
                 const data = JSON.parse(bodyText);
-                const deep_research = Array.isArray(data.limits_progress)
-                    ? data.limits_progress.find(
-                          (i) => i.feature_name === "deep_research",
-                      )
-                    : null;
-                const file_upload = Array.isArray(data.limits_progress)
-                    ? data.limits_progress.find(
-                          (i) => i.feature_name === "file_upload",
-                      )
-                    : null;
-                const paste_text_to_file = Array.isArray(data.limits_progress)
-                    ? data.limits_progress.find(
-                          (i) => i.feature_name === "paste_text_to_file",
-                      )
-                    : null;
-                const image_gen = Array.isArray(data.limits_progress)
-                    ? data.limits_progress.find(
-                          (i) => i.feature_name === "image_gen",
-                      )
-                    : null;
-                if (deep_research) {
-                    updateDeepResearchInfo(
-                        deep_research.remaining,
-                        deep_research.reset_after,
-                    );
-                }
-                if (file_upload) {
-                    updateFileUploadInfo(
-                        file_upload.remaining,
-                        file_upload.reset_after,
-                    );
-                }
-                if (paste_text_to_file) {
-                    updatePasteTextToFileInfo(
-                        paste_text_to_file.remaining,
-                        paste_text_to_file.reset_after,
-                    );
-                }
-                if (image_gen) {
-                    updateImageGenInfo(
-                        image_gen.remaining,
-                        image_gen.reset_after,
-                    );
+                if (Array.isArray(data.limits_progress)) {
+                    for (const limit of data.limits_progress) {
+                        const config =
+                            CHATGPT_FEATURE_LIMITS[limit.feature_name];
+                        if (Array.isArray(config)) {
+                            updateChatgptFeatureLimit(
+                                config,
+                                limit.remaining,
+                                limit.reset_after,
+                            );
+                        }
+                    }
                 }
                 updateDefaultModelInfo(
                     data.default_model_slug === null
