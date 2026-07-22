@@ -7,7 +7,6 @@
 // @version      3.3.0
 // @description  获取 ChatGPT 和 Grok 的功能、服务等信息。
 // @match        *://chatgpt.com/*
-// @match        *://sora.chatgpt.com/*
 // @match        *://grok.com/*
 // @grant        none
 // @run-at       document-start
@@ -21,12 +20,10 @@
 
     const MODE_CHATGPT = "chatgpt";
     const MODE_CODEX = "codex";
-    const MODE_SORA = "sora";
     const MODE_GROK = "grok";
 
     function detectPageMode() {
         const { hostname, pathname } = window.location;
-        if (hostname === "sora.chatgpt.com") return MODE_SORA;
         if (hostname === "grok.com") return MODE_GROK;
         if (hostname === "chatgpt.com" && pathname.startsWith("/codex")) {
             return MODE_CODEX;
@@ -37,7 +34,6 @@
     const currentPageMode = detectPageMode();
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
-    const isSoraMode = currentPageMode === MODE_SORA;
     const isGrokMode = currentPageMode === MODE_GROK;
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
@@ -849,55 +845,6 @@
                 剩余积分：<span id="codex-credits-value">...</span>
             </div>
         </div>
-        <div id="sora-section" style="margin-top: 10px; display: none">
-            <div style="margin-bottom: 2px;">
-                <strong>Sora</strong>
-                <span id="sora-info-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span>
-            </div>
-            <div id="sora-models-container">
-                生成模型：<span id="sora-models">...</span>
-            </div>
-            <div id="sora-concurrent-container" style="display: none">
-                并行生成：<span id="sora-concurrent">...</span>
-            </div>
-            <div id="sora-free-container">
-                免费次数：<span id="sora-free-usage">...</span>
-            </div>
-            <div id="sora-reset-container">
-                重置时间：<span id="sora-reset-time">...</span>
-            </div>
-            <div id="sora-credits-container" style="margin-top: 10px; display: none;">
-                <div style="margin-bottom: 2px;">
-                    <strong>积分</strong>
-                    <span id="credits-tooltip" style="
-                        cursor: pointer;
-                        color: #fff;
-                        font-size: 12px;
-                        display: inline-block;
-                        width: 14px;
-                        height: 14px;
-                        line-height: 14px;
-                        text-align: center;
-                        border-radius: 50%;
-                        border: 1px solid #fff;
-                        margin-left: 3px;
-                    ">?</span>
-                </div>
-                剩余积分：<span id="sora-credits-detail">...</span>
-            </div>
-        </div>
         <div id="grok-section" style="margin-top: 10px; display: none">
             <div style="margin-bottom: 2px;">
                 <strong>Grok</strong>
@@ -1501,7 +1448,6 @@
         );
         const imageGenSection = document.getElementById("image-gen-section");
         const codexSection = document.getElementById("codex-section");
-        const soraSection = document.getElementById("sora-section");
         const grokSection = document.getElementById("grok-section");
 
         if (isCodexMode) {
@@ -1514,10 +1460,6 @@
             if (imageGenSection) imageGenSection.style.display = "none";
             const featuresSection = document.getElementById("features-section");
             if (featuresSection) featuresSection.style.display = "none";
-            if (soraSection) {
-                soraSection.style.display = "none";
-                soraSection.style.marginTop = "10px";
-            }
             if (grokSection) {
                 grokSection.style.display = "none";
                 grokSection.style.marginTop = "10px";
@@ -1525,28 +1467,6 @@
             if (codexSection) {
                 codexSection.style.display = "block";
                 codexSection.style.marginTop = "0";
-            }
-        } else if (isSoraMode) {
-            if (powSection) powSection.style.display = "none";
-            if (deepSection) deepSection.style.display = "none";
-            if (odysseySection) odysseySection.style.display = "none";
-            if (fileUploadSection) fileUploadSection.style.display = "none";
-            if (pasteTextToFileSection)
-                pasteTextToFileSection.style.display = "none";
-            if (imageGenSection) imageGenSection.style.display = "none";
-            const featuresSection = document.getElementById("features-section");
-            if (featuresSection) featuresSection.style.display = "none";
-            if (codexSection) {
-                codexSection.style.display = "none";
-                codexSection.style.marginTop = "10px";
-            }
-            if (grokSection) {
-                grokSection.style.display = "none";
-                grokSection.style.marginTop = "10px";
-            }
-            if (soraSection) {
-                soraSection.style.display = "block";
-                soraSection.style.marginTop = "0";
             }
         } else if (isGrokMode) {
             if (powSection) powSection.style.display = "none";
@@ -1562,10 +1482,6 @@
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
             }
-            if (soraSection) {
-                soraSection.style.display = "none";
-                soraSection.style.marginTop = "10px";
-            }
             if (grokSection) {
                 grokSection.style.display = "block";
                 grokSection.style.marginTop = "0";
@@ -1578,10 +1494,6 @@
             if (codexSection) {
                 codexSection.style.display = "none";
                 codexSection.style.marginTop = "10px";
-            }
-            if (soraSection) {
-                soraSection.style.display = "none";
-                soraSection.style.marginTop = "10px";
             }
             if (grokSection) {
                 grokSection.style.display = "none";
@@ -1772,8 +1684,7 @@
         // 创建积分提示框
         const creditsTooltipBox = document.createElement("div");
         creditsTooltipBox.id = "credits-tooltip-box";
-        creditsTooltipBox.innerText =
-            "单独购买的积分，可用于 Codex、Sora 等任务。";
+        creditsTooltipBox.innerText = "单独购买的积分，可用于 Codex 任务。";
         creditsTooltipBox.style.position = "fixed";
         creditsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
         creditsTooltipBox.style.color = "#fff";
@@ -1786,24 +1697,6 @@
         creditsTooltipBox.style.lineHeight = "1.4";
         creditsTooltipBox.style.pointerEvents = "none";
         document.body.appendChild(creditsTooltipBox);
-
-        // 创建 Sora 信息提示框
-        const soraInfoTooltipBox = document.createElement("div");
-        soraInfoTooltipBox.id = "sora-info-tooltip-box";
-        soraInfoTooltipBox.innerText =
-            "Sora 1 (也就是 Turbo) 没有次数限制。Sora 2 有每日次数，也可使用积分。";
-        soraInfoTooltipBox.style.position = "fixed";
-        soraInfoTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        soraInfoTooltipBox.style.color = "#fff";
-        soraInfoTooltipBox.style.padding = "8px 12px";
-        soraInfoTooltipBox.style.borderRadius = "5px";
-        soraInfoTooltipBox.style.fontSize = "12px";
-        soraInfoTooltipBox.style.visibility = "hidden";
-        soraInfoTooltipBox.style.zIndex = "10001";
-        soraInfoTooltipBox.style.width = "240px";
-        soraInfoTooltipBox.style.lineHeight = "1.4";
-        soraInfoTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(soraInfoTooltipBox);
 
         // 创建 Grok 功能提示框
         const grokFeatureTooltipBox = document.createElement("div");
@@ -2102,9 +1995,7 @@
 
         function bindAllTooltips() {
             bindTooltipEvents("codex-tooltip", codexTooltipBox);
-            bindTooltipEvents("credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
-            bindTooltipEvents("sora-info-tooltip", soraInfoTooltipBox);
             bindTooltipEvents("grok-feature-tooltip", grokFeatureTooltipBox);
             bindTooltipEvents(
                 "grok-all-models-tooltip",
@@ -3078,196 +2969,6 @@
         }
     }
     setInterval(updateCodexCountdown, 1000);
-
-    // 更新 Sora 用量
-    let soraResetDeadlineMs = null;
-    let soraLimitWindowSeconds = null;
-    let soraTimerNotStarted = false;
-    let soraSupportsQuota = null;
-    let soraCreditsAvailable = false;
-
-    function applySoraQuotaVisibility() {
-        const showQuota = soraSupportsQuota !== false;
-        const freeContainer = document.getElementById("sora-free-container");
-        const resetContainer = document.getElementById("sora-reset-container");
-        const creditsContainer = document.getElementById(
-            "sora-credits-container",
-        );
-        if (freeContainer)
-            freeContainer.style.display = showQuota ? "block" : "none";
-        if (resetContainer)
-            resetContainer.style.display = showQuota ? "block" : "none";
-        if (creditsContainer) {
-            const showCredits = showQuota && soraCreditsAvailable;
-            creditsContainer.style.display = showCredits ? "block" : "none";
-        }
-    }
-
-    function updateSoraModels(models) {
-        if (!isSoraMode) return;
-        const modelsEl = document.getElementById("sora-models");
-        if (!modelsEl) return;
-        if (!Array.isArray(models) || models.length === 0) {
-            modelsEl.innerText = "...";
-            return;
-        }
-        const formatted = models
-            .map((item) => {
-                if (!item || typeof item !== "object") return null;
-                const label =
-                    typeof item.label === "string" && item.label.trim()
-                        ? item.label.trim()
-                        : "";
-                const id =
-                    typeof item.id === "string" && item.id.trim()
-                        ? item.id.trim()
-                        : "";
-                if (label && id) return `${label} (${id})`;
-                if (label) return label;
-                if (id) return id;
-                return null;
-            })
-            .filter(Boolean);
-        modelsEl.innerText = formatted.length ? formatted.join("、") : "...";
-        const hasTurbo = Array.isArray(models)
-            ? models.some((item) => {
-                  if (!item || typeof item !== "object") return false;
-                  const id =
-                      typeof item.id === "string" ? item.id.toLowerCase() : "";
-                  return id === "turbo";
-              })
-            : false;
-        if (hasTurbo) {
-            soraSupportsQuota = false;
-        } else if (formatted.length) {
-            soraSupportsQuota = true;
-        }
-        applySoraQuotaVisibility();
-        applySoraConcurrentVisibility(hasTurbo);
-        setIconColors("#2E91F6", "#1666D6");
-    }
-
-    function applySoraConcurrentVisibility(show) {
-        const container = document.getElementById("sora-concurrent-container");
-        if (container) container.style.display = show ? "block" : "none";
-    }
-
-    function updateSoraConcurrent(maxConcurrent) {
-        if (!isSoraMode) return;
-        const valueEl = document.getElementById("sora-concurrent");
-        if (!valueEl) return;
-        if (typeof maxConcurrent === "number") {
-            valueEl.innerText = String(maxConcurrent);
-        } else {
-            valueEl.innerText = "...";
-        }
-    }
-
-    function updateSoraInfo(
-        rateLimitReached,
-        accessResetsInSeconds,
-        creditRemaining,
-        estimatedVideosRemaining,
-        estimatedPurchasedVideosRemaining,
-    ) {
-        if (!isSoraMode) return;
-        if (soraSupportsQuota === false) {
-            soraCreditsAvailable = false;
-            applySoraQuotaVisibility();
-            return;
-        }
-        const section = document.getElementById("sora-section");
-        const freeUsageEl = document.getElementById("sora-free-usage");
-        const resetEl = document.getElementById("sora-reset-time");
-        const creditsDetailEl = document.getElementById("sora-credits-detail");
-
-        if (!section || !freeUsageEl || !resetEl || !creditsDetailEl) {
-            return;
-        }
-
-        if (rateLimitReached === true) {
-            freeUsageEl.innerText = "已用尽";
-        } else if (
-            typeof estimatedVideosRemaining === "number" &&
-            typeof estimatedPurchasedVideosRemaining === "number"
-        ) {
-            const freeCount = Math.max(
-                0,
-                estimatedVideosRemaining - estimatedPurchasedVideosRemaining,
-            );
-            freeUsageEl.innerText = `${freeCount}次`;
-        } else {
-            freeUsageEl.innerText = "...";
-        }
-
-        const hasCredits =
-            typeof creditRemaining === "number" &&
-            typeof estimatedPurchasedVideosRemaining === "number";
-        if (hasCredits) {
-            creditsDetailEl.innerText = `${creditRemaining} = ${estimatedPurchasedVideosRemaining}次`;
-        } else {
-            creditsDetailEl.innerText = "...";
-        }
-        soraCreditsAvailable = hasCredits;
-
-        if (typeof accessResetsInSeconds === "number") {
-            soraLimitWindowSeconds = accessResetsInSeconds + 1;
-            soraTimerNotStarted = soraLimitWindowSeconds >= 86400;
-            if (soraTimerNotStarted) {
-                soraResetDeadlineMs = null;
-            } else {
-                soraResetDeadlineMs =
-                    Date.now() + soraLimitWindowSeconds * 1000;
-            }
-        } else {
-            soraResetDeadlineMs = null;
-            soraLimitWindowSeconds = null;
-            soraTimerNotStarted = false;
-            resetEl.innerText = "...";
-            resetEl.removeAttribute("title");
-        }
-        updateSoraCountdown();
-        applySoraQuotaVisibility();
-
-        section.style.display = "block";
-        section.style.marginTop = "0";
-        setIconColors("#2E91F6", "#1666D6");
-    }
-
-    function updateSoraCountdown() {
-        if (!isSoraMode) return;
-        const resetEl = document.getElementById("sora-reset-time");
-        if (!resetEl) return;
-        if (soraTimerNotStarted) {
-            if (typeof soraLimitWindowSeconds === "number") {
-                resetEl.innerHTML = `${formatCodexDuration(
-                    soraLimitWindowSeconds,
-                    true,
-                )}${NOT_STARTED_BADGE}`;
-            } else {
-                resetEl.innerText = "...";
-            }
-            resetEl.removeAttribute("title");
-            return;
-        }
-        if (soraResetDeadlineMs == null) {
-            resetEl.innerText = "...";
-            resetEl.removeAttribute("title");
-            return;
-        }
-        const remainingSecs = Math.max(
-            0,
-            Math.floor((soraResetDeadlineMs - Date.now()) / 1000),
-        );
-        resetEl.innerText = formatCodexDuration(remainingSecs, false);
-        const tooltipText = formatCodexAbsoluteTime(soraResetDeadlineMs);
-        if (tooltipText) {
-            resetEl.title = tooltipText;
-        } else {
-            resetEl.removeAttribute("title");
-        }
-    }
-    setInterval(updateSoraCountdown, 1000);
 
     // 更新 ChatGPT 各自的开关状态显示
     function updateChatgptAgeVerificationSettingStatus(
@@ -4424,103 +4125,6 @@
                 return recreateResponseText(bodyText, response);
             } catch (e) {
                 console.error("[CheckerNext] 处理 conversation 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend/nf/check") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isSoraMode) {
-                return response;
-            }
-            let bodyText;
-            try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
-                const info = data?.rate_limit_and_credit_balance;
-                if (info) {
-                    updateSoraInfo(
-                        typeof info.rate_limit_reached === "boolean"
-                            ? info.rate_limit_reached
-                            : null,
-                        typeof info.access_resets_in_seconds === "number"
-                            ? info.access_resets_in_seconds
-                            : null,
-                        typeof info.credit_remaining === "number"
-                            ? info.credit_remaining
-                            : null,
-                        typeof info.estimated_num_videos_remaining === "number"
-                            ? info.estimated_num_videos_remaining
-                            : null,
-                        typeof info.estimated_num_purchased_videos_remaining ===
-                            "number"
-                            ? info.estimated_num_purchased_videos_remaining
-                            : null,
-                    );
-                }
-                return recreateResponseText(bodyText, response);
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Sora 响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend/models") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isSoraMode) {
-                return response;
-            }
-            let bodyText;
-            try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
-                if (Array.isArray(data?.data)) {
-                    updateSoraModels(data.data);
-                } else {
-                    updateSoraModels(null);
-                }
-                return recreateResponseText(bodyText, response);
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Sora 模型响应出错:", e);
-                if (typeof bodyText === "string") {
-                    return recreateResponseText(bodyText, response);
-                }
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend/parameters") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isSoraMode) {
-                return response;
-            }
-            let bodyText;
-            try {
-                bodyText = await response.text();
-                const data = JSON.parse(bodyText);
-                updateSoraConcurrent(
-                    typeof data?.max_relaxed_concurrent_gens === "number"
-                        ? data.max_relaxed_concurrent_gens
-                        : null,
-                );
-                return recreateResponseText(bodyText, response);
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Sora 参数响应出错:", e);
                 if (typeof bodyText === "string") {
                     return recreateResponseText(bodyText, response);
                 }
