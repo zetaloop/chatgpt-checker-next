@@ -8,7 +8,11 @@
 // @description  获取 ChatGPT 和 Grok 的功能、服务等信息。
 // @match        *://chatgpt.com/*
 // @match        *://grok.com/*
-// @grant        none
+// @grant        GM_addElement
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        unsafeWindow
+// @sandbox      raw
 // @run-at       document-start
 // @downloadURL  https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js
 // @updateURL    https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js
@@ -21,9 +25,10 @@
     const MODE_CHATGPT = "chatgpt";
     const MODE_CODEX = "codex";
     const MODE_GROK = "grok";
+    const pageWindow = unsafeWindow;
 
     function detectPageMode() {
-        const { hostname, pathname } = window.location;
+        const { hostname, pathname } = pageWindow.location;
         if (hostname === "grok.com") return MODE_GROK;
         if (hostname === "chatgpt.com" && pathname.startsWith("/codex")) {
             return MODE_CODEX;
@@ -35,6 +40,17 @@
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
     const isGrokMode = currentPageMode === MODE_GROK;
+    const CHATGPT_UNLOCK_THEME_COLORS_KEY =
+        "checker-next-chatgpt-unlock-theme-colors";
+    const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
+    const CHATGPT_FAKE_PLAN_ENABLED_KEY =
+        "checker-next-chatgpt-fake-plan-enabled";
+    const CHATGPT_IMPORT_MAP_CACHE_KEY =
+        "checker-next-chatgpt-import-map-cache";
+
+    if (isChatgptMode) {
+        installCachedChatgptImportMapPatch();
+    }
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
     // Spoil RSC dehydrated data to force client-side refetch
@@ -68,9 +84,9 @@
     const SPOIL_QUERY_KEYS = ["get-models"];
 
     if (isGrokMode) {
-        window.self.__next_f = window.self.__next_f || [];
-        const originalPush = window.self.__next_f.push;
-        window.self.__next_f.push = function (...args) {
+        pageWindow.__next_f = pageWindow.__next_f || [];
+        const originalPush = pageWindow.__next_f.push;
+        pageWindow.__next_f.push = function (...args) {
             try {
                 if (args[0] && typeof args[0][1] === "string") {
                     let dataString = args[0][1];
@@ -332,7 +348,7 @@
                     e,
                 );
             }
-            return originalPush.apply(window.self.__next_f, args);
+            return originalPush.apply(pageWindow.__next_f, args);
         };
     }
 
@@ -375,8 +391,6 @@
     let chatgptResearchToTextEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_RESEARCH_TO_TEXT_KEY) === "true";
-    const CHATGPT_UNLOCK_THEME_COLORS_KEY =
-        "checker-next-chatgpt-unlock-theme-colors";
     let chatgptUnlockThemeColorsEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true";
@@ -385,13 +399,6 @@
     let chatgptAgeVerificationSettingEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_AGE_VERIFICATION_SETTING_KEY) === "true";
-
-    function tryGetScriptNonce() {
-        const withNonce = document.querySelector("script[nonce]");
-        if (!withNonce) return null;
-        const nonce = withNonce.nonce || withNonce.getAttribute("nonce");
-        return typeof nonce === "string" && nonce.length > 0 ? nonce : null;
-    }
 
     function rewriteModuleImports(sourceText, assetUrl, assetBaseUrl) {
         let patched = sourceText;
@@ -405,6 +412,7 @@
         patched = patched.replaceAll("import'./", `import'${assetBaseUrl}/`);
         patched = patched.replaceAll('import("./', `import("${assetBaseUrl}/`);
         patched = patched.replaceAll("import('./", `import('${assetBaseUrl}/`);
+        patched = patched.replaceAll("import(`./", `import(\`${assetBaseUrl}/`);
 
         const normalizedBase = assetBaseUrl.endsWith("/")
             ? assetBaseUrl
@@ -505,116 +513,158 @@
         return patched;
     }
 
-    function createSyncTextRequest(url) {
-        try {
-            const xhr = new XMLHttpRequest();
-            xhr.open("GET", url, false);
-            xhr.send(null);
-            if (xhr.status >= 200 && xhr.status < 300) {
-                return xhr.responseText;
-            }
-            return null;
-        } catch {
-            return null;
-        }
-    }
-
     function injectImportMap(importMapJson) {
-        const script = document.createElement("script");
-        script.type = "importmap";
-        const nonce = tryGetScriptNonce();
-        if (nonce) script.setAttribute("nonce", nonce);
-        script.textContent = JSON.stringify(importMapJson);
-        const head =
-            document.head || document.getElementsByTagName("head")[0] || null;
-        if (head) {
-            head.insertBefore(script, head.firstChild);
-            return;
-        }
-        document.documentElement.insertBefore(
-            script,
-            document.documentElement.firstChild,
+        return GM_addElement("script", {
+            type: "importmap",
+            textContent: JSON.stringify(importMapJson),
+        });
+    }
+
+    function getChatgptImportPatchSignature() {
+        const unlockThemeColors =
+            localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true";
+        const fakePlanEnabled =
+            localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
+        const fakePlan = localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro";
+        const transformSignature = [
+            rewriteModuleImports,
+            patchChatgptUnlockThemeColorsAssetSource,
+            patchChatgptFakePlanAssetSource,
+        ].join("\n");
+        return `${transformSignature}\n${unlockThemeColors ? "1" : "0"}:${fakePlanEnabled ? fakePlan : ""}`;
+    }
+
+    function isChatgptImportPatchEnabled() {
+        return (
+            localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true" ||
+            localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true"
         );
     }
 
-    function discoverAssetFilename(loaderPrefix, targetPrefix) {
-        const html = document.documentElement.innerHTML;
-        const loaderPattern = new RegExp(
-            `/cdn/assets/${loaderPrefix}-[\\w]+\\.js`,
-        );
-        const loaderMatch = html.match(loaderPattern);
-        if (!loaderMatch) return null;
-
-        const loaderUrl = `https://chatgpt.com${loaderMatch[0]}`;
-        const loaderSource = createSyncTextRequest(loaderUrl);
-        if (typeof loaderSource !== "string") return null;
-
-        const importPattern = new RegExp(`\\./(${targetPrefix}-[\\w]+\\.js)`);
-        const importMatch = loaderSource.match(importPattern);
-        if (!importMatch) return null;
-
-        return importMatch[1];
-    }
-
-    function installImportMapPatches() {
-        if (!isChatgptMode) return;
+    function installCachedChatgptImportMapPatch() {
+        if (!isChatgptImportPatchEnabled()) return;
         if (window.__checkerNextImportMapInstalled) return;
 
-        const patchFns = [];
-        if (chatgptUnlockThemeColorsEnabled) {
-            patchFns.push(patchChatgptUnlockThemeColorsAssetSource);
-        }
-        if (isChatgptFakePlanRuntimeEnabled()) {
-            patchFns.push(patchChatgptFakePlanAssetSource);
-        }
-        if (patchFns.length === 0) return;
-
-        const assetBaseUrl = "https://chatgpt.com/cdn/assets";
-        const assetFilename = discoverAssetFilename("93527649", "4813494d");
-        if (!assetFilename) return;
-
-        const assetUrl = `${assetBaseUrl}/${assetFilename}`;
-
-        let sourceText = createSyncTextRequest(assetUrl);
-        if (typeof sourceText !== "string" || sourceText.length === 0) return;
-
-        for (const fn of patchFns) {
-            const result = fn(sourceText);
-            if (typeof result === "string" && result.length > 0) {
-                sourceText = result;
-            }
+        const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
+        if (
+            !cached ||
+            typeof cached !== "object" ||
+            cached.signature !== getChatgptImportPatchSignature() ||
+            typeof cached.assetUrl !== "string" ||
+            typeof cached.assetFilename !== "string" ||
+            typeof cached.sourceText !== "string"
+        ) {
+            return;
         }
 
-        const patchedText = rewriteModuleImports(
-            sourceText,
-            assetUrl,
-            assetBaseUrl,
+        const assetBaseUrl = cached.assetUrl.slice(
+            0,
+            cached.assetUrl.lastIndexOf("/"),
         );
-
         const blobUrl = URL.createObjectURL(
-            new Blob([patchedText], { type: "text/javascript" }),
+            new Blob([cached.sourceText], { type: "text/javascript" }),
         );
-
-        injectImportMap({
+        const importMap = injectImportMap({
             imports: {
-                [assetUrl]: blobUrl,
+                [cached.assetUrl]: blobUrl,
             },
             scopes: {
                 [`${assetBaseUrl}/`]: {
-                    [`./${assetFilename}`]: blobUrl,
+                    [`./${cached.assetFilename}`]: blobUrl,
                 },
             },
         });
+        if (!importMap) {
+            URL.revokeObjectURL(blobUrl);
+            console.warn("[CheckerNext] 缓存模块映射未能插入页面。");
+            return;
+        }
 
         window.__checkerNextImportMapInstalled = true;
+        console.info(
+            "[CheckerNext] 已创建缓存 import map 元素:",
+            cached.assetUrl,
+        );
+    }
+
+    function getChatgptAssetPatchFunctions() {
+        const patchFunctions = [];
+        if (chatgptUnlockThemeColorsEnabled) {
+            patchFunctions.push(patchChatgptUnlockThemeColorsAssetSource);
+        }
+        if (isChatgptFakePlanRuntimeEnabled()) {
+            patchFunctions.push(patchChatgptFakePlanAssetSource);
+        }
+        return patchFunctions;
+    }
+
+    async function prepareChatgptImportMapPatchCache() {
+        if (!isChatgptImportPatchEnabled()) return;
+
+        const preload = [
+            ...document.querySelectorAll('link[rel="modulepreload"]'),
+        ].find((element) =>
+            /\/4813494d-[^/?]+\.js(?:[?#]|$)/.test(element.href),
+        );
+        if (!preload) {
+            console.error("[CheckerNext] 未找到 ChatGPT 目标模块。");
+            return;
+        }
+
+        const assetUrl = preload.href;
+        const assetFilename = new URL(assetUrl).pathname.split("/").pop();
+        const signature = getChatgptImportPatchSignature();
+        const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
+        if (
+            cached?.assetUrl === assetUrl &&
+            cached?.signature === signature &&
+            typeof cached.sourceText === "string"
+        ) {
+            return;
+        }
+
+        try {
+            const response = await originalFetch(assetUrl);
+            if (!response.ok) {
+                throw new Error(`${response.status} ${response.statusText}`);
+            }
+
+            let sourceText = await response.text();
+            for (const patch of getChatgptAssetPatchFunctions()) {
+                const patched = patch(sourceText);
+                if (typeof patched !== "string" || patched.length === 0) {
+                    console.error(
+                        `[CheckerNext] 模块补丁未匹配: ${patch.name}`,
+                    );
+                    return;
+                }
+                sourceText = patched;
+            }
+
+            const assetBaseUrl = assetUrl.slice(0, assetUrl.lastIndexOf("/"));
+            sourceText = rewriteModuleImports(
+                sourceText,
+                assetUrl,
+                assetBaseUrl,
+            );
+            GM_setValue(CHATGPT_IMPORT_MAP_CACHE_KEY, {
+                assetFilename,
+                assetUrl,
+                signature,
+                sourceText,
+            });
+            console.info(
+                "[CheckerNext] 模块补丁缓存已更新，重新载入后生效:",
+                assetUrl,
+            );
+        } catch (error) {
+            console.error("[CheckerNext] 生成模块补丁缓存失败:", error);
+        }
     }
 
     let chatgptAgeVerificationSettingFetched = false;
     let chatgptAgeVerificationSettingDisplayValue = null;
 
-    const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
-    const CHATGPT_FAKE_PLAN_ENABLED_KEY =
-        "checker-next-chatgpt-fake-plan-enabled";
     const CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP = Object.freeze({
         guest: "chatgptguestplan",
         free: "chatgptfreeplan",
@@ -661,8 +711,6 @@
     function isChatgptFakePlanRuntimeEnabled() {
         return chatgptFakePlanEnabled && chatgptFakePlanValue;
     }
-
-    installImportMapPatches();
 
     // 全局状态：记录弹窗是否正在显示
     let isDisplayBoxVisible = false;
@@ -3496,7 +3544,7 @@
     }
 
     function recreateResponseText(text, response) {
-        return new Response(text, {
+        return new pageWindow.Response(text, {
             status: response.status,
             statusText: response.statusText,
             headers: response.headers,
@@ -3504,8 +3552,8 @@
     }
 
     // 拦截 fetch 请求
-    const originalFetch = window.fetch;
-    window.fetch = async function (resource, options = {}) {
+    const originalFetch = pageWindow.fetch.bind(pageWindow);
+    pageWindow.fetch = async function (resource, options = {}) {
         const requestUrl =
             typeof resource === "string" ? resource : resource?.url || "";
         const requestMethod =
@@ -3727,6 +3775,7 @@
                 return response;
             }
         }
+
         if (
             requestUrl.includes("/backend-api/settings/is_adult") &&
             finalMethod === "GET" &&
@@ -3755,7 +3804,7 @@
                 );
 
                 if (modified) {
-                    return new Response(JSON.stringify(data), {
+                    return new pageWindow.Response(JSON.stringify(data), {
                         status: response.status,
                         statusText: response.statusText,
                         headers: response.headers,
@@ -4007,4 +4056,16 @@
         }
         return response;
     };
+
+    if (isChatgptMode && isChatgptImportPatchEnabled()) {
+        if (document.readyState === "loading") {
+            document.addEventListener(
+                "DOMContentLoaded",
+                () => void prepareChatgptImportMapPatchCache(),
+                { once: true },
+            );
+        } else {
+            void prepareChatgptImportMapPatchCache();
+        }
+    }
 })();
