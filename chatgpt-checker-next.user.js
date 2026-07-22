@@ -747,6 +747,7 @@
         // 创建显示框
         const displayBox = document.createElement("div");
         displayBox.id = "checker-next-displayBox";
+        displayBox.dataset.mode = currentPageMode;
         displayBox.style.position = "fixed";
         displayBox.style.top = "50%";
         displayBox.style.right = "20px";
@@ -778,6 +779,19 @@
         const contentWrapper = document.createElement("div");
         contentWrapper.style.padding = "10px";
         contentWrapper.innerHTML = `
+        <style>
+            #checker-next-displayBox[data-mode="codex"] :is(#pow-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section, #grok-section),
+            #checker-next-displayBox[data-mode="grok"] :is(#pow-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section, #codex-section),
+            #checker-next-displayBox[data-mode="chatgpt"] :is(#codex-section, #grok-section) {
+                display: none !important;
+            }
+            #checker-next-displayBox[data-mode="codex"] #codex-section,
+            #checker-next-displayBox[data-mode="grok"] #grok-section,
+            #checker-next-displayBox[data-mode="chatgpt"] #features-section {
+                display: block !important;
+                margin-top: 0 !important;
+            }
+        </style>
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
                 <strong>ChatGPT</strong>
@@ -1450,67 +1464,6 @@
             displayBoxInitialized = true;
         }
 
-        const powSection = document.getElementById("pow-section");
-        const deepSection = document.getElementById("deep-research-section");
-        const fileUploadSection = document.getElementById(
-            "file-upload-section",
-        );
-        const pasteTextToFileSection = document.getElementById(
-            "paste-text-to-file-section",
-        );
-        const imageGenSection = document.getElementById("image-gen-section");
-        const codexSection = document.getElementById("codex-section");
-        const grokSection = document.getElementById("grok-section");
-
-        if (isCodexMode) {
-            if (powSection) powSection.style.display = "none";
-            if (deepSection) deepSection.style.display = "none";
-            if (fileUploadSection) fileUploadSection.style.display = "none";
-            if (pasteTextToFileSection)
-                pasteTextToFileSection.style.display = "none";
-            if (imageGenSection) imageGenSection.style.display = "none";
-            const featuresSection = document.getElementById("features-section");
-            if (featuresSection) featuresSection.style.display = "none";
-            if (grokSection) {
-                grokSection.style.display = "none";
-                grokSection.style.marginTop = "10px";
-            }
-            if (codexSection) {
-                codexSection.style.display = "block";
-                codexSection.style.marginTop = "0";
-            }
-        } else if (isGrokMode) {
-            if (powSection) powSection.style.display = "none";
-            if (deepSection) deepSection.style.display = "none";
-            if (fileUploadSection) fileUploadSection.style.display = "none";
-            if (pasteTextToFileSection)
-                pasteTextToFileSection.style.display = "none";
-            if (imageGenSection) imageGenSection.style.display = "none";
-            const featuresSection = document.getElementById("features-section");
-            if (featuresSection) featuresSection.style.display = "none";
-            if (codexSection) {
-                codexSection.style.display = "none";
-                codexSection.style.marginTop = "10px";
-            }
-            if (grokSection) {
-                grokSection.style.display = "block";
-                grokSection.style.marginTop = "0";
-            }
-        } else {
-            const featuresSection = document.getElementById("features-section");
-            if (featuresSection) {
-                featuresSection.style.display = "block";
-            }
-            if (codexSection) {
-                codexSection.style.display = "none";
-                codexSection.style.marginTop = "10px";
-            }
-            if (grokSection) {
-                grokSection.style.display = "none";
-                grokSection.style.marginTop = "10px";
-            }
-        }
-
         // 创建收缩状态的指示器
         const collapsedIndicator = document.createElement("div");
         collapsedIndicator.style.position = "fixed";
@@ -1656,307 +1609,115 @@
             hideDisplayBox();
         });
 
-        // 创建提示框
-        const tooltip = document.createElement("div");
-        tooltip.id = "tooltip";
-        tooltip.innerText =
-            "这个数值越大，相当于 ChatGPT 认为你的 IP 风险越低。";
-        tooltip.style.position = "fixed";
-        tooltip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        tooltip.style.color = "#fff";
-        tooltip.style.padding = "8px 12px";
-        tooltip.style.borderRadius = "5px";
-        tooltip.style.fontSize = "12px";
-        tooltip.style.visibility = "hidden";
-        tooltip.style.zIndex = "10001";
-        tooltip.style.width = "240px";
-        tooltip.style.lineHeight = "1.4";
-        tooltip.style.pointerEvents = "none";
-        document.body.appendChild(tooltip);
+        function createTooltip(id, text) {
+            const element = document.createElement("div");
+            element.id = id;
+            element.innerText = text;
+            Object.assign(element.style, {
+                position: "fixed",
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                color: "#fff",
+                padding: "8px 12px",
+                borderRadius: "5px",
+                fontSize: "12px",
+                visibility: "hidden",
+                zIndex: "10001",
+                width: "240px",
+                lineHeight: "1.4",
+                pointerEvents: "none",
+            });
+            document.body.appendChild(element);
+            return element;
+        }
+
+        const tooltip = createTooltip(
+            "tooltip",
+            "这个数值越大，相当于 ChatGPT 认为你的 IP 风险越低。",
+        );
 
         // 创建 Codex 提示框
-        const codexTooltipBox = document.createElement("div");
-        codexTooltipBox.id = "codex-tooltip-box";
-        codexTooltipBox.innerText = "使用一次之后才开始计时。";
-        codexTooltipBox.style.position = "fixed";
-        codexTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        codexTooltipBox.style.color = "#fff";
-        codexTooltipBox.style.padding = "8px 12px";
-        codexTooltipBox.style.borderRadius = "5px";
-        codexTooltipBox.style.fontSize = "12px";
-        codexTooltipBox.style.visibility = "hidden";
-        codexTooltipBox.style.zIndex = "10001";
-        codexTooltipBox.style.width = "240px";
-        codexTooltipBox.style.lineHeight = "1.4";
-        codexTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(codexTooltipBox);
+        const codexTooltipBox = createTooltip(
+            "codex-tooltip-box",
+            "使用一次之后才开始计时。",
+        );
 
         // 创建积分提示框
-        const creditsTooltipBox = document.createElement("div");
-        creditsTooltipBox.id = "credits-tooltip-box";
-        creditsTooltipBox.innerText = "单独购买的积分，可用于 Codex 任务。";
-        creditsTooltipBox.style.position = "fixed";
-        creditsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        creditsTooltipBox.style.color = "#fff";
-        creditsTooltipBox.style.padding = "8px 12px";
-        creditsTooltipBox.style.borderRadius = "5px";
-        creditsTooltipBox.style.fontSize = "12px";
-        creditsTooltipBox.style.visibility = "hidden";
-        creditsTooltipBox.style.zIndex = "10001";
-        creditsTooltipBox.style.width = "240px";
-        creditsTooltipBox.style.lineHeight = "1.4";
-        creditsTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(creditsTooltipBox);
+        const creditsTooltipBox = createTooltip(
+            "credits-tooltip-box",
+            "单独购买的积分，可用于 Codex 任务。",
+        );
 
         // 创建 Grok 功能提示框
-        const grokFeatureTooltipBox = document.createElement("div");
-        grokFeatureTooltipBox.id = "grok-feature-tooltip-box";
-        grokFeatureTooltipBox.innerText = "刷新页面生效。";
-        grokFeatureTooltipBox.style.position = "fixed";
-        grokFeatureTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokFeatureTooltipBox.style.color = "#fff";
-        grokFeatureTooltipBox.style.padding = "8px 12px";
-        grokFeatureTooltipBox.style.borderRadius = "5px";
-        grokFeatureTooltipBox.style.fontSize = "12px";
-        grokFeatureTooltipBox.style.visibility = "hidden";
-        grokFeatureTooltipBox.style.zIndex = "10001";
-        grokFeatureTooltipBox.style.width = "240px";
-        grokFeatureTooltipBox.style.lineHeight = "1.4";
-        grokFeatureTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokFeatureTooltipBox);
+        const grokFeatureTooltipBox = createTooltip(
+            "grok-feature-tooltip-box",
+            "刷新页面生效。",
+        );
 
         // 创建 Grok 开发工具提示框
-        const grokDevToolsTooltipBox = document.createElement("div");
-        grokDevToolsTooltipBox.id = "grok-dev-tools-tooltip-box";
-        grokDevToolsTooltipBox.innerText = "Grok 设置 - 开发工具。";
-        grokDevToolsTooltipBox.style.position = "fixed";
-        grokDevToolsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokDevToolsTooltipBox.style.color = "#fff";
-        grokDevToolsTooltipBox.style.padding = "8px 12px";
-        grokDevToolsTooltipBox.style.borderRadius = "5px";
-        grokDevToolsTooltipBox.style.fontSize = "12px";
-        grokDevToolsTooltipBox.style.visibility = "hidden";
-        grokDevToolsTooltipBox.style.zIndex = "10001";
-        grokDevToolsTooltipBox.style.width = "240px";
-        grokDevToolsTooltipBox.style.lineHeight = "1.4";
-        grokDevToolsTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokDevToolsTooltipBox);
+        const grokDevToolsTooltipBox = createTooltip(
+            "grok-dev-tools-tooltip-box",
+            "Grok 设置 - 开发工具。",
+        );
 
         // 创建 Grok 高频任务提示框
-        const grokFrequentTooltipBox = document.createElement("div");
-        grokFrequentTooltipBox.id = "grok-frequent-tooltip-box";
-        grokFrequentTooltipBox.innerText = "每日触发的任务。";
-        grokFrequentTooltipBox.style.position = "fixed";
-        grokFrequentTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokFrequentTooltipBox.style.color = "#fff";
-        grokFrequentTooltipBox.style.padding = "8px 12px";
-        grokFrequentTooltipBox.style.borderRadius = "5px";
-        grokFrequentTooltipBox.style.fontSize = "12px";
-        grokFrequentTooltipBox.style.visibility = "hidden";
-        grokFrequentTooltipBox.style.zIndex = "10001";
-        grokFrequentTooltipBox.style.width = "240px";
-        grokFrequentTooltipBox.style.lineHeight = "1.4";
-        grokFrequentTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokFrequentTooltipBox);
+        const grokFrequentTooltipBox = createTooltip(
+            "grok-frequent-tooltip-box",
+            "每日触发的任务。",
+        );
 
         // 创建功能提示框
-        const featuresTooltipBox = document.createElement("div");
-        featuresTooltipBox.id = "features-tooltip-box";
-        featuresTooltipBox.innerText = "刷新页面生效。";
-        featuresTooltipBox.style.position = "fixed";
-        featuresTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        featuresTooltipBox.style.color = "#fff";
-        featuresTooltipBox.style.padding = "8px 12px";
-        featuresTooltipBox.style.borderRadius = "5px";
-        featuresTooltipBox.style.fontSize = "12px";
-        featuresTooltipBox.style.visibility = "hidden";
-        featuresTooltipBox.style.zIndex = "10001";
-        featuresTooltipBox.style.width = "240px";
-        featuresTooltipBox.style.lineHeight = "1.4";
-        featuresTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(featuresTooltipBox);
+        const featuresTooltipBox = createTooltip(
+            "features-tooltip-box",
+            "刷新页面生效。",
+        );
 
         // 创建研究报告转文本提示框
-        const chatgptResearchToTextTooltipBox = document.createElement("div");
-        chatgptResearchToTextTooltipBox.id =
-            "chatgpt-research-to-text-tooltip-box";
-        chatgptResearchToTextTooltipBox.innerText =
-            "在传统深度研究时，将结果转为普通文本消息以便复制。";
-        chatgptResearchToTextTooltipBox.style.position = "fixed";
-        chatgptResearchToTextTooltipBox.style.backgroundColor =
-            "rgba(0, 0, 0, 0.8)";
-        chatgptResearchToTextTooltipBox.style.color = "#fff";
-        chatgptResearchToTextTooltipBox.style.padding = "8px 12px";
-        chatgptResearchToTextTooltipBox.style.borderRadius = "5px";
-        chatgptResearchToTextTooltipBox.style.fontSize = "12px";
-        chatgptResearchToTextTooltipBox.style.visibility = "hidden";
-        chatgptResearchToTextTooltipBox.style.zIndex = "10001";
-        chatgptResearchToTextTooltipBox.style.width = "240px";
-        chatgptResearchToTextTooltipBox.style.lineHeight = "1.4";
-        chatgptResearchToTextTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(chatgptResearchToTextTooltipBox);
+        const chatgptResearchToTextTooltipBox = createTooltip(
+            "chatgpt-research-to-text-tooltip-box",
+            "在传统深度研究时，将结果转为普通文本消息以便复制。",
+        );
 
         // 创建解锁主题色提示框
-        const chatgptUnlockThemeColorsTooltipBox =
-            document.createElement("div");
-        chatgptUnlockThemeColorsTooltipBox.id =
-            "chatgpt-unlock-theme-colors-tooltip-box";
-        chatgptUnlockThemeColorsTooltipBox.innerText =
-            "解锁粉色、橙色、紫色与黑色。";
-        chatgptUnlockThemeColorsTooltipBox.style.position = "fixed";
-        chatgptUnlockThemeColorsTooltipBox.style.backgroundColor =
-            "rgba(0, 0, 0, 0.8)";
-        chatgptUnlockThemeColorsTooltipBox.style.color = "#fff";
-        chatgptUnlockThemeColorsTooltipBox.style.padding = "8px 12px";
-        chatgptUnlockThemeColorsTooltipBox.style.borderRadius = "5px";
-        chatgptUnlockThemeColorsTooltipBox.style.fontSize = "12px";
-        chatgptUnlockThemeColorsTooltipBox.style.visibility = "hidden";
-        chatgptUnlockThemeColorsTooltipBox.style.zIndex = "10001";
-        chatgptUnlockThemeColorsTooltipBox.style.width = "240px";
-        chatgptUnlockThemeColorsTooltipBox.style.lineHeight = "1.4";
-        chatgptUnlockThemeColorsTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(chatgptUnlockThemeColorsTooltipBox);
+        const chatgptUnlockThemeColorsTooltipBox = createTooltip(
+            "chatgpt-unlock-theme-colors-tooltip-box",
+            "解锁粉色、橙色、紫色与黑色。",
+        );
 
         // 创建 Grok 低频任务提示框
-        const grokOccasionalTooltipBox = document.createElement("div");
-        grokOccasionalTooltipBox.id = "grok-occasional-tooltip-box";
-        grokOccasionalTooltipBox.innerText =
-            "单次、每周、每月、每年触发的任务。";
+        const grokOccasionalTooltipBox = createTooltip(
+            "grok-occasional-tooltip-box",
+            "单次、每周、每月、每年触发的任务。",
+        );
 
         // 创建年龄验证提示框
-        const chatgptAgeVerificationSettingTooltipBox =
-            document.createElement("div");
-        chatgptAgeVerificationSettingTooltipBox.id =
-            "chatgpt-age-verification-tooltip-box";
-        chatgptAgeVerificationSettingTooltipBox.innerText =
-            "ChatGPT 设置 - 账户 - 年龄验证，可以扫脸验证成人，没看到 True/False 的话请进入对话/设置来触发加载此配置。";
-        chatgptAgeVerificationSettingTooltipBox.style.position = "fixed";
-        chatgptAgeVerificationSettingTooltipBox.style.backgroundColor =
-            "rgba(0, 0, 0, 0.8)";
-        chatgptAgeVerificationSettingTooltipBox.style.color = "#fff";
-        chatgptAgeVerificationSettingTooltipBox.style.padding = "8px 12px";
-        chatgptAgeVerificationSettingTooltipBox.style.borderRadius = "5px";
-        chatgptAgeVerificationSettingTooltipBox.style.fontSize = "12px";
-        chatgptAgeVerificationSettingTooltipBox.style.visibility = "hidden";
-        chatgptAgeVerificationSettingTooltipBox.style.zIndex = "10001";
-        chatgptAgeVerificationSettingTooltipBox.style.width = "240px";
-        chatgptAgeVerificationSettingTooltipBox.style.lineHeight = "1.4";
-        chatgptAgeVerificationSettingTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(chatgptAgeVerificationSettingTooltipBox);
+        const chatgptAgeVerificationSettingTooltipBox = createTooltip(
+            "chatgpt-age-verification-tooltip-box",
+            "ChatGPT 设置 - 账户 - 年龄验证，可以扫脸验证成人，没看到 True/False 的话请进入对话/设置来触发加载此配置。",
+        );
 
         // 创建假装会员提示框
-        const chatgptFakePlanTooltipBox = document.createElement("div");
-        chatgptFakePlanTooltipBox.id = "chatgpt-fake-plan-tooltip-box";
-        chatgptFakePlanTooltipBox.innerText =
-            "可能导致功能异常，不影响模型列表。";
-        chatgptFakePlanTooltipBox.style.position = "fixed";
-        chatgptFakePlanTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        chatgptFakePlanTooltipBox.style.color = "#fff";
-        chatgptFakePlanTooltipBox.style.padding = "8px 12px";
-        chatgptFakePlanTooltipBox.style.borderRadius = "5px";
-        chatgptFakePlanTooltipBox.style.fontSize = "12px";
-        chatgptFakePlanTooltipBox.style.visibility = "hidden";
-        chatgptFakePlanTooltipBox.style.zIndex = "10001";
-        chatgptFakePlanTooltipBox.style.width = "240px";
-        chatgptFakePlanTooltipBox.style.lineHeight = "1.4";
-        chatgptFakePlanTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(chatgptFakePlanTooltipBox);
-
-        grokOccasionalTooltipBox.style.position = "fixed";
-        grokOccasionalTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokOccasionalTooltipBox.style.color = "#fff";
-        grokOccasionalTooltipBox.style.padding = "8px 12px";
-        grokOccasionalTooltipBox.style.borderRadius = "5px";
-        grokOccasionalTooltipBox.style.fontSize = "12px";
-        grokOccasionalTooltipBox.style.visibility = "hidden";
-        grokOccasionalTooltipBox.style.zIndex = "10001";
-        grokOccasionalTooltipBox.style.width = "240px";
-        grokOccasionalTooltipBox.style.lineHeight = "1.4";
-        grokOccasionalTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokOccasionalTooltipBox);
+        const chatgptFakePlanTooltipBox = createTooltip(
+            "chatgpt-fake-plan-tooltip-box",
+            "可能导致功能异常，不影响模型列表。",
+        );
 
         // 创建 Grok 所有模型提示框
-        const grokAllModelsTooltipBox = document.createElement("div");
-        grokAllModelsTooltipBox.id = "grok-all-models-tooltip-box";
-        grokAllModelsTooltipBox.innerText =
-            "在界面上解锁不可用的模型，并没有实际作用。";
-        grokAllModelsTooltipBox.style.position = "fixed";
-        grokAllModelsTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokAllModelsTooltipBox.style.color = "#fff";
-        grokAllModelsTooltipBox.style.padding = "8px 12px";
-        grokAllModelsTooltipBox.style.borderRadius = "5px";
-        grokAllModelsTooltipBox.style.fontSize = "12px";
-        grokAllModelsTooltipBox.style.visibility = "hidden";
-        grokAllModelsTooltipBox.style.zIndex = "10001";
-        grokAllModelsTooltipBox.style.width = "240px";
-        grokAllModelsTooltipBox.style.lineHeight = "1.4";
-        grokAllModelsTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokAllModelsTooltipBox);
+        const grokAllModelsTooltipBox = createTooltip(
+            "grok-all-models-tooltip-box",
+            "在界面上解锁不可用的模型，并没有实际作用。",
+        );
 
         // 创建 Grok 抢先体验模型提示框
-        const grokEarlyAccessTooltipBox = document.createElement("div");
-        grokEarlyAccessTooltipBox.id = "grok-early-access-tooltip-box";
-        grokEarlyAccessTooltipBox.innerText =
-            "将用户设置里的 enableEarlyAccessModels 设为 true。";
-        grokEarlyAccessTooltipBox.style.position = "fixed";
-        grokEarlyAccessTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokEarlyAccessTooltipBox.style.color = "#fff";
-        grokEarlyAccessTooltipBox.style.padding = "8px 12px";
-        grokEarlyAccessTooltipBox.style.borderRadius = "5px";
-        grokEarlyAccessTooltipBox.style.fontSize = "12px";
-        grokEarlyAccessTooltipBox.style.visibility = "hidden";
-        grokEarlyAccessTooltipBox.style.zIndex = "10001";
-        grokEarlyAccessTooltipBox.style.width = "240px";
-        grokEarlyAccessTooltipBox.style.lineHeight = "1.4";
-        grokEarlyAccessTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokEarlyAccessTooltipBox);
+        const grokEarlyAccessTooltipBox = createTooltip(
+            "grok-early-access-tooltip-box",
+            "将用户设置里的 enableEarlyAccessModels 设为 true。",
+        );
 
         // 创建 Grok 异步聊天提示框
-        const grokAsyncChatTooltipBox = document.createElement("div");
-        grokAsyncChatTooltipBox.id = "grok-async-chat-tooltip-box";
-        grokAsyncChatTooltipBox.innerText =
-            "将用户设置里的 isAsyncChat 设为 true。";
-        grokAsyncChatTooltipBox.style.position = "fixed";
-        grokAsyncChatTooltipBox.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        grokAsyncChatTooltipBox.style.color = "#fff";
-        grokAsyncChatTooltipBox.style.padding = "8px 12px";
-        grokAsyncChatTooltipBox.style.borderRadius = "5px";
-        grokAsyncChatTooltipBox.style.fontSize = "12px";
-        grokAsyncChatTooltipBox.style.visibility = "hidden";
-        grokAsyncChatTooltipBox.style.zIndex = "10001";
-        grokAsyncChatTooltipBox.style.width = "240px";
-        grokAsyncChatTooltipBox.style.lineHeight = "1.4";
-        grokAsyncChatTooltipBox.style.pointerEvents = "none";
-        document.body.appendChild(grokAsyncChatTooltipBox);
-
-        // 显示提示
-        document
-            .getElementById("difficulty-tooltip")
-            .addEventListener("mouseenter", function (event) {
-                tooltip.style.visibility = "visible";
-
-                const tooltipWidth = 240;
-                const windowWidth = window.innerWidth;
-                const mouseX = event.clientX;
-                const mouseY = event.clientY;
-
-                let leftPosition = mouseX - tooltipWidth - 10;
-                if (leftPosition < 10) {
-                    leftPosition = mouseX + 20;
-                }
-
-                let topPosition = mouseY - 40;
-
-                tooltip.style.left = `${leftPosition}px`;
-                tooltip.style.top = `${topPosition}px`;
-            });
-
-        // 隐藏提示
-        document
-            .getElementById("difficulty-tooltip")
-            .addEventListener("mouseleave", function () {
-                tooltip.style.visibility = "hidden";
-            });
+        const grokAsyncChatTooltipBox = createTooltip(
+            "grok-async-chat-tooltip-box",
+            "将用户设置里的 isAsyncChat 设为 true。",
+        );
 
         function bindTooltipEvents(triggerId, tooltipElement) {
             const trigger = document.getElementById(triggerId);
@@ -1985,6 +1746,7 @@
         }
 
         function bindAllTooltips() {
+            bindTooltipEvents("difficulty-tooltip", tooltip);
             bindTooltipEvents("codex-tooltip", codexTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
             bindTooltipEvents("grok-feature-tooltip", grokFeatureTooltipBox);
