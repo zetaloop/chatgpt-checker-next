@@ -457,12 +457,12 @@
 
     function patchChatgptUnlockThemeColorsAssetSource(sourceText) {
         const themeListPattern =
-            /const\s+([A-Za-z$_][\w$]*)=\["default","blue","green","yellow","pink","orange","custom"\],\s*([A-Za-z$_][\w$]*)=\["purple"\],\s*([A-Za-z$_][\w$]*)=\["black"\]/;
+            /([A-Za-z$_][\w$]*)=\[`default`,`blue`,`green`,`yellow`,`pink`,`orange`\],([A-Za-z$_][\w$]*)=\[`purple`\],([A-Za-z$_][\w$]*)=\[`black`\]/;
         if (!themeListPattern.test(sourceText)) return null;
         return sourceText.replace(
             themeListPattern,
             (_match, baseVarName, purpleVarName, blackVarName) =>
-                `const ${baseVarName}=["default","blue","green","yellow","pink","orange","custom","purple","black"],${purpleVarName}=[],${blackVarName}=[]`,
+                `${baseVarName}=[\`default\`,\`blue\`,\`green\`,\`yellow\`,\`pink\`,\`orange\`,\`purple\`,\`black\`],${purpleVarName}=[],${blackVarName}=[]`,
         );
     }
 
@@ -1781,7 +1781,7 @@
         chatgptUnlockThemeColorsTooltipBox.id =
             "chatgpt-unlock-theme-colors-tooltip-box";
         chatgptUnlockThemeColorsTooltipBox.innerText =
-            "解锁紫色 (Plus) 和黑色 (Pro)。";
+            "解锁粉色、橙色、紫色与黑色。";
         chatgptUnlockThemeColorsTooltipBox.style.position = "fixed";
         chatgptUnlockThemeColorsTooltipBox.style.backgroundColor =
             "rgba(0, 0, 0, 0.8)";
@@ -2120,6 +2120,7 @@
                     chatgptUnlockThemeColorsEnabled ? "true" : "false",
                 );
                 apply();
+                void prepareChatgptImportMapPatchCache();
             });
         }
         function bindChatgptAgeVerificationSettingToggle() {
