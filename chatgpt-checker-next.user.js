@@ -747,13 +747,6 @@
             剩余次数：<span id="deep-research-usage">...</span><br>
             重置时间：<span id="deep-research-reset-time">...</span>
         </div>
-        <div id="odyssey-section" style="margin-top: 10px; display: none">
-            <div style="margin-top: 10px; margin-bottom: 2px;">
-                <strong>代理模式</strong>
-            </div>
-            剩余次数：<span id="odyssey-usage">...</span><br>
-            重置时间：<span id="odyssey-reset-time">...</span>
-        </div>
         <div id="image-gen-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
                 <strong>图片生成</strong>
@@ -1439,7 +1432,6 @@
 
         const powSection = document.getElementById("pow-section");
         const deepSection = document.getElementById("deep-research-section");
-        const odysseySection = document.getElementById("odyssey-section");
         const fileUploadSection = document.getElementById(
             "file-upload-section",
         );
@@ -1453,7 +1445,6 @@
         if (isCodexMode) {
             if (powSection) powSection.style.display = "none";
             if (deepSection) deepSection.style.display = "none";
-            if (odysseySection) odysseySection.style.display = "none";
             if (fileUploadSection) fileUploadSection.style.display = "none";
             if (pasteTextToFileSection)
                 pasteTextToFileSection.style.display = "none";
@@ -1471,7 +1462,6 @@
         } else if (isGrokMode) {
             if (powSection) powSection.style.display = "none";
             if (deepSection) deepSection.style.display = "none";
-            if (odysseySection) odysseySection.style.display = "none";
             if (fileUploadSection) fileUploadSection.style.display = "none";
             if (pasteTextToFileSection)
                 pasteTextToFileSection.style.display = "none";
@@ -3463,43 +3453,6 @@
         }
     }
 
-    // 更新代理模式次数
-    let agentRemaining = null;
-    let agentReset = null;
-    function updateAgentInfo(remaining, resetAfter) {
-        if (!isChatgptMode) return;
-        const section = document.getElementById("odyssey-section");
-        const usageEl = document.getElementById("odyssey-usage");
-        const resetEl = document.getElementById("odyssey-reset-time");
-
-        if (!section || !usageEl || !resetEl) return;
-
-        if (typeof remaining !== "number") {
-            section.style.display = "none";
-            return;
-        }
-
-        agentRemaining = remaining;
-        agentReset = resetAfter || null;
-
-        section.style.display = "block";
-        section.style.marginTop = powFetched ? "10px" : "0";
-        if (isMonthlyResetNotStarted(resetAfter)) {
-            usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
-        } else {
-            usageEl.innerText = `${remaining}次`;
-        }
-
-        if (agentReset) {
-            const date = new Date(agentReset);
-            resetEl.innerText = date
-                .toLocaleString("zh-CN", { hour12: false })
-                .replace(/\//g, "-");
-        } else {
-            resetEl.innerText = "...";
-        }
-    }
-
     // 更新文件上传次数
     let uploadRemaining = null;
     let uploadReset = null;
@@ -3879,11 +3832,6 @@
                           (i) => i.feature_name === "deep_research",
                       )
                     : null;
-                const odyssey = Array.isArray(data.limits_progress)
-                    ? data.limits_progress.find(
-                          (i) => i.feature_name === "odyssey",
-                      )
-                    : null;
                 const file_upload = Array.isArray(data.limits_progress)
                     ? data.limits_progress.find(
                           (i) => i.feature_name === "file_upload",
@@ -3904,9 +3852,6 @@
                         deep_research.remaining,
                         deep_research.reset_after,
                     );
-                }
-                if (odyssey) {
-                    updateAgentInfo(odyssey.remaining, odyssey.reset_after);
                 }
                 if (file_upload) {
                     updateFileUploadInfo(
@@ -3935,10 +3880,7 @@
                 );
                 return recreateResponseText(bodyText, response);
             } catch (e) {
-                console.error(
-                    "[CheckerNext] 处理 Deep Research 与 Agent 响应出错:",
-                    e,
-                );
+                console.error("[CheckerNext] 处理功能用量响应出错:", e);
                 if (typeof bodyText === "string") {
                     return recreateResponseText(bodyText, response);
                 }
