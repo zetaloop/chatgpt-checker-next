@@ -391,11 +391,6 @@
     let grokEnterpriseEnabled =
         isGrokMode && localStorage.getItem(GROK_ENTERPRISE_KEY) === "true";
 
-    const CHATGPT_RESEARCH_TO_TEXT_KEY =
-        "checker-next-chatgpt-research-to-text";
-    let chatgptResearchToTextEnabled =
-        isChatgptMode &&
-        localStorage.getItem(CHATGPT_RESEARCH_TO_TEXT_KEY) === "true";
     let chatgptUnlockThemeColorsEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true";
@@ -1281,47 +1276,6 @@
                     "></span>
                 </label>
             </div>
-            <div id="chatgpt-research-to-text-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>研究报告转文本
-                <span id="chatgpt-research-to-text-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-research-to-text-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-research-to-text-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-research-to-text-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
             <div id="chatgpt-unlock-theme-colors-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>解锁所有主题色
                 <span id="chatgpt-unlock-theme-colors-tooltip" style="
@@ -1676,12 +1630,6 @@
             "刷新页面生效。",
         );
 
-        // 创建研究报告转文本提示框
-        const chatgptResearchToTextTooltipBox = createTooltip(
-            "chatgpt-research-to-text-tooltip-box",
-            "在传统深度研究时，将结果转为普通文本消息以便复制。",
-        );
-
         // 创建解锁主题色提示框
         const chatgptUnlockThemeColorsTooltipBox = createTooltip(
             "chatgpt-unlock-theme-colors-tooltip-box",
@@ -1783,10 +1731,6 @@
             );
             bindTooltipEvents("features-tooltip", featuresTooltipBox);
             bindTooltipEvents(
-                "chatgpt-research-to-text-tooltip",
-                chatgptResearchToTextTooltipBox,
-            );
-            bindTooltipEvents(
                 "chatgpt-unlock-theme-colors-tooltip",
                 chatgptUnlockThemeColorsTooltipBox,
             );
@@ -1818,42 +1762,6 @@
                     sliderDot,
                     toggle.checked,
                 );
-            });
-        }
-
-        function bindChatgptResearchToTextToggle() {
-            const container = document.getElementById(
-                "chatgpt-research-to-text-container",
-            );
-            const toggle = document.getElementById(
-                "chatgpt-research-to-text-toggle",
-            );
-            const slider = document.getElementById(
-                "chatgpt-research-to-text-slider",
-            );
-            const sliderDot = document.getElementById(
-                "chatgpt-research-to-text-slider-dot",
-            );
-            if (!container || !toggle || !slider || !sliderDot) return;
-
-            function apply() {
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    chatgptResearchToTextEnabled,
-                );
-            }
-
-            toggle.checked = chatgptResearchToTextEnabled;
-            apply();
-
-            toggle.addEventListener("change", function () {
-                chatgptResearchToTextEnabled = toggle.checked;
-                localStorage.setItem(
-                    CHATGPT_RESEARCH_TO_TEXT_KEY,
-                    chatgptResearchToTextEnabled ? "true" : "false",
-                );
-                apply();
             });
         }
 
@@ -2068,7 +1976,6 @@
         }
 
         if (isChatgptMode) {
-            bindChatgptResearchToTextToggle();
             bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
             bindChatgptFakePlanSelect();
@@ -3101,91 +3008,6 @@
                 return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 is_adult 响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend-api/conversation/") &&
-            !requestUrl.includes("/backend-api/conversation/init") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isChatgptMode) {
-                return response;
-            }
-
-            try {
-                if (
-                    !/\/backend-api\/conversation\/[0-9a-f-]+(?:[/?#]|$)/i.test(
-                        requestUrl,
-                    )
-                ) {
-                    return response;
-                }
-
-                const contentType = response.headers.get("content-type") || "";
-                if (contentType.indexOf("application/json") === -1) {
-                    return response;
-                }
-
-                const bodyText = await response.clone().text();
-
-                if (
-                    bodyText.indexOf('"async_task_type"') === -1 ||
-                    bodyText.indexOf('"research"') === -1
-                ) {
-                    return response;
-                }
-
-                if (
-                    bodyText.indexOf('"is_async_task_result_message"') === -1 &&
-                    bodyText.indexOf('"b1de6e2_rm"') === -1
-                ) {
-                    return response;
-                }
-
-                const data = JSON.parse(bodyText);
-                let modified = false;
-
-                if (data && typeof data === "object" && data.mapping) {
-                    const mapping = data.mapping;
-                    if (mapping && typeof mapping === "object") {
-                        for (const id of Object.keys(mapping)) {
-                            const metadata = mapping?.[id]?.message?.metadata;
-                            if (!metadata || typeof metadata !== "object")
-                                continue;
-                            if (metadata.async_task_type !== "research")
-                                continue;
-
-                            if (
-                                metadata.is_async_task_result_message ===
-                                    true ||
-                                metadata.b1de6e2_rm === true
-                            ) {
-                                if (chatgptResearchToTextEnabled) {
-                                    if (
-                                        metadata.is_async_task_result_message ===
-                                        true
-                                    ) {
-                                        metadata.is_async_task_result_message = false;
-                                        modified = true;
-                                    }
-                                    if (metadata.b1de6e2_rm === true) {
-                                        metadata.b1de6e2_rm = false;
-                                        modified = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                return modified
-                    ? recreateResponseText(JSON.stringify(data), response)
-                    : response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 conversation 响应出错:", e);
                 return response;
             }
         }
