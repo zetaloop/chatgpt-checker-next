@@ -866,33 +866,7 @@
                     margin-left: 3px;
                 ">?</span>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
-                <span>已用：<span id="codex-usage">...</span></span>
-                <span><i>代码 每5小时</i></span>
-            </div>
-            <div id="codex-progress-bg" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
-                <div id="codex-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
-            </div>
-            重置时间：<span id="codex-reset-time">...</span>
-            <div style="margin-top: 8px;"></div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
-                <span>已用：<span id="codex-usage-week">...</span></span>
-                <span><i>代码 每周</i></span>
-            </div>
-            <div id="codex-progress-bg-week" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
-                <div id="codex-progress-bar-week" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
-            </div>
-            重置时间：<span id="codex-reset-time-week">...</span>
-            <div id="codex-review-container" style="margin-top: 8px; display: none;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
-                    <span>已用：<span id="codex-usage-review">...</span></span>
-                    <span><i>代码审查 每周</i></span>
-                </div>
-                <div id="codex-progress-bg-review" style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
-                    <div id="codex-progress-bar-review" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
-                </div>
-                重置时间：<span id="codex-reset-time-review">...</span>
-            </div>
+            <div id="codex-windows-container"></div>
             <div id="codex-credits-container" style="margin-top: 10px; display: none;">
                 <div style="margin-bottom: 2px;">
                     <strong>积分</strong>
@@ -2061,140 +2035,143 @@
     }
 
     // 更新 Codex 用量
-    let codexResetTimePrimary = null;
-    let codexResetTimeSecondary = null;
-    let codexResetTimeReview = null;
-    let codexResetAtPrimary = null;
-    let codexResetAtSecondary = null;
-    let codexResetAtReview = null;
-    let codexResetsAfterPrimary = null;
-    let codexResetsAfterSecondary = null;
-    let codexResetsAfterReview = null;
-    let codexUsedPercentPrimary = null; // 0~100
-    let codexUsedPercentSecondary = null; // 0~100
-    let codexUsedPercentReview = null; // 0~100
-    let codexLimitWindowSecondsPrimary = null;
-    let codexLimitWindowSecondsSecondary = null;
-    let codexLimitWindowSecondsReview = null;
-    function updateCodexInfo(
-        pUsedPercent,
-        pResetAfter,
-        pResetAt,
-        sUsedPercent,
-        sResetAfter,
-        sResetAt,
-        pLimitWindowSecs,
-        sLimitWindowSecs,
-        rUsedPercent,
-        rResetAfter,
-        rResetAt,
-        rLimitWindowSecs,
-    ) {
-        const section = document.getElementById("codex-section");
-        const barP = document.getElementById("codex-progress-bar");
-        const usageP = document.getElementById("codex-usage");
-        const resetP = document.getElementById("codex-reset-time");
+    let codexUsageWindows = [];
+    let codexCreditsVisible = false;
 
-        const barS = document.getElementById("codex-progress-bar-week");
-        const usageS = document.getElementById("codex-usage-week");
-        const resetS = document.getElementById("codex-reset-time-week");
-
-        const barR = document.getElementById("codex-progress-bar-review");
-        const usageR = document.getElementById("codex-usage-review");
-        const resetR = document.getElementById("codex-reset-time-review");
-
-        if (
-            !section ||
-            !barP ||
-            !usageP ||
-            !resetP ||
-            !barS ||
-            !usageS ||
-            !resetS ||
-            !barR ||
-            !usageR ||
-            !resetR
-        )
-            return;
-
-        if (pUsedPercent == null || sUsedPercent == null) {
-            section.style.display = "none";
-            return;
-        }
-
-        codexUsedPercentPrimary = Math.max(0, Math.min(100, pUsedPercent));
-        codexUsedPercentSecondary = Math.max(0, Math.min(100, sUsedPercent));
-        codexUsedPercentReview =
-            rUsedPercent != null
-                ? Math.max(0, Math.min(100, rUsedPercent))
-                : null;
-        codexResetsAfterPrimary = pResetAfter ?? null;
-        codexResetsAfterSecondary = sResetAfter ?? null;
-        codexResetsAfterReview = rResetAfter ?? null;
-        codexLimitWindowSecondsPrimary = pLimitWindowSecs ?? null;
-        codexLimitWindowSecondsSecondary = sLimitWindowSecs ?? null;
-        codexLimitWindowSecondsReview = rLimitWindowSecs ?? null;
-        codexResetAtPrimary = pResetAt != null ? pResetAt * 1000 : null;
-        codexResetAtSecondary = sResetAt != null ? sResetAt * 1000 : null;
-        codexResetAtReview = rResetAt != null ? rResetAt * 1000 : null;
-
-        if (codexUsedPercentPrimary > 0 && codexResetsAfterPrimary != null) {
-            codexResetTimePrimary = Date.now() + codexResetsAfterPrimary * 1000;
-        } else if (codexResetAtPrimary != null) {
-            codexResetTimePrimary = codexResetAtPrimary;
-        } else {
-            codexResetTimePrimary = null;
-        }
-
-        if (
-            codexUsedPercentSecondary > 0 &&
-            codexResetsAfterSecondary != null
-        ) {
-            codexResetTimeSecondary =
-                Date.now() + codexResetsAfterSecondary * 1000;
-        } else if (codexResetAtSecondary != null) {
-            codexResetTimeSecondary = codexResetAtSecondary;
-        } else {
-            codexResetTimeSecondary = null;
-        }
-
-        if (codexUsedPercentReview > 0 && codexResetsAfterReview != null) {
-            codexResetTimeReview = Date.now() + codexResetsAfterReview * 1000;
-        } else if (codexResetAtReview != null) {
-            codexResetTimeReview = codexResetAtReview;
-        } else {
-            codexResetTimeReview = null;
-        }
-
-        barP.style.width = `${codexUsedPercentPrimary}%`;
-        barS.style.width = `${codexUsedPercentSecondary}%`;
-        barP.style.background = "#C26FFD";
-        barS.style.background = "#C26FFD";
-
-        usageP.innerText = `${codexUsedPercentPrimary}%`;
-        usageS.innerText = `${codexUsedPercentSecondary}%`;
-
-        const reviewContainer = document.getElementById(
-            "codex-review-container",
+    function isCodexWindowDuration(limitWindowSeconds, expectedSeconds) {
+        return (
+            Number.isFinite(limitWindowSeconds) &&
+            limitWindowSeconds > 0 &&
+            Math.abs(limitWindowSeconds - expectedSeconds) <=
+                expectedSeconds * 0.05
         );
-        if (codexUsedPercentReview != null) {
-            barR.style.width = `${codexUsedPercentReview}%`;
-            barR.style.background = "#C26FFD";
-            usageR.innerText = `${codexUsedPercentReview}%`;
-            if (reviewContainer) reviewContainer.style.display = "block";
-        } else {
-            if (reviewContainer) reviewContainer.style.display = "none";
+    }
+
+    function formatCodexWindowLabel(name, limitWindowSeconds) {
+        let period = "";
+        if (isCodexWindowDuration(limitWindowSeconds, 5 * 60 * 60)) {
+            period = "每5小时";
+        } else if (
+            isCodexWindowDuration(limitWindowSeconds, 30 * 24 * 60 * 60)
+        ) {
+            period = "每月";
+        } else if (
+            isCodexWindowDuration(limitWindowSeconds, 7 * 24 * 60 * 60)
+        ) {
+            period = "每周";
+        } else if (isCodexWindowDuration(limitWindowSeconds, 24 * 60 * 60)) {
+            period = "每天";
+        } else if (
+            Number.isFinite(limitWindowSeconds) &&
+            limitWindowSeconds > 0
+        ) {
+            period = `每${formatCodexDuration(limitWindowSeconds, true)}`;
+        }
+        return period ? `${name} ${period}` : name;
+    }
+
+    function getCodexUsageWindows(data) {
+        const windows = [];
+
+        function appendWindow(window, name) {
+            if (!window || typeof window !== "object") return;
+            const limitWindowSeconds = Number.isFinite(
+                window.limit_window_seconds,
+            )
+                ? window.limit_window_seconds
+                : null;
+            windows.push({
+                label: formatCodexWindowLabel(name, limitWindowSeconds),
+                usedPercent: Number.isFinite(window.used_percent)
+                    ? Math.max(0, Math.min(100, window.used_percent))
+                    : null,
+                resetAfterSeconds: Number.isFinite(window.reset_after_seconds)
+                    ? window.reset_after_seconds
+                    : null,
+                resetAt: Number.isFinite(window.reset_at)
+                    ? window.reset_at * 1000
+                    : null,
+                limitWindowSeconds,
+            });
         }
 
-        section.style.display = "block";
-        section.style.marginTop = powFetched ? "10px" : "0";
+        function appendRateLimit(rateLimit, name) {
+            if (!rateLimit || typeof rateLimit !== "object") return;
+            appendWindow(rateLimit.primary_window, name);
+            appendWindow(rateLimit.secondary_window, name);
+        }
 
-        codexFetched = true;
+        appendRateLimit(data?.rate_limit, "代码");
+        if (Array.isArray(data?.additional_rate_limits)) {
+            for (const additionalRateLimit of data.additional_rate_limits) {
+                const name =
+                    typeof additionalRateLimit?.limit_name === "string" &&
+                    additionalRateLimit.limit_name.trim()
+                        ? additionalRateLimit.limit_name.trim()
+                        : "附加用量";
+                appendRateLimit(additionalRateLimit?.rate_limit, name);
+            }
+        }
+        appendWindow(data?.code_review_rate_limit?.primary_window, "代码审查");
+        return windows;
+    }
+
+    function updateCodexDisplayState() {
+        codexFetched = codexUsageWindows.length > 0 || codexCreditsVisible;
+        if (!codexFetched) return;
+
+        const section = document.getElementById("codex-section");
+        if (section) section.style.marginTop = powFetched ? "10px" : "0";
         if (!powFetched) {
             setIconColors("#C26FFD", "#A855F7");
             const powSection = document.getElementById("pow-section");
             if (powSection) powSection.style.display = "none";
         }
+    }
+
+    function updateCodexInfo(windows) {
+        const container = document.getElementById("codex-windows-container");
+        if (!container) return;
+
+        const now = Date.now();
+        codexUsageWindows = windows.map((window) => ({
+            ...window,
+            resetTime:
+                window.resetAfterSeconds != null
+                    ? now + window.resetAfterSeconds * 1000
+                    : window.resetAt,
+            resetElement: null,
+        }));
+        container.replaceChildren();
+
+        for (const [index, window] of codexUsageWindows.entries()) {
+            const row = document.createElement("div");
+            if (index > 0) row.style.marginTop = "8px";
+            row.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-right:4px;">
+                    <span>已用：<span class="codex-window-usage">...</span></span>
+                    <span><i class="codex-window-label"></i></span>
+                </div>
+                <div style="margin-top: 4px; margin-bottom: 4px; width: 100%; height: 8px; background: #555; border-radius: 4px;">
+                    <div class="codex-window-progress-bar" style="height: 100%; width: 0%; background: #C26FFD; border-radius: 4px;"></div>
+                </div>
+                重置时间：<span class="codex-window-reset-time">...</span>
+            `;
+            const usage = row.querySelector(".codex-window-usage");
+            const label = row.querySelector(".codex-window-label");
+            const bar = row.querySelector(".codex-window-progress-bar");
+            const reset = row.querySelector(".codex-window-reset-time");
+            if (!usage || !label || !bar || !reset) continue;
+
+            usage.innerText =
+                window.usedPercent == null ? "..." : `${window.usedPercent}%`;
+            label.innerText = window.label;
+            bar.style.width = `${window.usedPercent ?? 0}%`;
+            window.resetElement = reset;
+            container.appendChild(row);
+        }
+
+        updateCodexDisplayState();
         updateCodexCountdown();
     }
 
@@ -2213,10 +2190,13 @@
         if (balanceRaw) {
             valueEl.innerText = balanceRaw;
             container.style.display = "block";
+            codexCreditsVisible = true;
         } else {
             valueEl.innerText = "...";
             container.style.display = "none";
+            codexCreditsVisible = false;
         }
+        updateCodexDisplayState();
     }
 
     function isCodexTimerNotStarted(limitSecs, resetAfterSecs) {
@@ -2264,128 +2244,37 @@
     }
 
     function updateCodexCountdown() {
-        const resetP = document.getElementById("codex-reset-time");
-        const resetS = document.getElementById("codex-reset-time-week");
-        const resetR = document.getElementById("codex-reset-time-review");
-        if (!resetP || !resetS || !resetR) return;
+        for (const window of codexUsageWindows) {
+            const reset = window.resetElement;
+            if (!reset) continue;
 
-        const notStartedPrimary = isCodexTimerNotStarted(
-            codexLimitWindowSecondsPrimary,
-            codexResetsAfterPrimary,
-        );
-        const notStartedSecondary = isCodexTimerNotStarted(
-            codexLimitWindowSecondsSecondary,
-            codexResetsAfterSecondary,
-        );
-        const notStartedReview = isCodexTimerNotStarted(
-            codexLimitWindowSecondsReview,
-            codexResetsAfterReview,
-        );
-
-        // 五小时
-        let tooltipTimestampPrimary = null;
-        if (codexUsedPercentPrimary == null) {
-            resetP.innerText = "...";
-        } else if (notStartedPrimary) {
-            const secs = codexLimitWindowSecondsPrimary;
-            resetP.innerHTML = `${formatCodexDuration(
-                secs,
-                true,
-            )}${NOT_STARTED_BADGE}`;
-            tooltipTimestampPrimary = codexResetAtPrimary;
-        } else {
-            if (codexResetTimePrimary != null) {
-                const secs = Math.max(
-                    0,
-                    Math.floor((codexResetTimePrimary - Date.now()) / 1000),
-                );
-                resetP.innerText = formatCodexDuration(secs, false);
-            } else {
-                resetP.innerText = "...";
-            }
-            tooltipTimestampPrimary = codexResetAtPrimary;
-        }
-        if (tooltipTimestampPrimary != null) {
-            const tooltipText = formatCodexAbsoluteTime(
-                tooltipTimestampPrimary,
+            const notStarted = isCodexTimerNotStarted(
+                window.limitWindowSeconds,
+                window.resetAfterSeconds,
             );
-            if (tooltipText) {
-                resetP.title = tooltipText;
-            } else {
-                resetP.removeAttribute("title");
-            }
-        } else {
-            resetP.removeAttribute("title");
-        }
-
-        // 一星期
-        let tooltipTimestampSecondary = null;
-        if (codexUsedPercentSecondary == null) {
-            resetS.innerText = "...";
-        } else if (notStartedSecondary) {
-            const secs = codexLimitWindowSecondsSecondary;
-            resetS.innerHTML = `${formatCodexDuration(
-                secs,
-                true,
-            )}${NOT_STARTED_BADGE}`;
-            tooltipTimestampSecondary = codexResetAtSecondary;
-        } else {
-            if (codexResetTimeSecondary != null) {
+            if (window.usedPercent == null) {
+                reset.innerText = "...";
+            } else if (notStarted) {
+                reset.innerHTML = `${formatCodexDuration(
+                    window.limitWindowSeconds,
+                    true,
+                )}${NOT_STARTED_BADGE}`;
+            } else if (window.resetTime != null) {
                 const secs = Math.max(
                     0,
-                    Math.floor((codexResetTimeSecondary - Date.now()) / 1000),
+                    Math.floor((window.resetTime - Date.now()) / 1000),
                 );
-                resetS.innerText = formatCodexDuration(secs, false);
+                reset.innerText = formatCodexDuration(secs, false);
             } else {
-                resetS.innerText = "...";
+                reset.innerText = "...";
             }
-            tooltipTimestampSecondary = codexResetAtSecondary;
-        }
-        if (tooltipTimestampSecondary != null) {
-            const tooltipText = formatCodexAbsoluteTime(
-                tooltipTimestampSecondary,
-            );
-            if (tooltipText) {
-                resetS.title = tooltipText;
-            } else {
-                resetS.removeAttribute("title");
-            }
-        } else {
-            resetS.removeAttribute("title");
-        }
 
-        // 代码审查
-        let tooltipTimestampReview = null;
-        if (codexUsedPercentReview == null) {
-            resetR.innerText = "...";
-        } else if (notStartedReview) {
-            const secs = codexLimitWindowSecondsReview;
-            resetR.innerHTML = `${formatCodexDuration(
-                secs,
-                true,
-            )}${NOT_STARTED_BADGE}`;
-            tooltipTimestampReview = codexResetAtReview;
-        } else {
-            if (codexResetTimeReview != null) {
-                const secs = Math.max(
-                    0,
-                    Math.floor((codexResetTimeReview - Date.now()) / 1000),
-                );
-                resetR.innerText = formatCodexDuration(secs, false);
-            } else {
-                resetR.innerText = "...";
-            }
-            tooltipTimestampReview = codexResetAtReview;
-        }
-        if (tooltipTimestampReview != null) {
-            const tooltipText = formatCodexAbsoluteTime(tooltipTimestampReview);
+            const tooltipText = formatCodexAbsoluteTime(window.resetAt);
             if (tooltipText) {
-                resetR.title = tooltipText;
+                reset.title = tooltipText;
             } else {
-                resetR.removeAttribute("title");
+                reset.removeAttribute("title");
             }
-        } else {
-            resetR.removeAttribute("title");
         }
     }
     setInterval(updateCodexCountdown, 1000);
@@ -3019,48 +2908,9 @@
         ) {
             try {
                 const data = await response.clone().json();
-                if (
-                    location.pathname.startsWith("/codex") &&
-                    data &&
-                    data.rate_limit
-                ) {
-                    const p = data.rate_limit.primary_window || {};
-                    const s = data.rate_limit.secondary_window || {};
-                    const cr = data.code_review_rate_limit || {};
-                    const r = cr.primary_window || {};
-                    updateCodexInfo(
-                        typeof p.used_percent === "number"
-                            ? p.used_percent
-                            : null,
-                        typeof p.reset_after_seconds === "number"
-                            ? p.reset_after_seconds
-                            : null,
-                        typeof p.reset_at === "number" ? p.reset_at : null,
-                        typeof s.used_percent === "number"
-                            ? s.used_percent
-                            : null,
-                        typeof s.reset_after_seconds === "number"
-                            ? s.reset_after_seconds
-                            : null,
-                        typeof s.reset_at === "number" ? s.reset_at : null,
-                        typeof p.limit_window_seconds === "number"
-                            ? p.limit_window_seconds
-                            : null,
-                        typeof s.limit_window_seconds === "number"
-                            ? s.limit_window_seconds
-                            : null,
-                        typeof r.used_percent === "number"
-                            ? r.used_percent
-                            : null,
-                        typeof r.reset_after_seconds === "number"
-                            ? r.reset_after_seconds
-                            : null,
-                        typeof r.reset_at === "number" ? r.reset_at : null,
-                        typeof r.limit_window_seconds === "number"
-                            ? r.limit_window_seconds
-                            : null,
-                    );
-                    updateCodexCredits(data.credits);
+                if (isCodexMode) {
+                    updateCodexInfo(getCodexUsageWindows(data));
+                    updateCodexCredits(data?.credits);
                 }
                 return response;
             } catch (e) {
