@@ -47,6 +47,8 @@
         "checker-next-chatgpt-fake-plan-enabled";
     const CHATGPT_IMPORT_MAP_CACHE_KEY =
         "checker-next-chatgpt-import-map-cache";
+    const CHATGPT_MODULE_INJECTION_ENABLED_KEY =
+        "checker-next-chatgpt-module-injection-enabled";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
         "checker-next-runtime-model-state";
     const CHATGPT_RUNTIME_MODEL_REQUEST_EVENT =
@@ -54,6 +56,9 @@
     const CHATGPT_RUNTIME_MODEL_SET_EVENT = "checker-next-runtime-model-set";
     const CHATGPT_RUNTIME_CUSTOM_VALUE = "__checker_next_custom__";
 
+    let chatgptModuleInjectionEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_MODULE_INJECTION_ENABLED_KEY) !== "false";
     let chatgptRuntimeModelState;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
@@ -806,8 +811,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         return `${transformSignature}\n${unlockThemeColors ? "1" : "0"}:${fakePlan}`;
     }
 
+    function setChatgptImportMapPatchCache(value) {
+        GM_setValue(CHATGPT_IMPORT_MAP_CACHE_KEY, value);
+    }
+
     function isChatgptImportPatchEnabled() {
-        return isChatgptMode;
+        return isChatgptMode && chatgptModuleInjectionEnabled;
     }
 
     function installCachedChatgptImportMapPatch() {
@@ -916,7 +925,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                             : patch === patchChatgptUnlockThemeColorsAssetSource
                               ? "主题色解锁"
                               : "假装会员";
-                    GM_setValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
+                    setChatgptImportMapPatchCache(null);
                     chatgptImportPatchFailure = `${patchLabel}补丁与当前 ChatGPT 模块不匹配。`;
                     updateChatgptInjectionStatus();
                     console.error(
@@ -933,7 +942,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 assetUrl,
                 assetBaseUrl,
             );
-            GM_setValue(CHATGPT_IMPORT_MAP_CACHE_KEY, {
+            if (!isChatgptImportPatchEnabled()) return;
+            setChatgptImportMapPatchCache({
                 assetFilename,
                 assetUrl,
                 signature,
@@ -946,6 +956,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 assetUrl,
             );
         } catch (error) {
+            if (!isChatgptImportPatchEnabled()) return;
             chatgptImportPatchFailure = `补丁缓存生成失败：${String(error)}`;
             updateChatgptInjectionStatus();
             console.error("[CheckerNext] 生成模块补丁缓存失败:", error);
@@ -1139,8 +1150,18 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         let label = "检查中";
         let color = "#bbbbbb";
         let description = "正在检查 ChatGPT 模块补丁。";
+        const injectionInstalled = Boolean(
+            Reflect.get(window, "__checkerNextImportMapInstalled") ||
+                chatgptRuntimeModelState,
+        );
 
-        if (chatgptImportPatchFailure) {
+        if (!chatgptModuleInjectionEnabled) {
+            label = injectionInstalled ? "刷新生效" : "注入关闭";
+            color = injectionInstalled ? "#ffd700" : "#bbbbbb";
+            description = injectionInstalled
+                ? `当前页面仍已注入：\n${installedItems}\n\n刷新页面后关闭模块注入。`
+                : "模块注入已关闭。\n\n运行时模型、主题色解锁和假装会员均不会生效。";
+        } else if (chatgptImportPatchFailure) {
             label = "注入失败";
             color = "#ff6b6b";
             description = chatgptImportPatchFailure;
@@ -1159,10 +1180,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             label = "注入成功";
             color = "#98fb98";
             description = `当前页面已注入：\n${installedItems}`;
-        } else if (
-            document.readyState === "complete" &&
-            window.__checkerNextImportMapInstalled
-        ) {
+        } else if (document.readyState === "complete" && injectionInstalled) {
             label = "刷新重试";
             color = "#ffd700";
             description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
@@ -1191,6 +1209,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 : null;
         if (!originSelect || !modelSelect || !thinkingSelect) return;
 
+        const controlsDisabled = !chatgptModuleInjectionEnabled;
+        originSelect.disabled = controlsDisabled;
+        modelSelect.disabled = controlsDisabled;
+        thinkingSelect.disabled = controlsDisabled;
+
         const state = chatgptRuntimeModelState;
         let modelValue;
         let thinkingValue;
@@ -1218,7 +1241,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     }
 
     function requestChatgptRuntimeModelState() {
-        if (!isChatgptMode) return;
+        if (!isChatgptMode || !chatgptModuleInjectionEnabled) return;
         pageWindow.dispatchEvent(
             new pageWindow.CustomEvent(CHATGPT_RUNTIME_MODEL_REQUEST_EVENT),
         );
@@ -1749,6 +1772,47 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     margin-left: 3px;
                 ">?</span>
             </div>
+            <div id="chatgpt-module-injection-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>模块注入
+                <span id="chatgpt-module-injection-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-module-injection-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-module-injection-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-module-injection-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-age-verification-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>年龄验证：<span id="chatgpt-age-verification-status">...</span>
                 <span id="chatgpt-age-verification-tooltip" style="
@@ -2159,6 +2223,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             "刷新页面生效。",
         );
 
+        const chatgptModuleInjectionTooltipBox = createTooltip(
+            "chatgpt-module-injection-tooltip-box",
+            "关闭后清除补丁缓存。刷新页面后，运行时模型切换、主题色解锁和假装会员均不再生效。",
+        );
+
         // 创建模块注入提示框
         const chatgptInjectionTooltipBox = createTooltip(
             "chatgpt-injection-tooltip-box",
@@ -2267,6 +2336,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             );
             bindTooltipEvents("features-tooltip", featuresTooltipBox);
             bindTooltipEvents(
+                "chatgpt-module-injection-tooltip",
+                chatgptModuleInjectionTooltipBox,
+            );
+            bindTooltipEvents(
                 "chatgpt-injection-status",
                 chatgptInjectionTooltipBox,
             );
@@ -2302,6 +2375,57 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     sliderDot,
                     toggle.checked,
                 );
+            });
+        }
+
+        function bindChatgptModuleInjectionToggle() {
+            const toggle = document.getElementById(
+                "chatgpt-module-injection-toggle",
+            );
+            const slider = document.getElementById(
+                "chatgpt-module-injection-slider",
+            );
+            const sliderDot = document.getElementById(
+                "chatgpt-module-injection-slider-dot",
+            );
+            if (!(toggle instanceof HTMLInputElement) || !slider || !sliderDot)
+                return;
+
+            const apply = () =>
+                updateGrokDevToolsSliderStyle(
+                    slider,
+                    sliderDot,
+                    chatgptModuleInjectionEnabled,
+                );
+
+            toggle.checked = chatgptModuleInjectionEnabled;
+            apply();
+
+            toggle.addEventListener("change", function () {
+                chatgptModuleInjectionEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_MODULE_INJECTION_ENABLED_KEY,
+                    String(chatgptModuleInjectionEnabled),
+                );
+                chatgptImportPatchFailure = undefined;
+                chatgptImportPatchNeedsReload = false;
+
+                if (chatgptModuleInjectionEnabled) {
+                    chatgptPendingPatchSettings =
+                        getChatgptImportPatchSettings();
+                    chatgptImportPatchNeedsReload = !Reflect.get(
+                        window,
+                        "__checkerNextImportMapInstalled",
+                    );
+                    void prepareChatgptImportMapPatchCache();
+                    requestChatgptRuntimeModelState();
+                } else {
+                    setChatgptImportMapPatchCache(null);
+                    chatgptPendingPatchSettings = undefined;
+                }
+
+                apply();
+                updateChatgptRuntimeModelControls();
             });
         }
 
@@ -2408,6 +2532,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             if (!originSelect || !modelSelect || !thinkingSelect) return;
 
             function apply(detail) {
+                if (!chatgptModuleInjectionEnabled) return;
                 pageWindow.dispatchEvent(
                     new pageWindow.CustomEvent(
                         CHATGPT_RUNTIME_MODEL_SET_EVENT,
@@ -2603,6 +2728,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         }
 
         if (isChatgptMode) {
+            bindChatgptModuleInjectionToggle();
             bindChatgptRuntimeModelControls();
             bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
