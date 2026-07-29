@@ -1359,6 +1359,19 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         <div id="chatgpt-runtime-model-section" style="margin-top: 10px;">
             <div style="margin-bottom: 4px;">
                 <strong>模型</strong>
+                <span id="chatgpt-runtime-model-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span>
             </div>
             <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px; align-items: center;">
                 <label for="chatgpt-runtime-origin">模式</label>
@@ -2005,7 +2018,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const collapsedIndicator = document.createElement("div");
         collapsedIndicator.style.position = "fixed";
         collapsedIndicator.style.top = "50%";
-        collapsedIndicator.style.right = "20px";
+        collapsedIndicator.style.right = "28px";
         collapsedIndicator.style.transform = "translateY(-50%)";
         collapsedIndicator.style.width = "32px";
         collapsedIndicator.style.height = "32px";
@@ -2223,6 +2236,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             "刷新页面生效。",
         );
 
+        const chatgptRuntimeModelTooltipBox = createTooltip(
+            "chatgpt-runtime-model-tooltip-box",
+            "乱改会触发风控。",
+        );
+
         const chatgptModuleInjectionTooltipBox = createTooltip(
             "chatgpt-module-injection-tooltip-box",
             "关闭后清除补丁缓存。刷新页面后，运行时模型切换、主题色解锁和假装会员均不再生效。",
@@ -2335,6 +2353,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 grokAsyncChatTooltipBox,
             );
             bindTooltipEvents("features-tooltip", featuresTooltipBox);
+            bindTooltipEvents(
+                "chatgpt-runtime-model-tooltip",
+                chatgptRuntimeModelTooltipBox,
+            );
             bindTooltipEvents(
                 "chatgpt-module-injection-tooltip",
                 chatgptModuleInjectionTooltipBox,
