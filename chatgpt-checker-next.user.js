@@ -1135,7 +1135,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (!isChatgptMode) return;
         const status = document.getElementById("chatgpt-injection-status");
         const tooltip = document.getElementById(
-            "chatgpt-injection-tooltip-box",
+            "chatgpt-module-injection-tooltip-box",
         );
         if (!status) return;
 
@@ -1186,7 +1186,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
         }
 
-        status.innerText = `<${label}>`;
+        status.innerText = label;
         status.style.color = color;
         if (tooltip) tooltip.innerText = description;
     }
@@ -1349,7 +1349,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
                 <strong>ChatGPT</strong>
-                <span id="chatgpt-injection-status" style="margin-left: 4px; color: #bbbbbb; cursor: pointer;">&lt;检查中&gt;</span>
             </div>
             PoW难度：<span id="difficulty">...</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
@@ -1807,7 +1806,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 ">?</span>
             </div>
             <div id="chatgpt-module-injection-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>模块注入
+                <span>模块注入：<span id="chatgpt-injection-status" style="color: #bbbbbb;">检查中</span>
                 <span id="chatgpt-module-injection-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -2264,15 +2263,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
         const chatgptModuleInjectionTooltipBox = createTooltip(
             "chatgpt-module-injection-tooltip-box",
-            "关闭后清除补丁缓存。刷新页面后，运行时模型切换、主题色解锁和假装会员均不再生效。",
-        );
-
-        // 创建模块注入提示框
-        const chatgptInjectionTooltipBox = createTooltip(
-            "chatgpt-injection-tooltip-box",
             "正在检查 ChatGPT 模块补丁。",
         );
-        chatgptInjectionTooltipBox.style.whiteSpace = "pre-line";
+        chatgptModuleInjectionTooltipBox.style.whiteSpace = "pre-line";
 
         // 创建解锁主题色提示框
         const chatgptUnlockThemeColorsTooltipBox = createTooltip(
@@ -2381,10 +2374,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             bindTooltipEvents(
                 "chatgpt-module-injection-tooltip",
                 chatgptModuleInjectionTooltipBox,
-            );
-            bindTooltipEvents(
-                "chatgpt-injection-status",
-                chatgptInjectionTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-unlock-theme-colors-tooltip",
