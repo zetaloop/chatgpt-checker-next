@@ -55,7 +55,10 @@
     const CHATGPT_RUNTIME_CUSTOM_VALUE = "__checker_next_custom__";
 
     let chatgptRuntimeModelState;
-    let chatgptRuntimeModelNeedsReload = false;
+    let chatgptImportPatchNeedsReload = false;
+    let chatgptInstalledPatchSettings;
+    let chatgptPendingPatchSettings;
+    let chatgptImportPatchFailure;
     const chatgptRuntimeModelCatalogs = {
         chat: [],
         work: [],
@@ -766,19 +769,37 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         return patched;
     }
 
-    function getChatgptImportPatchSignature() {
-        const unlockThemeColors =
-            localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true";
+    function getChatgptImportPatchSettings() {
         const fakePlanEnabled =
             localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
-        const fakePlan = localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro";
+        return {
+            unlockThemeColors:
+                localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) ===
+                "true",
+            fakePlan: fakePlanEnabled
+                ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
+                : "",
+        };
+    }
+
+    function getChatgptImportPatchItems(settings) {
+        const items = ["运行时模型切换"];
+        if (settings?.unlockThemeColors) items.push("解锁全部主题色");
+        if (settings?.fakePlan) {
+            items.push(`假装会员：${settings.fakePlan}`);
+        }
+        return items;
+    }
+
+    function getChatgptImportPatchSignature() {
+        const { unlockThemeColors, fakePlan } = getChatgptImportPatchSettings();
         const transformSignature = [
             rewriteModuleImports,
             patchChatgptRuntimeModelAssetSource,
             patchChatgptUnlockThemeColorsAssetSource,
             patchChatgptFakePlanAssetSource,
         ].join("\n");
-        return `${transformSignature}\n${unlockThemeColors ? "1" : "0"}:${fakePlanEnabled ? fakePlan : ""}`;
+        return `${transformSignature}\n${unlockThemeColors ? "1" : "0"}:${fakePlan}`;
     }
 
     function isChatgptImportPatchEnabled() {
@@ -820,11 +841,13 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         });
         if (!importMap) {
             URL.revokeObjectURL(blobUrl);
+            chatgptImportPatchFailure = "浏览器未能插入缓存模块映射。";
             console.warn("[CheckerNext] 缓存模块映射未能插入页面。");
             return;
         }
 
         window.__checkerNextImportMapInstalled = true;
+        chatgptInstalledPatchSettings = getChatgptImportPatchSettings();
         console.info(
             "[CheckerNext] 已创建缓存 import map 元素:",
             cached.assetUrl,
@@ -845,12 +868,16 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     async function prepareChatgptImportMapPatchCache() {
         if (!isChatgptImportPatchEnabled()) return;
 
+        chatgptPendingPatchSettings = getChatgptImportPatchSettings();
         const preload = [
             ...document.querySelectorAll('link[rel="modulepreload"]'),
         ].find((element) =>
             /\/4813494d-[^/?]+\.js(?:[?#]|$)/.test(element.href),
         );
         if (!preload) {
+            chatgptImportPatchFailure =
+                "页面没有提供可补丁的 ChatGPT 目标模块，资源结构可能已经变化。";
+            updateChatgptInjectionStatus();
             console.error("[CheckerNext] 未找到 ChatGPT 目标模块。");
             return;
         }
@@ -867,6 +894,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return;
         }
 
+        chatgptImportPatchFailure = undefined;
+        chatgptImportPatchNeedsReload = false;
         try {
             const response = await originalFetch(assetUrl);
             if (!response.ok) {
@@ -877,7 +906,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             for (const patch of getChatgptAssetPatchFunctions()) {
                 const patched = patch(sourceText);
                 if (typeof patched !== "string" || patched.length === 0) {
+                    const patchLabel =
+                        patch === patchChatgptRuntimeModelAssetSource
+                            ? "运行时模型"
+                            : patch === patchChatgptUnlockThemeColorsAssetSource
+                              ? "主题色解锁"
+                              : "假装会员";
                     GM_setValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
+                    chatgptImportPatchFailure = `${patchLabel}补丁与当前 ChatGPT 模块不匹配。`;
+                    updateChatgptInjectionStatus();
                     console.error(
                         `[CheckerNext] 模块补丁未匹配: ${patch.name}`,
                     );
@@ -898,13 +935,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 signature,
                 sourceText,
             });
-            chatgptRuntimeModelNeedsReload = true;
-            updateChatgptRuntimeModelControls();
+            chatgptImportPatchNeedsReload = true;
+            updateChatgptInjectionStatus();
             console.info(
                 "[CheckerNext] 模块补丁缓存已更新，重新载入后生效:",
                 assetUrl,
             );
         } catch (error) {
+            chatgptImportPatchFailure = `补丁缓存生成失败：${String(error)}`;
+            updateChatgptInjectionStatus();
             console.error("[CheckerNext] 生成模块补丁缓存失败:", error);
         }
     }
@@ -1072,18 +1111,54 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     function updateChatgptInjectionStatus() {
         if (!isChatgptMode) return;
         const status = document.getElementById("chatgpt-injection-status");
+        const tooltip = document.getElementById(
+            "chatgpt-injection-tooltip-box",
+        );
         if (!status) return;
 
-        if (chatgptRuntimeModelNeedsReload) {
-            status.innerText = "<待重新载入>";
-            status.style.color = "#ffd700";
+        const formatItems = (settings) =>
+            getChatgptImportPatchItems(settings)
+                .map((item) => `• ${item}`)
+                .join("\n");
+        const installedItems = formatItems(chatgptInstalledPatchSettings);
+        const pendingItems = formatItems(
+            chatgptPendingPatchSettings || getChatgptImportPatchSettings(),
+        );
+        let label = "检查中";
+        let color = "#bbbbbb";
+        let description = "正在检查 ChatGPT 模块补丁。";
+
+        if (chatgptImportPatchFailure) {
+            label = "注入失败";
+            color = "#ff6b6b";
+            description = chatgptImportPatchFailure;
+            if (chatgptRuntimeModelState) {
+                description += `\n\n当前页面已注入：\n${installedItems}`;
+            } else {
+                description += `\n\n准备注入：\n${pendingItems}`;
+            }
+        } else if (chatgptImportPatchNeedsReload) {
+            label = "刷新生效";
+            color = "#ffd700";
+            description = chatgptRuntimeModelState
+                ? `当前页面已注入：\n${installedItems}\n\n刷新后生效：\n${pendingItems}`
+                : `刷新后注入：\n${pendingItems}`;
         } else if (chatgptRuntimeModelState) {
-            status.innerText = "<已注入>";
-            status.style.color = "#98fb98";
-        } else {
-            status.innerText = "<未注入>";
-            status.style.color = "#ff6b6b";
+            label = "注入成功";
+            color = "#98fb98";
+            description = `当前页面已注入：\n${installedItems}`;
+        } else if (
+            document.readyState === "complete" &&
+            window.__checkerNextImportMapInstalled
+        ) {
+            label = "刷新重试";
+            color = "#ffd700";
+            description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
         }
+
+        status.innerText = `<${label}>`;
+        status.style.color = color;
+        if (tooltip) tooltip.innerText = description;
     }
 
     function updateChatgptRuntimeModelControls() {
@@ -1146,6 +1221,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 updateChatgptRuntimeModelControls();
             },
         );
+        pageWindow.addEventListener("load", updateChatgptInjectionStatus, {
+            once: true,
+        });
     }
 
     // 全局状态：记录弹窗是否正在显示
@@ -1223,7 +1301,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         <div id="pow-section">
             <div style="margin-bottom: 2px;">
                 <strong>ChatGPT</strong>
-                <span id="chatgpt-injection-status" style="margin-left: 4px; color: #ff6b6b; cursor: pointer;">&lt;未注入&gt;</span>
+                <span id="chatgpt-injection-status" style="margin-left: 4px; color: #bbbbbb; cursor: pointer;">&lt;检查中&gt;</span>
             </div>
             PoW难度：<span id="difficulty">...</span><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
@@ -2072,8 +2150,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         // 创建模块注入提示框
         const chatgptInjectionTooltipBox = createTooltip(
             "chatgpt-injection-tooltip-box",
-            "检测当前页面是否已载入 Checker Next 的模块补丁。运行时模型、主题色解锁和假装会员都依赖这项注入。",
+            "正在检查 ChatGPT 模块补丁。",
         );
+        chatgptInjectionTooltipBox.style.whiteSpace = "pre-line";
 
         // 创建解锁主题色提示框
         const chatgptUnlockThemeColorsTooltipBox = createTooltip(
