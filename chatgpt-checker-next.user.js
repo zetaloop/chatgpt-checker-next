@@ -1280,9 +1280,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         displayBox.style.top = "50%";
         displayBox.style.right = "20px";
         displayBox.style.transform = "translateY(-50%)";
-        displayBox.style.width = "240px";
+        displayBox.style.width = "248px";
         displayBox.style.padding = "0";
-        displayBox.style.overflow = "hidden";
+        displayBox.style.maxHeight = "calc(100vh - 20px)";
+        displayBox.style.overflowX = "hidden";
+        displayBox.style.overflowY = "auto";
+        displayBox.style.scrollbarWidth = "thin";
         displayBox.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
         displayBox.style.color = "#fff";
         displayBox.style.fontSize = "14px";
@@ -2193,6 +2196,16 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 event.target.blur();
             }
         });
+        displayBox.addEventListener(
+            "wheel",
+            function (event) {
+                if (displayBox.scrollHeight <= displayBox.clientHeight) return;
+                displayBox.scrollTop += event.deltaY;
+                event.preventDefault();
+                event.stopPropagation();
+            },
+            { passive: false },
+        );
 
         function createTooltip(id, text) {
             const element = document.createElement("div");
