@@ -669,7 +669,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     const originOverrides=new Map;
     let lastConversation,newConversation,stateScheduled=!1;
     const getServerId=conversation=>typeof conversation.serverId$==="function"?conversation.serverId$():null;
-    const getOrigin=conversation=>originOverrides.get(conversation.id)??originOverrides.get(getServerId(conversation));
+    const getOrigin=conversation=>{
+        __CONVERSATION_ORIGIN__(conversation);
+        return originOverrides.get(conversation.id)??originOverrides.get(getServerId(conversation));
+    };
     const setOrigin=(conversation,origin)=>{
         if(conversation.id!=null)originOverrides.set(conversation.id,origin);
         const serverId=getServerId(conversation);
@@ -741,6 +744,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             ["__MODEL_SETTER__", modelSetterMatch[1]],
             ["__THINKING_STORE__", thinkingStoreMatch[1]],
             ["__ORIGIN_SELECTOR__", originSelectorName],
+            ["__CONVERSATION_ORIGIN__", originDecisionMatch[4]],
             ["__SURFACE_SWITCH__", surfaceSwitchMatch[1]],
             ["__SURFACE_MODE__", surfaceModeMatch[1]],
             ["__THREAD_MUTATOR__", threadMutatorMatch[2]],
@@ -1071,7 +1075,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return option;
         };
         const models = chatgptRuntimeModelCatalogs[originSelect.value] || [];
-        const modelOptions = [createOption("", "保持当前值")];
+        const createPlaceholder = () => {
+            const option = createOption(
+                "",
+                chatgptRuntimeModelState?.available ? "默认" : "读取中…",
+            );
+            option.disabled = true;
+            return option;
+        };
+        const modelOptions = modelValue ? [] : [createPlaceholder()];
         modelOptions.push(
             ...models.map((model) => createOption(model.slug, model.title)),
         );
@@ -1096,7 +1108,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 ).filter(Boolean),
             ),
         ].map(String);
-        const thinkingOptions = [createOption("", "保持当前值")];
+        const thinkingOptions = thinkingValue ? [] : [createPlaceholder()];
         thinkingOptions.push(...efforts.map((effort) => createOption(effort)));
         if (thinkingValue && !efforts.includes(thinkingValue)) {
             thinkingOptions.push(createOption(thinkingValue));
@@ -1323,7 +1335,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         </div>
         <div id="chatgpt-runtime-model-section" style="margin-top: 10px;">
             <div style="margin-bottom: 4px;">
-                <strong>运行时模型</strong>
+                <strong>模型</strong>
             </div>
             <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px; align-items: center;">
                 <label for="chatgpt-runtime-origin">模式</label>
@@ -1333,12 +1345,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 </select>
                 <label for="chatgpt-runtime-model">模型</label>
                 <select id="chatgpt-runtime-model">
-                    <option value="">保持当前值</option>
+                    <option value="" disabled selected>读取中…</option>
                     <option value="${CHATGPT_RUNTIME_CUSTOM_VALUE}">自定义…</option>
                 </select>
                 <label for="chatgpt-runtime-thinking">思考</label>
                 <select id="chatgpt-runtime-thinking">
-                    <option value="">保持当前值</option>
+                    <option value="" disabled selected>读取中…</option>
                     <option value="${CHATGPT_RUNTIME_CUSTOM_VALUE}">自定义…</option>
                 </select>
             </div>
