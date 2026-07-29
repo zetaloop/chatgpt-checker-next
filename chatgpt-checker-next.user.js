@@ -1310,7 +1310,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         <style>
             #checker-next-displayBox[data-mode="codex"] :is(#pow-section, #chatgpt-runtime-model-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section, #grok-section),
             #checker-next-displayBox[data-mode="grok"] :is(#pow-section, #chatgpt-runtime-model-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section, #codex-section),
-            #checker-next-displayBox[data-mode="chatgpt"] :is(#codex-section, #grok-section) {
+            #checker-next-displayBox[data-mode="chatgpt"] #grok-section {
                 display: none !important;
             }
             #checker-next-displayBox[data-mode="codex"] #codex-section,
@@ -1318,6 +1318,19 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             #checker-next-displayBox[data-mode="chatgpt"] #features-section {
                 display: block !important;
                 margin-top: 0 !important;
+            }
+            #checker-next-displayBox[data-mode="chatgpt"] #codex-section {
+                display: block !important;
+            }
+            #checker-next-displayBox[data-mode="chatgpt"] .codex-section-title {
+                margin-bottom: 2px !important;
+            }
+            #codex-section a {
+                color: #8ab4f8;
+                text-decoration: none;
+            }
+            #codex-section a:hover {
+                text-decoration: underline;
             }
             #chatgpt-runtime-model-section select {
                 width: 100%;
@@ -1426,7 +1439,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             记忆容量：<span id="memory-usage">...</span>
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
-            <div style="margin-bottom: 8px;">
+            <div class="codex-section-title" style="margin-bottom: 8px;">
                 <strong>Codex</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
@@ -1442,7 +1455,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     margin-left: 3px;
                 ">?</span>
             </div>
-            <div id="codex-windows-container"></div>
+            <div id="codex-windows-container">${isChatgptMode ? '<a href="#settings/Usage">查看用量</a>' : "额度：..."}</div>
             <div id="codex-credits-container" style="margin-top: 10px; display: none;">
                 <div style="margin-bottom: 2px;">
                     <strong>积分</strong>
@@ -1461,6 +1474,14 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     ">?</span>
                 </div>
                 剩余积分：<span id="codex-credits-value">...</span>
+            </div>
+            <div id="codex-reset-credits-container" style="margin-top: 10px; display: none;">
+                <div style="margin-bottom: 2px;">
+                    <strong>重置机会</strong>
+                </div>
+                可用次数：<span id="codex-reset-credits-count">...</span>
+                <div id="codex-reset-credits-expirations" style="margin-top: 2px; white-space: pre-line;"></div>
+                <a id="codex-reset-credits-link" href="${isCodexMode ? "/#settings/Usage" : "#settings/Usage"}" style="display: none; margin-top: 2px;">查看到期时间</a>
             </div>
         </div>
         <div id="grok-section" style="margin-top: 10px; display: none">
@@ -2203,7 +2224,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         // 创建 Codex 提示框
         const codexTooltipBox = createTooltip(
             "codex-tooltip-box",
-            "使用一次之后才开始计时。",
+            isCodexMode ? "首次使用后开始计时。" : "打开“使用情况”后加载。",
         );
 
         // 创建积分提示框
@@ -2790,7 +2811,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             difficultyLevel.innerText = "";
             powFetched = false;
             const powSection = document.getElementById("pow-section");
-            if (powSection && codexFetched) powSection.style.display = "none";
+            if (powSection && isCodexMode && codexFetched)
+                powSection.style.display = "none";
             return;
         }
 
@@ -2839,6 +2861,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     // 更新 Codex 用量
     let codexUsageWindows = [];
     let codexCreditsVisible = false;
+    let codexResetAvailableCount;
+    let codexResetCredits;
 
     function isCodexWindowDuration(limitWindowSeconds, expectedSeconds) {
         return (
@@ -2919,21 +2943,27 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     }
 
     function updateCodexDisplayState() {
-        codexFetched = codexUsageWindows.length > 0 || codexCreditsVisible;
-        if (!codexFetched) return;
+        codexFetched =
+            codexUsageWindows.length > 0 ||
+            codexCreditsVisible ||
+            codexResetAvailableCount != null ||
+            (codexResetCredits?.length ?? 0) > 0;
 
         const section = document.getElementById("codex-section");
-        if (section) section.style.marginTop = powFetched ? "10px" : "0";
-        if (!powFetched) {
-            setIconColors("#C26FFD", "#A855F7");
-            const powSection = document.getElementById("pow-section");
-            if (powSection) powSection.style.display = "none";
+        if (section) {
+            section.style.display = codexFetched ? "block" : "none";
+            section.style.marginTop = powFetched ? "10px" : "0";
         }
+        if (!codexFetched || !isCodexMode || powFetched) return;
+
+        setIconColors("#C26FFD", "#A855F7");
+        const powSection = document.getElementById("pow-section");
+        if (powSection) powSection.style.display = "none";
     }
 
     function updateCodexInfo(windows) {
         const container = document.getElementById("codex-windows-container");
-        if (!container) return;
+        if (!container || windows.length === 0) return;
 
         const now = Date.now();
         codexUsageWindows = windows.map((window) => ({
@@ -2978,7 +3008,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     }
 
     function updateCodexCredits(credits) {
-        if (!isCodexMode) return;
         const container = document.getElementById("codex-credits-container");
         const valueEl = document.getElementById("codex-credits-value");
         if (!container || !valueEl) return;
@@ -2989,7 +3018,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 : typeof credits.balance === "number"
                   ? String(credits.balance)
                   : "");
-        if (balanceRaw) {
+        if (Number(balanceRaw) > 0) {
             valueEl.innerText = balanceRaw;
             container.style.display = "block";
             codexCreditsVisible = true;
@@ -2998,6 +3027,47 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             container.style.display = "none";
             codexCreditsVisible = false;
         }
+        updateCodexDisplayState();
+    }
+
+    function updateCodexResetCredits(resetCredits) {
+        if (!resetCredits || typeof resetCredits !== "object") return;
+
+        if (Number.isFinite(resetCredits.available_count)) {
+            codexResetAvailableCount = Math.max(
+                0,
+                Math.floor(resetCredits.available_count),
+            );
+        }
+        if (Array.isArray(resetCredits.credits)) {
+            codexResetCredits = resetCredits.credits.filter(
+                (credit) => credit?.status === "available",
+            );
+        }
+
+        const container = document.getElementById(
+            "codex-reset-credits-container",
+        );
+        const count = document.getElementById("codex-reset-credits-count");
+        const expirations = document.getElementById(
+            "codex-reset-credits-expirations",
+        );
+        const detailsLink = document.getElementById("codex-reset-credits-link");
+        if (!container || !count || !expirations || !detailsLink) return;
+
+        const availableCredits = codexResetCredits ?? [];
+        count.innerText = `${codexResetAvailableCount ?? availableCredits.length}次`;
+        expirations.innerText = availableCredits
+            .map(
+                (credit, index) =>
+                    `第${index + 1}次到期：${formatCodexAbsoluteTime(credit.expires_at) || "..."}`,
+            )
+            .join("\n");
+        detailsLink.style.display =
+            availableCredits.length === 0 && codexResetAvailableCount > 0
+                ? "block"
+                : "none";
+        container.style.display = "block";
         updateCodexDisplayState();
     }
 
@@ -3713,19 +3783,36 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         }
 
         if (
-            requestUrl.includes("/backend-api/wham/usage") &&
+            /\/backend-api\/wham\/usage\/?(?:[?#]|$)/.test(requestUrl) &&
             finalMethod === "GET" &&
             response.ok
         ) {
+            if (!isChatgptMode && !isCodexMode) return response;
             try {
                 const data = await response.clone().json();
-                if (isCodexMode) {
-                    updateCodexInfo(getCodexUsageWindows(data));
-                    updateCodexCredits(data?.credits);
-                }
+                updateCodexInfo(getCodexUsageWindows(data));
+                updateCodexCredits(data?.credits);
+                updateCodexResetCredits(data?.rate_limit_reset_credits);
                 return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 响应出错:", e);
+                return response;
+            }
+        }
+
+        if (
+            /\/backend-api\/wham\/rate-limit-reset-credits\/?(?:[?#]|$)/.test(
+                requestUrl,
+            ) &&
+            finalMethod === "GET" &&
+            response.ok
+        ) {
+            if (!isChatgptMode && !isCodexMode) return response;
+            try {
+                updateCodexResetCredits(await response.clone().json());
+                return response;
+            } catch (e) {
+                console.error("[CheckerNext] 处理 Codex 重置机会响应出错:", e);
                 return response;
             }
         }
