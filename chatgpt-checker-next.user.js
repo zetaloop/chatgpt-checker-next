@@ -649,7 +649,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     const scheduleState=()=>{
         if(stateScheduled)return;
         stateScheduled=!0;
-        queueMicrotask(()=>{stateScheduled=!1;emitState()});
+        queueMicrotask(()=>{try{emitState()}finally{stateScheduled=!1}});
     };
     const register=conversation=>{
         if(!conversation)return;
