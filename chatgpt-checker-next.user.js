@@ -616,7 +616,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     const conversations=new Map;
     const customModels=new Set;
     const originOverrides=new Map;
-    let lastConversation,newConversation,stateScheduled=!1;
+    let newConversation,stateScheduled=!1;
     const getServerId=conversation=>typeof conversation.serverId$==="function"?conversation.serverId$():null;
     const getOrigin=conversation=>{
         __CONVERSATION_ORIGIN__(conversation);
@@ -660,7 +660,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             const origin=originOverrides.get(conversation.id);
             if(origin)originOverrides.set(serverId,origin);
         }else newConversation=conversation;
-        if(lastConversation!==conversation){lastConversation=conversation;scheduleState()}
+        scheduleState();
     };
     const getTurns=()=>{
         const conversation=getCurrentConversation();
@@ -930,10 +930,18 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         pro: "chatgptpro",
         free_workspace: "chatgptfreeworkspaceplan",
         team: "chatgptteamplan",
+        self_serve_business_prolite: "chatgptteamplan",
+        self_serve_business_usage_based: "chatgptteamplan",
+        sci: "chatgptsciplan",
         business: "chatgptbusiness_flat",
+        enterprise_cbp_usage_based: "chatgptbusiness_flat",
+        enterprise_cbp_automation: "chatgptbusiness_flat",
         hc: "chatgpthc_flat",
         finserv: "chatgptfinserv_flat",
+        ent26: "chatgptent26",
         education: "chatgpteducation_flat",
+        edu_plus: "chatgptedu_plus",
+        edu_pro: "chatgptedu_pro",
         quorum: "chatgptquorumplan",
         enterprise: "chatgptenterpriseplan",
         edu: "chatgpteduplan",
@@ -2023,10 +2031,18 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     <option value="pro">Pro</option>
                     <option value="free_workspace">Free Workspace</option>
                     <option value="team">Team</option>
+                    <option value="self_serve_business_prolite">Self-serve Pro Lite</option>
+                    <option value="self_serve_business_usage_based">Self-serve Usage</option>
+                    <option value="sci">SCI</option>
                     <option value="business">Business</option>
+                    <option value="enterprise_cbp_usage_based">Enterprise Usage</option>
+                    <option value="enterprise_cbp_automation">Enterprise Automation</option>
                     <option value="hc">HC</option>
                     <option value="finserv">Finserv</option>
+                    <option value="ent26">ENT26</option>
                     <option value="education">Education</option>
+                    <option value="edu_plus">EDU Plus</option>
+                    <option value="edu_pro">EDU Pro</option>
                     <option value="quorum">Quorum</option>
                     <option value="enterprise">Enterprise (弃用)</option>
                     <option value="edu">Edu (弃用)</option>
