@@ -49,6 +49,11 @@
         "checker-next-chatgpt-import-map-cache";
     const CHATGPT_MODULE_INJECTION_ENABLED_KEY =
         "checker-next-chatgpt-module-injection-enabled";
+    const CHATGPT_COPY_BUTTON_ENABLED_KEY =
+        "checker-next-chatgpt-copy-button-enabled";
+    const CHATGPT_COPY_ICON_ID = "ce3544";
+    const CHATGPT_COPY_SUCCESS_ICON_ID = "fa1dbd";
+    const CHATGPT_COPY_ERROR_ICON_ID = "85f94b";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
         "checker-next-runtime-model-state";
     const CHATGPT_RUNTIME_MODEL_REQUEST_EVENT =
@@ -59,6 +64,9 @@
     let chatgptModuleInjectionEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_MODULE_INJECTION_ENABLED_KEY) !== "false";
+    let chatgptCopyButtonEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_COPY_BUTTON_ENABLED_KEY) !== "false";
     let chatgptRuntimeModelState;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
@@ -601,6 +609,15 @@
         const originDecisionMatch = singleMatch(
             /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{return ([A-Za-z$_][\w$]*)\(\{conversationOrigin:([A-Za-z$_][\w$]*)\(\2\),isNewConversation:([A-Za-z$_][\w$]*)\(\2\),conversationIsLoading:([A-Za-z$_][\w$]*)\(\2\),modelSlug:([A-Za-z$_][\w$]*)\(\2\)\}\)\}/g,
         );
+        const threadSelectorsMatch = singleMatch(
+            /getCurrentLeafId:\s*[A-Za-z$_][\w$]*\(\s*([A-Za-z$_][\w$]*)\s*=>\s*\{\s*let\s+[A-Za-z$_][\w$]*\s*=\s*([A-Za-z$_][\w$]*)\.getTree\(\1\)/g,
+        );
+        const threadGetterMatch = singleMatch(
+            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\)\)\{let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\2,\3\);return \3\.threads\[\5\]\}/g,
+        );
+        const messageTextMatch = singleMatch(
+            /function\s+([A-Za-z_$][\w$]*)\s*\(\s*[A-Za-z_$][\w$]*\s*,\s*[A-Za-z_$][\w$]*\s*=\s*\{\s*shouldGetTextFromContentReferences:\s*!1\s*,\s*shouldGetVisibleText:\s*!1\s*\}\s*\)\s*\{/g,
+        );
         if (
             !surfaceSelectorMatch ||
             !modelSetterMatch ||
@@ -611,7 +628,10 @@
             !surfaceModeMatch ||
             !surfaceSwitchMatch ||
             !threadMutatorMatch ||
-            !originDecisionMatch
+            !originDecisionMatch ||
+            !threadSelectorsMatch ||
+            !threadGetterMatch ||
+            !messageTextMatch
         ) {
             return null;
         }
@@ -685,7 +705,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     };
     const getCurrentConversation=()=>{
         const routeId=globalThis.location.pathname.match(/\\/c\\/([^/?#]+)/)?.[1];
-        if(routeId)return conversations.get(routeId);
+        if(routeId)return __THREAD_GETTER__(routeId)??conversations.get(routeId);
         return newConversation&&getServerId(newConversation)==null?newConversation:void 0;
     };
     const emitState=error=>{
@@ -718,6 +738,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         }else newConversation=conversation;
         if(lastConversation!==conversation){lastConversation=conversation;scheduleState()}
     };
+    const getTurns=()=>{
+        const conversation=getCurrentConversation();
+        return conversation?__THREAD_SELECTORS__.getConversationTurns(conversation):[];
+    };
+    const getMessageText=message=>__MESSAGE_TEXT__(message,{shouldGetTextFromContentReferences:!0,shouldGetVisibleText:!0});
     globalThis.addEventListener("checker-next-runtime-model-request",()=>emitState());
     globalThis.addEventListener("checker-next-runtime-model-set",event=>{
         const conversation=getCurrentConversation();
@@ -740,7 +765,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     return{
         register,
         allows:model=>customModels.has(model),
-        getOrigin
+        getOrigin,
+        getTurns,
+        getMessageText
     };
 })();
 `;
@@ -754,6 +781,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             ["__SURFACE_MODE__", surfaceModeMatch[1]],
             ["__THREAD_MUTATOR__", threadMutatorMatch[2]],
             ["__ORIGIN_ENUM__", threadMutatorMatch[4]],
+            ["__THREAD_SELECTORS__", threadSelectorsMatch[2]],
+            ["__THREAD_GETTER__", threadGetterMatch[1]],
+            ["__MESSAGE_TEXT__", messageTextMatch[1]],
         ]) {
             bridgeSource = bridgeSource.split(placeholder).join(value);
         }
@@ -793,6 +823,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
     function getChatgptImportPatchItems(settings) {
         const items = ["运行时模型切换"];
+        if (chatgptCopyButtonEnabled) items.push("复制全文");
         if (settings?.unlockThemeColors) items.push("解锁全部主题色");
         if (settings?.fakePlan) {
             items.push(`假装会员：${settings.fakePlan}`);
@@ -1259,6 +1290,156 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         pageWindow.addEventListener("load", updateChatgptInjectionStatus, {
             once: true,
         });
+    }
+
+    function getChatgptMessageText(message) {
+        const role = message?.author?.role;
+        const metadata = message?.metadata;
+        if (
+            message?.clientMetadata?.err ||
+            (role !== "user" && role !== "assistant") ||
+            (role === "assistant" && message.recipient !== "all") ||
+            metadata?.reasoning_status ||
+            metadata?.is_thinking_preamble_message
+        ) {
+            return "";
+        }
+        return (
+            pageWindow.__checkerNextRuntimeModelBridge?.getMessageText?.(
+                message,
+            ) ?? ""
+        );
+    }
+
+    function formatChatgptConversation(turns) {
+        let transcript = "";
+        for (const turn of turns ?? []) {
+            let role;
+            let text = "";
+            for (const message of turn?.messages ?? []) {
+                const messageText = getChatgptMessageText(message);
+                if (!messageText) continue;
+                role ??= message.author.role === "user" ? "用户" : "助手";
+                text = text ? `${text}\n\n${messageText}` : messageText;
+            }
+            if (!text) continue;
+            const formattedTurn = `「${role}」\n${text}`;
+            transcript = transcript
+                ? `${transcript}\n\n========\n\n${formattedTurn}`
+                : formattedTurn;
+        }
+        if (!transcript) throw new Error("会话中没有可复制的正文");
+        return transcript;
+    }
+
+    function setChatgptCopyButtonState(button, state) {
+        const use = button.querySelector("use");
+        const href = use?.getAttribute("href");
+        if (use && href) {
+            use.setAttribute(
+                "href",
+                `${href.split("#")[0]}#${
+                    state === "success"
+                        ? CHATGPT_COPY_SUCCESS_ICON_ID
+                        : state === "error"
+                          ? CHATGPT_COPY_ERROR_ICON_ID
+                          : CHATGPT_COPY_ICON_ID
+                }`,
+            );
+        }
+        button.classList.toggle(
+            "hover:bg-token-bg-tertiary!",
+            state !== "idle",
+        );
+        const label =
+            state === "loading"
+                ? "正在复制"
+                : state === "success"
+                  ? "已复制"
+                  : state === "error"
+                    ? "复制失败"
+                    : "复制全文";
+        button.setAttribute("aria-label", label);
+        button.title = label;
+    }
+
+    function syncChatgptCopyButton() {
+        const existing = document.getElementById(
+            "checker-next-copy-conversation-button",
+        );
+        if (
+            !chatgptCopyButtonEnabled ||
+            !pageWindow.location.pathname.startsWith("/c/")
+        ) {
+            existing?.remove();
+            return;
+        }
+        const turns = chatgptModuleInjectionEnabled
+            ? pageWindow.__checkerNextRuntimeModelBridge?.getTurns?.()
+            : undefined;
+        const ready = Array.isArray(turns) && turns.length > 0;
+        if (existing) {
+            if (existing instanceof HTMLButtonElement) {
+                existing.disabled = !ready;
+            }
+            return;
+        }
+
+        const optionsButton = document.querySelector(
+            'button[data-testid="conversation-options-button"]',
+        );
+        if (!(optionsButton instanceof HTMLButtonElement)) return;
+
+        const button = optionsButton.cloneNode(true);
+        if (!(button instanceof HTMLButtonElement)) return;
+        const nativeCopyIcon = document.querySelector(
+            'button[data-testid="copy-turn-action-button"] svg',
+        );
+        if (nativeCopyIcon) {
+            button.replaceChildren(nativeCopyIcon.cloneNode(true));
+        } else {
+            const use = button.querySelector("use");
+            const href = use?.getAttribute("href");
+            if (!use || !href) return;
+            use.setAttribute(
+                "href",
+                `${href.split("#")[0]}#${CHATGPT_COPY_ICON_ID}`,
+            );
+        }
+
+        button.id = "checker-next-copy-conversation-button";
+        button.type = "button";
+        button.removeAttribute("data-testid");
+        button.removeAttribute("data-state");
+        button.removeAttribute("aria-controls");
+        button.removeAttribute("aria-expanded");
+        button.removeAttribute("aria-haspopup");
+        button.disabled = !ready;
+        setChatgptCopyButtonState(button, "idle");
+        let copying = false;
+        button.addEventListener("click", async () => {
+            if (copying) return;
+            copying = true;
+            setChatgptCopyButtonState(button, "loading");
+            try {
+                const currentTurns =
+                    pageWindow.__checkerNextRuntimeModelBridge?.getTurns?.();
+                if (!Array.isArray(currentTurns)) {
+                    throw new Error("当前会话尚未载入");
+                }
+                await pageWindow.navigator.clipboard.writeText(
+                    formatChatgptConversation(currentTurns),
+                );
+                setChatgptCopyButtonState(button, "success");
+            } catch (error) {
+                console.error("[CheckerNext] 复制会话失败:", error);
+                setChatgptCopyButtonState(button, "error");
+            } finally {
+                copying = false;
+            }
+            setTimeout(() => setChatgptCopyButtonState(button, "idle"), 1000);
+        });
+        optionsButton.parentElement?.before(button);
     }
 
     // 全局状态：记录弹窗是否正在显示
@@ -1890,6 +2071,47 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-copy-button-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>复制按钮
+                <span id="chatgpt-copy-button-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-copy-button-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-copy-button-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-copy-button-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-unlock-theme-colors-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>解锁所有主题色
                 <span id="chatgpt-unlock-theme-colors-tooltip" style="
@@ -2280,6 +2502,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         );
         chatgptModuleInjectionTooltipBox.style.whiteSpace = "pre-line";
 
+        const chatgptCopyButtonTooltipBox = createTooltip(
+            "chatgpt-copy-button-tooltip-box",
+            "在会话右上角显示复制全文按钮，以「用户」「助手」分隔正文。需要模块注入。",
+        );
+
         // 创建解锁主题色提示框
         const chatgptUnlockThemeColorsTooltipBox = createTooltip(
             "chatgpt-unlock-theme-colors-tooltip-box",
@@ -2389,6 +2616,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 chatgptModuleInjectionTooltipBox,
             );
             bindTooltipEvents(
+                "chatgpt-copy-button-tooltip",
+                chatgptCopyButtonTooltipBox,
+            );
+            bindTooltipEvents(
                 "chatgpt-unlock-theme-colors-tooltip",
                 chatgptUnlockThemeColorsTooltipBox,
             );
@@ -2423,6 +2654,29 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             });
         }
 
+        function updateChatgptCopyButtonToggle() {
+            const toggle = document.getElementById(
+                "chatgpt-copy-button-toggle",
+            );
+            const slider = document.getElementById(
+                "chatgpt-copy-button-slider",
+            );
+            const sliderDot = document.getElementById(
+                "chatgpt-copy-button-slider-dot",
+            );
+            if (!(toggle instanceof HTMLInputElement) || !slider || !sliderDot)
+                return;
+
+            toggle.checked = chatgptCopyButtonEnabled;
+            toggle.disabled = !chatgptModuleInjectionEnabled;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                chatgptModuleInjectionEnabled && chatgptCopyButtonEnabled,
+            );
+            syncChatgptCopyButton();
+        }
+
         function bindChatgptModuleInjectionToggle() {
             const toggle = document.getElementById(
                 "chatgpt-module-injection-toggle",
@@ -2436,12 +2690,14 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             if (!(toggle instanceof HTMLInputElement) || !slider || !sliderDot)
                 return;
 
-            const apply = () =>
+            const apply = () => {
                 updateGrokDevToolsSliderStyle(
                     slider,
                     sliderDot,
                     chatgptModuleInjectionEnabled,
                 );
+                updateChatgptCopyButtonToggle();
+            };
 
             toggle.checked = chatgptModuleInjectionEnabled;
             apply();
@@ -2471,6 +2727,24 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
                 apply();
                 updateChatgptRuntimeModelControls();
+            });
+        }
+
+        function bindChatgptCopyButtonToggle() {
+            const toggle = document.getElementById(
+                "chatgpt-copy-button-toggle",
+            );
+            if (!(toggle instanceof HTMLInputElement)) return;
+
+            updateChatgptCopyButtonToggle();
+            toggle.addEventListener("change", () => {
+                chatgptCopyButtonEnabled = toggle.checked;
+                localStorage.setItem(
+                    CHATGPT_COPY_BUTTON_ENABLED_KEY,
+                    String(chatgptCopyButtonEnabled),
+                );
+                updateChatgptCopyButtonToggle();
+                updateChatgptInjectionStatus();
             });
         }
 
@@ -2774,6 +3048,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
         if (isChatgptMode) {
             bindChatgptModuleInjectionToggle();
+            bindChatgptCopyButtonToggle();
             bindChatgptRuntimeModelControls();
             bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
@@ -2790,6 +3065,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (!document.getElementById("checker-next-displayBox")) {
             createElements();
         }
+        if (isChatgptMode) syncChatgptCopyButton();
     });
 
     function startObserverWhenReady() {
