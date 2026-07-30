@@ -629,7 +629,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     };
     const getCurrentConversation=()=>{
         const routeId=globalThis.location.pathname.match(/\\/c\\/([^/?#]+)/)?.[1];
-        if(routeId)return __THREAD_GETTER__(routeId)??conversations.get(routeId);
+        if(routeId)return conversations.get(routeId);
         return newConversation&&getServerId(newConversation)==null?newConversation:void 0;
     };
     const emitState=error=>{
@@ -664,7 +664,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     };
     const getTurns=()=>{
         const conversation=getCurrentConversation();
-        return conversation?__THREAD_SELECTORS__.getConversationTurns(conversation):[];
+        const thread=conversation&&__THREAD_GETTER__(conversation.id);
+        return thread?__THREAD_SELECTORS__.getConversationTurns(thread):[];
     };
     const getMessageText=message=>__MESSAGE_TEXT__(message,{shouldGetTextFromContentReferences:!0,shouldGetVisibleText:!0});
     globalThis.addEventListener("checker-next-runtime-model-request",()=>emitState());
