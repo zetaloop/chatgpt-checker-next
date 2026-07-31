@@ -73,6 +73,8 @@
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
     let chatgptSelectionPopoverStyle;
+    let userRegionValue = null;
+    let priceRegionCode = null;
     let chatgptRuntimeModelState;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
@@ -1493,8 +1495,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 margin-left: 3px;
             ">?</span><br>
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
-            <span id="user-region-container" style="display: block">用户地区：<span id="user-region">...</span></span>
-            <span id="price-region-container" style="display: block">价格地区：<span id="price-region">...</span></span>
+            <span id="user-region-container" style="display: block">用户地区：<span id="user-region">${userRegionValue || "..."}</span></span>
+            <span id="price-region-container" style="display: block">价格地区：<span id="price-region">${priceRegionCode || "..."}</span></span>
         </div>
         <div id="chatgpt-runtime-model-section" style="margin-top: 10px;">
             <div style="margin-bottom: 4px;">
@@ -3735,41 +3737,37 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             : "...";
     }
 
-    let userRegionValue = null;
     function updateUserRegion(country, region) {
-        if (!isChatgptMode) return;
+        if (!isChatgptMode || typeof country !== "string" || !country.trim())
+            return;
+
+        const parts = [country.trim()];
+        if (typeof region === "string" && region.trim()) {
+            parts.push(region.trim());
+        }
+        userRegionValue = parts.join(" / ");
+
         const container = document.getElementById("user-region-container");
         const valueEl = document.getElementById("user-region");
         if (!container || !valueEl) return;
-
-        if (typeof country === "string" && country.trim()) {
-            const parts = [country.trim()];
-            if (typeof region === "string" && region.trim()) {
-                parts.push(region.trim());
-            }
-            userRegionValue = parts.join(" / ");
-        } else {
-            userRegionValue = null;
-        }
-
-        valueEl.innerText = userRegionValue || "...";
+        valueEl.innerText = userRegionValue;
         container.style.display = "block";
     }
 
-    let priceRegionCode = null;
     function updatePriceRegion(countryCode) {
-        if (!isChatgptMode) return;
+        if (
+            !isChatgptMode ||
+            typeof countryCode !== "string" ||
+            !countryCode.trim()
+        )
+            return;
+
+        priceRegionCode = countryCode.trim().toUpperCase();
+
         const container = document.getElementById("price-region-container");
         const valueEl = document.getElementById("price-region");
         if (!container || !valueEl) return;
-
-        if (typeof countryCode === "string" && countryCode.trim()) {
-            priceRegionCode = countryCode.trim().toUpperCase();
-        } else {
-            priceRegionCode = null;
-        }
-
-        valueEl.innerText = priceRegionCode || "...";
+        valueEl.innerText = priceRegionCode;
         container.style.display = "block";
     }
 
