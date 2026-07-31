@@ -51,6 +51,8 @@
         "checker-next-chatgpt-module-injection-enabled";
     const CHATGPT_COPY_BUTTON_ENABLED_KEY =
         "checker-next-chatgpt-copy-button-enabled";
+    const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
+        "checker-next-chatgpt-selection-popover-disabled";
     const CHATGPT_COPY_ICON_ID = "ce3544";
     const CHATGPT_COPY_SUCCESS_ICON_ID = "fa1dbd";
     const CHATGPT_COPY_ERROR_ICON_ID = "85f94b";
@@ -67,6 +69,10 @@
     let chatgptCopyButtonEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_COPY_BUTTON_ENABLED_KEY) !== "false";
+    let chatgptSelectionPopoverDisabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
+    let chatgptSelectionPopoverStyle;
     let chatgptRuntimeModelState;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
@@ -83,6 +89,11 @@
 
     if (isChatgptMode) {
         installCachedChatgptImportMapPatch();
+        chatgptSelectionPopoverStyle = GM_addElement("style", {
+            media: chatgptSelectionPopoverDisabled ? "all" : "not all",
+            textContent:
+                '[aria-live="polite"][popover="manual"][style*="position-anchor: --targeted-action-selection"] { display: none !important; }',
+        });
     }
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
@@ -1970,6 +1981,47 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-selection-popover-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>禁用划词悬浮窗
+                <span id="chatgpt-selection-popover-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-selection-popover-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-selection-popover-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-selection-popover-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-unlock-theme-colors-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>解锁所有主题色
                 <span id="chatgpt-unlock-theme-colors-tooltip" style="
@@ -2364,7 +2416,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
         const chatgptCopyButtonTooltipBox = createTooltip(
             "chatgpt-copy-button-tooltip-box",
-            "在会话右上角显示复制全文按钮，以「用户」「助手」分隔正文。需要模块注入。",
+            "在右上角显示复制全文按钮。",
+        );
+
+        const chatgptSelectionPopoverTooltipBox = createTooltip(
+            "chatgpt-selection-popover-tooltip-box",
+            "不显示［询问 ChatGPT丨开始写作］。",
         );
 
         // 创建解锁主题色提示框
@@ -2469,6 +2526,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 chatgptCopyButtonTooltipBox,
             );
             bindTooltipEvents(
+                "chatgpt-selection-popover-tooltip",
+                chatgptSelectionPopoverTooltipBox,
+            );
+            bindTooltipEvents(
                 "chatgpt-unlock-theme-colors-tooltip",
                 chatgptUnlockThemeColorsTooltipBox,
             );
@@ -2484,7 +2545,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             }
         }
 
-        function bindGrokToggle(id, enabled, storageKey, setEnabled) {
+        function bindToggle(id, enabled, storageKey, setEnabled) {
             const toggle = document.getElementById(`${id}-toggle`);
             const slider = document.getElementById(`${id}-slider`);
             const sliderDot = document.getElementById(`${id}-slider-dot`);
@@ -2811,7 +2872,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         }
 
         if (isGrokMode) {
-            bindGrokToggle(
+            bindToggle(
                 "grok-dev-tools",
                 grokDevToolsEnabled,
                 GROK_DEV_TOOLS_KEY,
@@ -2819,7 +2880,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     grokDevToolsEnabled = value;
                 },
             );
-            bindGrokToggle(
+            bindToggle(
                 "grok-all-models",
                 grokAllModelsEnabled,
                 GROK_ALL_MODELS_KEY,
@@ -2827,7 +2888,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     grokAllModelsEnabled = value;
                 },
             );
-            bindGrokToggle(
+            bindToggle(
                 "grok-early-access",
                 grokEarlyAccessEnabled,
                 GROK_EARLY_ACCESS_KEY,
@@ -2835,7 +2896,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     grokEarlyAccessEnabled = value;
                 },
             );
-            bindGrokToggle(
+            bindToggle(
                 "grok-async-chat",
                 grokAsyncChatEnabled,
                 GROK_ASYNC_CHAT_KEY,
@@ -2844,7 +2905,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 },
             );
             for (const membership of grokMemberships) {
-                bindGrokToggle(
+                bindToggle(
                     membership.id,
                     membership.enabled,
                     membership.storageKey,
@@ -2884,6 +2945,17 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (isChatgptMode) {
             bindChatgptModuleInjectionToggle();
             bindChatgptCopyButtonToggle();
+            bindToggle(
+                "chatgpt-selection-popover",
+                chatgptSelectionPopoverDisabled,
+                CHATGPT_SELECTION_POPOVER_DISABLED_KEY,
+                (value) => {
+                    chatgptSelectionPopoverDisabled = value;
+                    chatgptSelectionPopoverStyle.media = value
+                        ? "all"
+                        : "not all";
+                },
+            );
             bindChatgptRuntimeModelControls();
             bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
