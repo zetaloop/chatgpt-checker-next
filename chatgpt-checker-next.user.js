@@ -40,8 +40,6 @@
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
     const isGrokMode = currentPageMode === MODE_GROK;
-    const CHATGPT_UNLOCK_THEME_COLORS_KEY =
-        "checker-next-chatgpt-unlock-theme-colors";
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
         "checker-next-chatgpt-fake-plan-enabled";
@@ -361,9 +359,6 @@
     let grokAsyncChatEnabled =
         isGrokMode && localStorage.getItem(GROK_ASYNC_CHAT_KEY) === "true";
 
-    let chatgptUnlockThemeColorsEnabled =
-        isChatgptMode &&
-        localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) === "true";
     const CHATGPT_AGE_VERIFICATION_SETTING_KEY =
         "checker-next-chatgpt-age-verification-setting";
     let chatgptAgeVerificationSettingEnabled =
@@ -423,17 +418,6 @@
             `new URL('${normalizedBase}assets/`,
         );
         return patched;
-    }
-
-    function patchChatgptUnlockThemeColorsAssetSource(sourceText) {
-        const themeListPattern =
-            /([A-Za-z$_][\w$]*)=\[`default`,`blue`,`green`,`yellow`,`pink`,`orange`\],([A-Za-z$_][\w$]*)=\[`purple`\],([A-Za-z$_][\w$]*)=\[`black`\]/;
-        if (!themeListPattern.test(sourceText)) return null;
-        return sourceText.replace(
-            themeListPattern,
-            (_match, baseVarName, purpleVarName, blackVarName) =>
-                `${baseVarName}=[\`default\`,\`blue\`,\`green\`,\`yellow\`,\`pink\`,\`orange\`,\`purple\`,\`black\`],${purpleVarName}=[],${blackVarName}=[]`,
-        );
     }
 
     function patchChatgptFakePlanAssetSource(sourceText) {
@@ -750,9 +734,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const fakePlanEnabled =
             localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
         return {
-            unlockThemeColors:
-                localStorage.getItem(CHATGPT_UNLOCK_THEME_COLORS_KEY) ===
-                "true",
             fakePlan: fakePlanEnabled
                 ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
                 : "",
@@ -762,7 +743,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     function getChatgptImportPatchItems(settings) {
         const items = ["运行时模型切换"];
         if (chatgptCopyButtonEnabled) items.push("复制全文");
-        if (settings?.unlockThemeColors) items.push("解锁全部主题色");
         if (settings?.fakePlan) {
             items.push(`假装会员：${settings.fakePlan}`);
         }
@@ -770,14 +750,13 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     }
 
     function getChatgptImportPatchSignature() {
-        const { unlockThemeColors, fakePlan } = getChatgptImportPatchSettings();
+        const { fakePlan } = getChatgptImportPatchSettings();
         const transformSignature = [
             rewriteModuleImports,
             patchChatgptRuntimeModelAssetSource,
-            patchChatgptUnlockThemeColorsAssetSource,
             patchChatgptFakePlanAssetSource,
         ].join("\n");
-        return `${transformSignature}\n${unlockThemeColors ? "1" : "0"}:${fakePlan}`;
+        return `${transformSignature}\n${fakePlan}`;
     }
 
     function setChatgptImportMapPatchCache(value) {
@@ -838,9 +817,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
     function getChatgptAssetPatchFunctions() {
         const patchFunctions = [patchChatgptRuntimeModelAssetSource];
-        if (chatgptUnlockThemeColorsEnabled) {
-            patchFunctions.push(patchChatgptUnlockThemeColorsAssetSource);
-        }
         if (isChatgptFakePlanRuntimeEnabled()) {
             patchFunctions.push(patchChatgptFakePlanAssetSource);
         }
@@ -891,9 +867,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     const patchLabel =
                         patch === patchChatgptRuntimeModelAssetSource
                             ? "运行时模型"
-                            : patch === patchChatgptUnlockThemeColorsAssetSource
-                              ? "主题色解锁"
-                              : "假装会员";
+                            : "假装会员";
                     setChatgptImportMapPatchCache(null);
                     chatgptImportPatchFailure = `${patchLabel}补丁与当前 ChatGPT 模块不匹配。`;
                     updateChatgptInjectionStatus();
@@ -1137,7 +1111,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             color = injectionInstalled ? "#ffd700" : "#bbbbbb";
             description = injectionInstalled
                 ? `当前页面仍已注入：\n${installedItems}\n\n刷新页面后关闭模块注入。`
-                : "模块注入已关闭。\n\n运行时模型、主题色解锁和假装会员均不会生效。";
+                : "模块注入已关闭。\n\n运行时模型和假装会员均不会生效。";
         } else if (chatgptImportPatchFailure) {
             label = "注入失败";
             color = "#ff6b6b";
@@ -2024,47 +1998,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     "></span>
                 </label>
             </div>
-            <div id="chatgpt-unlock-theme-colors-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>解锁所有主题色
-                <span id="chatgpt-unlock-theme-colors-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-unlock-theme-colors-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-unlock-theme-colors-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-unlock-theme-colors-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
             <div id="chatgpt-fake-plan-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>假装
                 <select id="chatgpt-fake-plan-select" style="
@@ -2426,12 +2359,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             "不显示［询问 ChatGPT丨开始写作］。",
         );
 
-        // 创建解锁主题色提示框
-        const chatgptUnlockThemeColorsTooltipBox = createTooltip(
-            "chatgpt-unlock-theme-colors-tooltip-box",
-            "解锁粉色、橙色、紫色与黑色。",
-        );
-
         // 创建年龄验证提示框
         const chatgptAgeVerificationSettingTooltipBox = createTooltip(
             "chatgpt-age-verification-tooltip-box",
@@ -2530,10 +2457,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             bindTooltipEvents(
                 "chatgpt-selection-popover-tooltip",
                 chatgptSelectionPopoverTooltipBox,
-            );
-            bindTooltipEvents(
-                "chatgpt-unlock-theme-colors-tooltip",
-                chatgptUnlockThemeColorsTooltipBox,
             );
         }
 
@@ -2660,42 +2583,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             });
         }
 
-        function bindChatgptUnlockThemeColorsToggle() {
-            const container = document.getElementById(
-                "chatgpt-unlock-theme-colors-container",
-            );
-            const toggle = document.getElementById(
-                "chatgpt-unlock-theme-colors-toggle",
-            );
-            const slider = document.getElementById(
-                "chatgpt-unlock-theme-colors-slider",
-            );
-            const sliderDot = document.getElementById(
-                "chatgpt-unlock-theme-colors-slider-dot",
-            );
-            if (!container || !toggle || !slider || !sliderDot) return;
-
-            function apply() {
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    chatgptUnlockThemeColorsEnabled,
-                );
-            }
-
-            toggle.checked = chatgptUnlockThemeColorsEnabled;
-            apply();
-
-            toggle.addEventListener("change", function () {
-                chatgptUnlockThemeColorsEnabled = toggle.checked;
-                localStorage.setItem(
-                    CHATGPT_UNLOCK_THEME_COLORS_KEY,
-                    chatgptUnlockThemeColorsEnabled ? "true" : "false",
-                );
-                apply();
-                void prepareChatgptImportMapPatchCache();
-            });
-        }
         function bindChatgptAgeVerificationSettingToggle() {
             const container = document.getElementById(
                 "chatgpt-age-verification-container",
@@ -2959,7 +2846,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 },
             );
             bindChatgptRuntimeModelControls();
-            bindChatgptUnlockThemeColorsToggle();
             bindChatgptAgeVerificationSettingToggle();
             bindChatgptFakePlanSelect();
         }
