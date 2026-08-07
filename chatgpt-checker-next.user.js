@@ -439,7 +439,7 @@
         const lightAccountPlanTypePattern =
             /return this\.data\.lightAccount\.planType/;
         const sessionAccountPattern =
-            /([A-Za-z$_][\w$]*)=[A-Za-z$_][\w$]*\.session\?\.account;/;
+            /authStatus===[A-Za-z$_][\w$]*\.LoggedIn\)\{let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\.user,([A-Za-z$_][\w$]*)=\1\.session\?\.account;/;
         const requiredPatterns = [
             planTypePattern,
             hasPaidSubscriptionPattern,
@@ -481,7 +481,7 @@
 
         patched = patched.replace(
             sessionAccountPattern,
-            (match, accountVariable) =>
+            (match, _sessionVariable, accountVariable) =>
                 `${match}${accountVariable}&&(${accountVariable}.planType="${targetPlanType}");`,
         );
 
