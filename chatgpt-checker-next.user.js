@@ -74,6 +74,7 @@
     let userRegionValue = null;
     let priceRegionCode = null;
     let chatgptRuntimeModelState;
+    let chatgptFakePlanCatalog;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
     let chatgptPendingPatchSettings;
@@ -417,11 +418,88 @@
         return patched;
     }
 
+    function extractChatgptFakePlanCatalog(sourceText) {
+        const enumPattern =
+            /([A-Za-z$_][\w$]*)=function\(([A-Za-z$_][\w$]*)\)\{return ((?:\2\.[A-Z][A-Z0-9_]*=`[^`]*`,)+)\2\}\(\{\}\)/g;
+        const enums = [...sourceText.matchAll(enumPattern)].map((match) => ({
+            name: match[1],
+            entries: [
+                ...match[3].matchAll(
+                    /[A-Za-z$_][\w$]*\.([A-Z][A-Z0-9_]*)=`([^`]*)`/g,
+                ),
+            ].map((entry) => [entry[1], entry[2]]),
+        }));
+        const planSymbols = new Set(
+            [
+                ...sourceText.matchAll(
+                    /is[A-Za-z$_][\w$]*\(\)\{return this\.data\.subscriptionStatus\.planType===([A-Za-z$_][\w$]*)\.[A-Z][A-Z0-9_]*\}/g,
+                ),
+            ].map((match) => match[1]),
+        );
+        const planEnumIndexes = enums.flatMap(({ name }, index) =>
+            planSymbols.has(name) ? [index] : [],
+        );
+        if (planEnumIndexes.length !== 1 || planEnumIndexes[0] === 0) {
+            return null;
+        }
+
+        const planTypes = enums[planEnumIndexes[0]].entries.map(
+            ([planKey, planType]) => ({ planKey, planType }),
+        );
+        const subscriptions = enums[planEnumIndexes[0] - 1].entries;
+        const options = subscriptions.flatMap(
+            ([subscriptionKey, subscriptionPlan]) => {
+                const plan = planTypes
+                    .filter(
+                        ({ planKey }) =>
+                            subscriptionKey === planKey ||
+                            subscriptionKey.startsWith(`${planKey}_`),
+                    )
+                    .sort(
+                        (left, right) =>
+                            right.planKey.length - left.planKey.length,
+                    )[0];
+                return plan
+                    ? [{ subscriptionKey, subscriptionPlan, ...plan }]
+                    : [];
+            },
+        );
+        return options.length === subscriptions.length
+            ? { options, planTypes }
+            : null;
+    }
+
+    function findChatgptFakePlan(catalog, value) {
+        const subscription = catalog?.options.find(
+            ({ subscriptionPlan }) => subscriptionPlan === value,
+        );
+        if (subscription) return subscription;
+
+        const plan = catalog?.planTypes.find(
+            ({ planType }) => planType === value,
+        );
+        if (!plan) return undefined;
+        return catalog.options
+            .filter(
+                ({ planKey }) =>
+                    plan.planKey === planKey ||
+                    plan.planKey.startsWith(`${planKey}_`),
+            )
+            .sort(
+                (left, right) =>
+                    right.planKey.length - left.planKey.length ||
+                    left.subscriptionKey.length - right.subscriptionKey.length,
+            )[0];
+    }
+
     function patchChatgptFakePlanAssetSource(sourceText) {
-        const targetPlanType =
-            normalizeChatgptFakePlanType(chatgptFakePlanValue);
-        const targetSubscriptionPlan =
-            getFakeSubscriptionPlanByPlanType(targetPlanType);
+        const target = findChatgptFakePlan(
+            extractChatgptFakePlanCatalog(sourceText),
+            chatgptFakePlanValue,
+        );
+        if (!target) return null;
+
+        const { planType: targetPlanType, subscriptionPlan } = target;
         const hasPaid =
             targetPlanType !== "guest" &&
             targetPlanType !== "free" &&
@@ -468,7 +546,7 @@
 
         patched = patched.replace(
             subscriptionPlanPattern,
-            `subscriptionPlan:"${targetSubscriptionPlan}"`,
+            `subscriptionPlan:"${subscriptionPlan}"`,
         );
 
         patched = patched.replace(
@@ -682,10 +760,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     function getChatgptImportPatchSettings() {
         const fakePlanEnabled =
             localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
+        const fakePlan = getChatgptFakePlan(
+            localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro",
+        );
         return {
-            fakePlan: fakePlanEnabled
-                ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
-                : "",
+            fakePlan: fakePlanEnabled ? fakePlan?.subscriptionPlan || "" : "",
         };
     }
 
@@ -702,6 +781,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const { fakePlan } = getChatgptImportPatchSettings();
         const transformSignature = [
             rewriteModuleImports,
+            extractChatgptFakePlanCatalog,
+            findChatgptFakePlan,
             patchChatgptRuntimeModelAssetSource,
             patchChatgptRuntimeModelConversationAssetSource,
             patchChatgptFakePlanAssetSource,
@@ -725,7 +806,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (
             !cached ||
             typeof cached !== "object" ||
-            cached.signature !== getChatgptImportPatchSignature() ||
             !Array.isArray(cached.assets) ||
             cached.assets.length !== 2 ||
             cached.assets.some(
@@ -737,6 +817,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         ) {
             return;
         }
+        chatgptFakePlanCatalog = extractChatgptFakePlanCatalog(
+            cached.assets[0].sourceText,
+        );
+        if (cached.signature !== getChatgptImportPatchSignature()) return;
 
         const assetBaseUrl = cached.assets[0].assetUrl.slice(
             0,
@@ -894,8 +978,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
         const targets = chatgptImportPatchTargets;
         const assetUrls = targets.map((target) => target.assetUrl);
-        const signature = getChatgptImportPatchSignature();
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
+        if (!chatgptFakePlanCatalog && Array.isArray(cached?.assets)) {
+            chatgptFakePlanCatalog = extractChatgptFakePlanCatalog(
+                cached.assets[0]?.sourceText || "",
+            );
+            updateChatgptFakePlanControls();
+            chatgptPendingPatchSettings = getChatgptImportPatchSettings();
+        }
+        const signature = getChatgptImportPatchSignature();
         if (
             cached?.assets?.every(
                 (asset, index) => asset.assetUrl === assetUrls[index],
@@ -923,6 +1014,23 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 const target = targets[index];
                 const assetUrl = assetUrls[index];
                 let sourceText = await response.text();
+                if (target.assetType === "shared") {
+                    chatgptFakePlanCatalog =
+                        extractChatgptFakePlanCatalog(sourceText);
+                    if (!chatgptFakePlanCatalog) {
+                        setChatgptImportMapPatchCache(null);
+                        chatgptImportPatchFailure =
+                            "假装会员列表与当前 ChatGPT 模块不匹配。";
+                        updateChatgptInjectionStatus();
+                        console.error(
+                            "[CheckerNext] 未能读取 ChatGPT 会员枚举。",
+                        );
+                        return;
+                    }
+                    updateChatgptFakePlanControls();
+                    chatgptPendingPatchSettings =
+                        getChatgptImportPatchSettings();
+                }
                 for (const patch of getChatgptAssetPatchFunctions(
                     target.assetType,
                 )) {
@@ -961,7 +1069,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             if (!isChatgptImportPatchEnabled()) return;
             setChatgptImportMapPatchCache({
                 assets,
-                signature,
+                signature: getChatgptImportPatchSignature(),
             });
             chatgptImportPatchNeedsReload = true;
             updateChatgptInjectionStatus();
@@ -980,59 +1088,84 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     let chatgptAgeVerificationSettingFetched = false;
     let chatgptAgeVerificationSettingDisplayValue = null;
 
-    const CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP = Object.freeze({
-        guest: "chatgptguestplan",
-        free: "chatgptfreeplan",
-        go: "chatgptgoplan",
-        plus: "chatgptplusplan",
-        prolite: "chatgptprolite",
-        pro: "chatgptpro",
-        free_workspace: "chatgptfreeworkspaceplan",
-        team: "chatgptteamplan",
-        self_serve_business_prolite: "chatgptteamplan",
-        self_serve_business_usage_based: "chatgptteamplan",
-        sci: "chatgptsciplan",
-        business: "chatgptbusiness_flat",
-        enterprise_cbp_usage_based: "chatgptbusiness_flat",
-        enterprise_cbp_automation: "chatgptbusiness_flat",
-        hc: "chatgpthc_flat",
-        finserv: "chatgptfinserv_flat",
-        ent26: "chatgptent26",
-        education: "chatgpteducation_flat",
-        edu_plus: "chatgptedu_plus",
-        edu_pro: "chatgptedu_pro",
-        quorum: "chatgptquorumplan",
-        enterprise: "chatgptenterpriseplan",
-        edu: "chatgpteduplan",
-        k12: "chatgptk12plan",
-    });
-
-    function normalizeChatgptFakePlanType(value) {
-        if (
-            typeof value === "string" &&
-            Object.hasOwn(CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP, value)
-        ) {
-            return value;
+    function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
+        if (enabled) {
+            slider.style.backgroundColor = "#4CAF50";
+            sliderDot.style.transform = "translateX(12px)";
+        } else {
+            slider.style.backgroundColor = "#555";
+            sliderDot.style.transform = "translateX(0)";
         }
-        return "pro";
     }
 
-    function getFakeSubscriptionPlanByPlanType(planType) {
-        const normalizedPlanType = normalizeChatgptFakePlanType(planType);
-        return CHATGPT_FAKE_PLAN_SUBSCRIPTION_PLAN_MAP[normalizedPlanType];
+    function getChatgptFakePlan(value) {
+        return findChatgptFakePlan(chatgptFakePlanCatalog, value);
+    }
+
+    function updateChatgptFakePlanControls() {
+        const select = document.getElementById("chatgpt-fake-plan-select");
+        const toggle = document.getElementById("chatgpt-fake-plan-toggle");
+        const slider = document.getElementById("chatgpt-fake-plan-slider");
+        const sliderDot = document.getElementById(
+            "chatgpt-fake-plan-slider-dot",
+        );
+        if (!(select instanceof HTMLSelectElement)) return;
+
+        const selectedPlan = getChatgptFakePlan(chatgptFakePlanValue);
+        if (
+            selectedPlan &&
+            chatgptFakePlanValue !== selectedPlan.subscriptionPlan
+        ) {
+            chatgptFakePlanValue = selectedPlan.subscriptionPlan;
+            localStorage.setItem(CHATGPT_FAKE_PLAN_KEY, chatgptFakePlanValue);
+        }
+        const options = (chatgptFakePlanCatalog?.options || []).map(
+            ({ subscriptionPlan, planType }) => {
+                const option = document.createElement("option");
+                option.value = subscriptionPlan;
+                option.textContent = `${planType} (${subscriptionPlan})`;
+                return option;
+            },
+        );
+        if (!selectedPlan) {
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = chatgptFakePlanCatalog
+                ? "请选择"
+                : "读取中…";
+            placeholder.disabled = true;
+            options.unshift(placeholder);
+        }
+        select.replaceChildren(...options);
+        select.value = selectedPlan?.subscriptionPlan || "";
+        select.disabled = !chatgptFakePlanCatalog;
+
+        if (
+            toggle instanceof HTMLInputElement &&
+            slider instanceof HTMLElement &&
+            sliderDot instanceof HTMLElement
+        ) {
+            toggle.checked = Boolean(selectedPlan && chatgptFakePlanEnabled);
+            toggle.disabled = !selectedPlan;
+            updateGrokDevToolsSliderStyle(
+                slider,
+                sliderDot,
+                isChatgptFakePlanRuntimeEnabled(),
+            );
+        }
     }
 
     let chatgptFakePlanValue = isChatgptMode
-        ? normalizeChatgptFakePlanType(
-              localStorage.getItem(CHATGPT_FAKE_PLAN_KEY),
-          )
+        ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
         : "pro";
     let chatgptFakePlanEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
 
     function isChatgptFakePlanRuntimeEnabled() {
-        return chatgptFakePlanEnabled && chatgptFakePlanValue;
+        return Boolean(
+            chatgptFakePlanEnabled && getChatgptFakePlan(chatgptFakePlanValue),
+        );
     }
 
     function updateChatgptRuntimeModelCatalog(origin, data) {
@@ -2081,31 +2214,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     cursor: pointer;
                     outline: none;
                     line-height: 1em;
+                    width: 140px;
+                    box-sizing: border-box;
                 ">
-                    <option value="guest">Guest</option>
-                    <option value="free">Free</option>
-                    <option value="go">Go</option>
-                    <option value="plus">Plus</option>
-                    <option value="prolite">Pro Lite</option>
-                    <option value="pro">Pro</option>
-                    <option value="free_workspace">Free Workspace</option>
-                    <option value="team">Team</option>
-                    <option value="self_serve_business_prolite">Self-serve Pro Lite</option>
-                    <option value="self_serve_business_usage_based">Self-serve Usage</option>
-                    <option value="sci">SCI</option>
-                    <option value="business">Business</option>
-                    <option value="enterprise_cbp_usage_based">Enterprise Usage</option>
-                    <option value="enterprise_cbp_automation">Enterprise Automation</option>
-                    <option value="hc">HC</option>
-                    <option value="finserv">Finserv</option>
-                    <option value="ent26">ENT26</option>
-                    <option value="education">Education</option>
-                    <option value="edu_plus">EDU Plus</option>
-                    <option value="edu_pro">EDU Pro</option>
-                    <option value="quorum">Quorum</option>
-                    <option value="enterprise">Enterprise (弃用)</option>
-                    <option value="edu">Edu (弃用)</option>
-                    <option value="k12">K12</option>
+                    <option value="" disabled>读取中…</option>
                 </select>
                 <span id="chatgpt-fake-plan-tooltip" style="
                     cursor: pointer;
@@ -2531,16 +2643,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             );
         }
 
-        function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
-            if (enabled) {
-                slider.style.backgroundColor = "#4CAF50";
-                sliderDot.style.transform = "translateX(12px)";
-            } else {
-                slider.style.backgroundColor = "#555";
-                sliderDot.style.transform = "translateX(0)";
-            }
-        }
-
         function bindToggle(id, enabled, storageKey, setEnabled) {
             const toggle = document.getElementById(`${id}-toggle`);
             const slider = document.getElementById(`${id}-slider`);
@@ -2794,27 +2896,26 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             const sliderDot = document.getElementById(
                 "chatgpt-fake-plan-slider-dot",
             );
-            if (!select || !toggle || !slider || !sliderDot) return;
+            if (
+                !(select instanceof HTMLSelectElement) ||
+                !(toggle instanceof HTMLInputElement) ||
+                !(slider instanceof HTMLElement) ||
+                !(sliderDot instanceof HTMLElement)
+            ) {
+                return;
+            }
 
-            chatgptFakePlanValue =
-                normalizeChatgptFakePlanType(chatgptFakePlanValue);
-            select.value = chatgptFakePlanValue;
-            toggle.checked = chatgptFakePlanEnabled;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                isChatgptFakePlanRuntimeEnabled(),
-            );
+            updateChatgptFakePlanControls();
 
             select.addEventListener("change", function () {
-                chatgptFakePlanValue = normalizeChatgptFakePlanType(
-                    select.value,
-                );
-                select.value = chatgptFakePlanValue;
+                const selectedPlan = getChatgptFakePlan(select.value);
+                if (!selectedPlan) return;
+                chatgptFakePlanValue = selectedPlan.subscriptionPlan;
                 localStorage.setItem(
                     CHATGPT_FAKE_PLAN_KEY,
                     chatgptFakePlanValue,
                 );
+                updateChatgptFakePlanControls();
                 void prepareChatgptImportMapPatchCache();
             });
             toggle.addEventListener("change", function () {
@@ -2823,11 +2924,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     CHATGPT_FAKE_PLAN_ENABLED_KEY,
                     chatgptFakePlanEnabled ? "true" : "false",
                 );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    chatgptFakePlanEnabled,
-                );
+                updateChatgptFakePlanControls();
                 void prepareChatgptImportMapPatchCache();
             });
         }
