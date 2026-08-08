@@ -77,6 +77,7 @@
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
     let chatgptPendingPatchSettings;
+    let chatgptImportPatchTargets;
     let chatgptImportPatchFailure;
     const chatgptRuntimeModelCatalogs = {
         chat: [],
@@ -861,34 +862,38 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (!isChatgptImportPatchEnabled()) return;
 
         chatgptPendingPatchSettings = getChatgptImportPatchSettings();
-        const preloads = [
-            ...document.querySelectorAll('link[rel="modulepreload"]'),
-        ];
-        const targets = [
-            {
-                assetType: "shared",
-                preload: preloads.find((element) =>
-                    /\/4813494d-[^/?]+\.js(?:[?#]|$)/.test(element.href),
-                ),
-            },
-            {
-                assetType: "conversation",
-                preload: preloads.find((element) =>
-                    /\/conversation-small-[^/?]+\.js(?:[?#]|$)/.test(
-                        element.href,
-                    ),
-                ),
-            },
-        ];
-        if (targets.some((target) => !target.preload)) {
-            chatgptImportPatchFailure =
-                "页面没有提供可补丁的 ChatGPT 目标模块，资源结构可能已经变化。";
-            updateChatgptInjectionStatus();
-            console.error("[CheckerNext] 未找到 ChatGPT 目标模块。");
-            return;
+        if (!chatgptImportPatchTargets) {
+            const preloads = [...document.querySelectorAll("link")].filter(
+                (element) => element.rel === "modulepreload",
+            );
+            const targets = [
+                {
+                    assetType: "shared",
+                    assetUrl: preloads.find((element) =>
+                        /\/4813494d-[^/?]+\.js(?:[?#]|$)/.test(element.href),
+                    )?.href,
+                },
+                {
+                    assetType: "conversation",
+                    assetUrl: preloads.find((element) =>
+                        /\/conversation-small-[^/?]+\.js(?:[?#]|$)/.test(
+                            element.href,
+                        ),
+                    )?.href,
+                },
+            ];
+            if (targets.some((target) => !target.assetUrl)) {
+                chatgptImportPatchFailure =
+                    "页面没有提供可补丁的 ChatGPT 目标模块，资源结构可能已经变化。";
+                updateChatgptInjectionStatus();
+                console.error("[CheckerNext] 未找到 ChatGPT 目标模块。");
+                return;
+            }
+            chatgptImportPatchTargets = targets;
         }
 
-        const assetUrls = targets.map((target) => target.preload.href);
+        const targets = chatgptImportPatchTargets;
+        const assetUrls = targets.map((target) => target.assetUrl);
         const signature = getChatgptImportPatchSignature();
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
         if (
