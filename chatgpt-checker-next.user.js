@@ -82,10 +82,6 @@
         chat: [],
         work: [],
     };
-    const chatgptRuntimeThinkingEfforts = {
-        chat: ["standard", "extended"],
-        work: ["min", "standard", "extended", "xhigh", "max"],
-    };
 
     if (isChatgptMode) {
         installCachedChatgptImportMapPatch();
@@ -500,35 +496,23 @@
             const matches = [...sourceText.matchAll(pattern)];
             return matches.length === 1 ? matches[0] : null;
         };
-        const surfaceSelectorMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{return ([A-Za-z$_][\w$]*)\(\2\)\?`tpp`:`chat`\}/g,
-        );
-        const modelSetterMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{([A-Za-z$_][\w$]*)\.set\(\2,\{\.\.\.\4\(\2\),\[([A-Za-z$_][\w$]*)\(\2\)\]:\3\}\),([A-Za-z$_][\w$]*)\(\2,!1\)\}/g,
-        );
-        const modelGetterMatch = singleMatch(
-            /([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)=>([A-Za-z$_][\w$]*)\(\(\)=>\{let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\3,([A-Za-z$_][\w$]*)\(\3\)\);/g,
-        );
-        const modelResolverMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{if\(!\3\|\|[A-Za-z$_][\w$]*\(\)\.some\([A-Za-z$_][\w$]*=>[A-Za-z$_][\w$]*\.model_slug===\3\)\)return;[\s\S]{0,800}?let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\(\2\),\3\);if\(\4\)return \4;if\(!([A-Za-z$_][\w$]*)\(\2\)\)return ([A-Za-z$_][\w$]*)\(\3\)\}/g,
-        );
-        const workModelResolverMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{if\(\4&&\3\.models\.has\(\4\)\)return \4;let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\2\)\.id;if\(\3\.models\.has\(\5\)\)return \5;let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\3\);/g,
-        );
-        const thinkingStoreMatch = singleMatch(
-            /return ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\.conversationThinkingEffort\$\(\)\}var [A-Za-z$_][\w$]*=/g,
-        );
-        const surfaceModeMatch = singleMatch(
-            /([A-Za-z$_][\w$]*)=\{Chat:`chatgpt`,TPP:`work`\}/g,
-        );
         const surfaceSwitchMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(\{conversation:([A-Za-z$_][\w$]*),(?:entryIntent:[A-Za-z$_][\w$]*,)?nextMode:([A-Za-z$_][\w$]*)\}\)\{let ([A-Za-z$_][\w$]*)=[A-Za-z$_][\w$]*\(\);[A-Za-z$_][\w$]*\(\(\)=>\{[^{}]{0,300}?([A-Za-z$_][\w$]*)\(\{conversation:\2,currentMode:\4,nextMode:\3\}\),[A-Za-z$_][\w$]*\(\3\)\}\)\}/g,
+            /function ([A-Za-z$_][\w$]*)\(\{conversation:([A-Za-z$_][\w$]*),entryIntent:[A-Za-z$_][\w$]*,nextMode:([A-Za-z$_][\w$]*)\}\)\{if\(\3===([A-Za-z$_][\w$]*)\.Chat&&[A-Za-z$_][\w$]*\(\)\)return!1;let ([A-Za-z$_][\w$]*)=[A-Za-z$_][\w$]*\(\);return [A-Za-z$_][\w$]*\(\(\)=>\{[^{}]{0,300}?[A-Za-z$_][\w$]*\(\{conversation:\2,currentMode:\5,nextMode:\3\}\),[A-Za-z$_][\w$]*\(\3\)\}\),!0\}/g,
+        );
+        const originModeMatch = singleMatch(
+            /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{([A-Za-z$_][\w$]*)\(\1,([A-Za-z$_][\w$]*)=>\{[^{}]{0,200}?\.conversationOrigin=([A-Za-z$_][\w$]*)\.TPP\)\}\)\}/g,
         );
         const threadMutatorMatch = singleMatch(
-            /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{([A-Za-z$_][\w$]*)\(\1,([A-Za-z$_][\w$]*)=>\{[^{}]{0,200}?\.conversationOrigin=([A-Za-z$_][\w$]*)\.TPP\)\}\)\}/g,
+            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)=>\{let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\2,\5\);\6&&\3\(\6\)\}\)\}/g,
         );
         const originDecisionMatch = singleMatch(
             /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{return ([A-Za-z$_][\w$]*)\(\{(?=[^{}]{0,500}isNewConversation:[A-Za-z$_][\w$]*\(\2\))(?=[^{}]{0,500}conversationIsLoading:[A-Za-z$_][\w$]*\(\2\))(?=[^{}]{0,500}modelSlug:[A-Za-z$_][\w$]*\(\2\))[^{}]{0,500}?conversationOrigin:([A-Za-z$_][\w$]*)\(\2\)[^{}]{0,500}\}\)\}/g,
+        );
+        const workOnlyMatch = singleMatch(
+            /function ([A-Za-z$_][\w$]*)\(\)\{return ([A-Za-z$_][\w$]*)\(\)&&([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\.WorkOnlyMode\)===!0\}/g,
+        );
+        const originSelectorMatch = singleMatch(
+            /([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)=>\3\?\.conversationOrigin\?\?null\)/g,
         );
         const threadSelectorsMatch = singleMatch(
             /getCurrentLeafId:\s*[A-Za-z$_][\w$]*\(\s*([A-Za-z$_][\w$]*)\s*=>\s*\{\s*let\s+[A-Za-z$_][\w$]*\s*=\s*([A-Za-z$_][\w$]*)\.getTree\(\1\)/g,
@@ -539,71 +523,39 @@
         const messageTextMatch = singleMatch(
             /function\s+([A-Za-z_$][\w$]*)\s*\(\s*[A-Za-z_$][\w$]*\s*,\s*[A-Za-z_$][\w$]*\s*=\s*\{\s*shouldGetTextFromContentReferences:\s*!1\s*,\s*shouldGetVisibleText:\s*!1\s*\}\s*\)\s*\{/g,
         );
-        if (
-            !surfaceSelectorMatch ||
-            !modelSetterMatch ||
-            !modelGetterMatch ||
-            !modelResolverMatch ||
-            !workModelResolverMatch ||
-            !thinkingStoreMatch ||
-            !surfaceModeMatch ||
-            !surfaceSwitchMatch ||
-            !threadMutatorMatch ||
-            !originDecisionMatch ||
-            !threadSelectorsMatch ||
-            !threadGetterMatch ||
-            !messageTextMatch
-        ) {
-            return null;
-        }
-
-        const originSelectorName = surfaceSelectorMatch[3];
-        const originStoreMatch = singleMatch(
-            new RegExp(
-                RegExp.escape(originSelectorName) +
-                    String.raw`=[A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)=>[A-Za-z$_][\w$]*\(\(\)=>([A-Za-z$_][\w$]*)\(\1\)\?([A-Za-z$_][\w$]*)\(\1\):!1\)\)`,
-                "g",
-            ),
-        );
         const exportMatches = [...sourceText.matchAll(/export\{/g)];
         if (
-            !originStoreMatch ||
-            originDecisionMatch[1] !== originStoreMatch[3] ||
-            workModelResolverMatch[6] !== modelGetterMatch[1] ||
+            !surfaceSwitchMatch ||
+            !originModeMatch ||
+            !threadMutatorMatch ||
+            !originDecisionMatch ||
+            !workOnlyMatch ||
+            !originSelectorMatch ||
+            !threadSelectorsMatch ||
+            !threadGetterMatch ||
+            !messageTextMatch ||
+            originModeMatch[2] !== threadMutatorMatch[1] ||
+            originDecisionMatch[4] !== originSelectorMatch[1] ||
+            !surfaceSwitchMatch[0].includes(`&&${workOnlyMatch[1]}()`) ||
             exportMatches.length !== 1
         ) {
             return null;
         }
 
-        const resolverPrefix = `function ${modelResolverMatch[1]}(${modelResolverMatch[2]},${modelResolverMatch[3]}){`;
-        const patchedResolver = modelResolverMatch[0].replace(
-            resolverPrefix,
-            `${resolverPrefix}if(globalThis.__checkerNextRuntimeModelBridge?.allows(${modelResolverMatch[3]})){let ${modelResolverMatch[4]}=${modelResolverMatch[5]}(${modelResolverMatch[6]}(${modelResolverMatch[2]}),${modelResolverMatch[3]});return ${modelResolverMatch[4]}??${modelResolverMatch[8]}(${modelResolverMatch[3]})}`,
+        const surfaceSwitchBodyStart = surfaceSwitchMatch[0].indexOf("){");
+        const patchedSurfaceSwitch =
+            surfaceSwitchBodyStart === -1
+                ? surfaceSwitchMatch[0]
+                : `${surfaceSwitchMatch[0].slice(0, surfaceSwitchBodyStart + 2)}globalThis.__checkerNextRuntimeModelBridge?.setOriginOverride(${surfaceSwitchMatch[2]},${surfaceSwitchMatch[3]}===${surfaceSwitchMatch[4]}.TPP?"work":"chat");${surfaceSwitchMatch[0].slice(surfaceSwitchBodyStart + 2)}`;
+        const patchedWorkOnly = workOnlyMatch[0].replace(
+            `function ${workOnlyMatch[1]}(){return`,
+            `function ${workOnlyMatch[1]}(){return globalThis.__checkerNextRuntimeModelBridge?.getCurrentOriginOverride()==="chat"?!1:`,
         );
-        const patchedWorkModelResolver = workModelResolverMatch[0]
-            .replace(
-                `${workModelResolverMatch[4]}&&${workModelResolverMatch[3]}.models.has(${workModelResolverMatch[4]})`,
-                `${workModelResolverMatch[4]}&&(${workModelResolverMatch[3]}.models.has(${workModelResolverMatch[4]})||globalThis.__checkerNextRuntimeModelBridge?.allows(${workModelResolverMatch[4]}))`,
-            )
-            .replace(
-                `${workModelResolverMatch[3]}.models.has(${workModelResolverMatch[5]})`,
-                `(${workModelResolverMatch[3]}.models.has(${workModelResolverMatch[5]})||globalThis.__checkerNextRuntimeModelBridge?.allows(${workModelResolverMatch[5]}))`,
-            );
-        const surfaceSelectorPrefix = `function ${surfaceSelectorMatch[1]}(${surfaceSelectorMatch[2]}){`;
-        const patchedSurfaceSelector = surfaceSelectorMatch[0].replace(
-            surfaceSelectorPrefix,
-            `${surfaceSelectorPrefix}let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${surfaceSelectorMatch[2]});if(checkerNextOrigin==="work")return"tpp";if(checkerNextOrigin==="chat")return"chat";`,
-        );
-        const originDecisionPrefix = `function ${originDecisionMatch[1]}(${originDecisionMatch[2]}){`;
-        const patchedOriginDecision = originDecisionMatch[0].replace(
-            originDecisionPrefix,
-            `${originDecisionPrefix}let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${originDecisionMatch[2]});if(checkerNextOrigin==="work")return!0;if(checkerNextOrigin==="chat")return!1;`,
-        );
+        const patchedOriginSelector = `${originSelectorMatch[1]}=(()=>{let checkerNextNativeOrigin=${originSelectorMatch[2]}(${originSelectorMatch[3]}=>${originSelectorMatch[3]}?.conversationOrigin??null);return conversation=>{let origin=globalThis.__checkerNextRuntimeModelBridge?.getOriginOverride(conversation),nativeOrigin=checkerNextNativeOrigin(conversation);return origin==="work"?${originModeMatch[4]}.TPP:origin==="chat"?null:nativeOrigin}})()`;
         if (
-            patchedResolver === modelResolverMatch[0] ||
-            patchedWorkModelResolver === workModelResolverMatch[0] ||
-            patchedSurfaceSelector === surfaceSelectorMatch[0] ||
-            patchedOriginDecision === originDecisionMatch[0]
+            patchedSurfaceSwitch === surfaceSwitchMatch[0] ||
+            patchedWorkOnly === workOnlyMatch[0] ||
+            patchedOriginSelector === originSelectorMatch[0]
         ) {
             return null;
         }
@@ -613,32 +565,41 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     const conversations=new Map;
     const customModels=new Set;
     const originOverrides=new Map;
-    let newConversation,stateScheduled=!1;
+    let newConversation,stateScheduled=!1,modelGetter,modelSetter,thinkingStore,thinkingLane;
     const getServerId=conversation=>typeof conversation.serverId$==="function"?conversation.serverId$():null;
+    const getOriginKey=conversation=>getServerId(conversation)??conversation.id;
+    const getOriginOverride=conversation=>conversation?originOverrides.get(getOriginKey(conversation)):void 0;
     const getOrigin=conversation=>{
-        __CONVERSATION_ORIGIN__(conversation);
-        return originOverrides.get(conversation.id)??originOverrides.get(getServerId(conversation));
+        const conversationOrigin=__CONVERSATION_ORIGIN__(conversation);
+        return conversationOrigin===__ORIGIN_ENUM__.TPP?"work":"chat";
+    };
+    const setOriginOverride=(conversation,origin)=>{
+        const originKey=getOriginKey(conversation);
+        originOverrides.set(originKey,origin);
+        conversations.set(originKey,conversation);
+        if(conversation.id!==originKey)conversations.set(conversation.id,conversation);
+        __THREAD_MUTATOR__(conversation.id,thread=>{thread.conversationOrigin=origin==="work"?__ORIGIN_ENUM__.TPP:null});
     };
     const setOrigin=(conversation,origin)=>{
-        if(conversation.id!=null)originOverrides.set(conversation.id,origin);
-        const serverId=getServerId(conversation);
-        if(serverId!=null)originOverrides.set(serverId,origin);
+        __SURFACE_SWITCH__({conversation,nextMode:origin==="work"?__SURFACE_MODE__.TPP:__SURFACE_MODE__.Chat});
     };
     const getCurrentConversation=()=>{
         const routeId=globalThis.location.pathname.match(/\\/c\\/([^/?#]+)/)?.[1];
         if(routeId)return conversations.get(routeId);
         return newConversation&&getServerId(newConversation)==null?newConversation:void 0;
     };
+    const getCurrentOriginOverride=()=>getOriginOverride(getCurrentConversation());
     const emitState=error=>{
         const conversation=getCurrentConversation();
         let detail={ready:!error,available:!1,error:error?String(error):null};
         if(conversation&&!error)try{
+            const model=modelGetter(conversation);
             detail={
                 ready:!0,
                 available:!0,
-                model:__MODEL_GETTER__(conversation)?.id??"",
-                thinkingEffort:__THINKING_STORE__(conversation)?.conversationThinkingEffort$?.()??"",
-                origin:getOrigin(conversation)??(__ORIGIN_SELECTOR__(conversation)?"work":"chat")
+                model:model.id,
+                thinkingEffort:model.configurableThinkingEffort||model.id==="gpt-5-thinking"?thinkingStore(conversation).conversationThinkingEffort$():void 0,
+                origin:getOrigin(conversation)
             };
         }catch(error){detail={ready:!1,available:!0,error:String(error)}}
         globalThis.dispatchEvent(new CustomEvent("checker-next-runtime-model-state",{detail}));
@@ -648,14 +609,21 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         stateScheduled=!0;
         queueMicrotask(()=>{try{emitState()}finally{stateScheduled=!1}});
     };
-    const register=conversation=>{
+    const register=(conversation,nextModelGetter,nextModelSetter,nextThinkingStore,nextThinkingLane)=>{
         if(!conversation)return;
+        modelGetter=nextModelGetter;
+        modelSetter=nextModelSetter;
+        thinkingStore=nextThinkingStore;
+        thinkingLane=nextThinkingLane;
         if(conversation.id!=null)conversations.set(conversation.id,conversation);
         const serverId=getServerId(conversation);
         if(serverId!=null){
             conversations.set(serverId,conversation);
             const origin=originOverrides.get(conversation.id);
-            if(origin)originOverrides.set(serverId,origin);
+            if(origin){
+                originOverrides.delete(conversation.id);
+                originOverrides.set(serverId,origin);
+            }
         }else newConversation=conversation;
         scheduleState();
     };
@@ -671,38 +639,25 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if(!conversation){emitState("未找到当前对话");return}
         try{
             const detail=event.detail??{};
-            if(detail.origin==="work"||detail.origin==="chat"){
-                setOrigin(conversation,detail.origin);
-                __SURFACE_SWITCH__({conversation,nextMode:detail.origin==="work"?__SURFACE_MODE__.TPP:__SURFACE_MODE__.Chat});
-                __THREAD_MUTATOR__(conversation.id,thread=>{thread.conversationOrigin=detail.origin==="work"?__ORIGIN_ENUM__.TPP:null});
-            }
+            if(detail.origin==="work"||detail.origin==="chat")setOrigin(conversation,detail.origin);
             const model=typeof detail.model==="string"?detail.model.trim():"";
-            if(model){customModels.add(model);__MODEL_SETTER__(conversation,model)}
-            const thinkingEffort=typeof detail.thinkingEffort==="string"?detail.thinkingEffort.trim():"";
-            if(thinkingEffort)__THINKING_STORE__(conversation).setThinkingEffort(thinkingEffort);
+            if(model){customModels.add(model);modelSetter(conversation,model)}
+            const hasThinkingEffort=Object.hasOwn(detail,"thinkingEffort")&&(detail.thinkingEffort===null||typeof detail.thinkingEffort==="string");
+            const thinkingEffort=typeof detail.thinkingEffort==="string"?detail.thinkingEffort.trim():void 0;
+            if(hasThinkingEffort)thinkingStore(conversation).setThinkingEffort(thinkingEffort||void 0,thinkingLane(conversation),modelGetter(conversation).id);
         }catch(error){emitState(error);return}
         scheduleState();
     });
     scheduleState();
-    return{
-        register,
-        allows:model=>customModels.has(model),
-        getOrigin,
-        getTurns,
-        getMessageText
-    };
+    return{register,allows:model=>customModels.has(model),getOrigin,getOriginOverride,getCurrentOriginOverride,setOriginOverride,getTurns,getMessageText};
 })();
 `;
         for (const [placeholder, value] of [
-            ["__MODEL_GETTER__", modelGetterMatch[1]],
-            ["__MODEL_SETTER__", modelSetterMatch[1]],
-            ["__THINKING_STORE__", thinkingStoreMatch[1]],
-            ["__ORIGIN_SELECTOR__", originSelectorName],
             ["__CONVERSATION_ORIGIN__", originDecisionMatch[4]],
+            ["__ORIGIN_ENUM__", originModeMatch[4]],
             ["__SURFACE_SWITCH__", surfaceSwitchMatch[1]],
-            ["__SURFACE_MODE__", surfaceModeMatch[1]],
-            ["__THREAD_MUTATOR__", threadMutatorMatch[2]],
-            ["__ORIGIN_ENUM__", threadMutatorMatch[4]],
+            ["__SURFACE_MODE__", surfaceSwitchMatch[4]],
+            ["__THREAD_MUTATOR__", threadMutatorMatch[1]],
             ["__THREAD_SELECTORS__", threadSelectorsMatch[2]],
             ["__THREAD_GETTER__", threadGetterMatch[1]],
             ["__MESSAGE_TEXT__", messageTextMatch[1]],
@@ -710,22 +665,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             bridgeSource = bridgeSource.split(placeholder).join(value);
         }
 
-        let patched = sourceText
-            .replace(modelResolverMatch[0], patchedResolver)
-            .replace(workModelResolverMatch[0], patchedWorkModelResolver)
-            .replace(surfaceSelectorMatch[0], patchedSurfaceSelector)
-            .replace(originDecisionMatch[0], patchedOriginDecision)
-            .replace(
-                modelGetterMatch[0],
-                modelGetterMatch[0].replace(
-                    `${modelGetterMatch[4]}(()=>{`,
-                    `${modelGetterMatch[4]}(()=>{globalThis.__checkerNextRuntimeModelBridge?.register(${modelGetterMatch[3]});`,
-                ),
-            )
-            .replace(
-                originStoreMatch[0],
-                `${originSelectorName}=${modelGetterMatch[2]}(${originStoreMatch[1]}=>${modelGetterMatch[4]}(()=>{let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${originStoreMatch[1]});return checkerNextOrigin==="work"?!0:checkerNextOrigin==="chat"?!1:${originStoreMatch[2]}(${originStoreMatch[1]})?${originStoreMatch[3]}(${originStoreMatch[1]}):!1}))`,
-            );
+        let patched = sourceText.replace(
+            surfaceSwitchMatch[0],
+            patchedSurfaceSwitch,
+        );
+        patched = patched.replace(workOnlyMatch[0], patchedWorkOnly);
+        patched = patched.replace(
+            originSelectorMatch[0],
+            patchedOriginSelector,
+        );
         patched = patched.replace(/export\{/, `${bridgeSource}export{`);
         return patched;
     }
@@ -754,6 +702,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const transformSignature = [
             rewriteModuleImports,
             patchChatgptRuntimeModelAssetSource,
+            patchChatgptRuntimeModelConversationAssetSource,
             patchChatgptFakePlanAssetSource,
         ].join("\n");
         return `${transformSignature}\n${fakePlan}`;
@@ -776,32 +725,45 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             !cached ||
             typeof cached !== "object" ||
             cached.signature !== getChatgptImportPatchSignature() ||
-            typeof cached.assetUrl !== "string" ||
-            typeof cached.assetFilename !== "string" ||
-            typeof cached.sourceText !== "string"
+            !Array.isArray(cached.assets) ||
+            cached.assets.length !== 2 ||
+            cached.assets.some(
+                (asset) =>
+                    typeof asset?.assetUrl !== "string" ||
+                    typeof asset.assetFilename !== "string" ||
+                    typeof asset.sourceText !== "string",
+            )
         ) {
             return;
         }
 
-        const assetBaseUrl = cached.assetUrl.slice(
+        const assetBaseUrl = cached.assets[0].assetUrl.slice(
             0,
-            cached.assetUrl.lastIndexOf("/"),
+            cached.assets[0].assetUrl.lastIndexOf("/"),
         );
-        const blobUrl = URL.createObjectURL(
-            new Blob([cached.sourceText], { type: "text/javascript" }),
-        );
+        const mappedAssets = cached.assets.map((asset) => ({
+            ...asset,
+            blobUrl: URL.createObjectURL(
+                new Blob([asset.sourceText], { type: "text/javascript" }),
+            ),
+        }));
         const importMap = injectImportMap({
-            imports: {
-                [cached.assetUrl]: blobUrl,
-            },
+            imports: Object.fromEntries(
+                mappedAssets.map((asset) => [asset.assetUrl, asset.blobUrl]),
+            ),
             scopes: {
-                [`${assetBaseUrl}/`]: {
-                    [`./${cached.assetFilename}`]: blobUrl,
-                },
+                [`${assetBaseUrl}/`]: Object.fromEntries(
+                    mappedAssets.map((asset) => [
+                        `./${asset.assetFilename}`,
+                        asset.blobUrl,
+                    ]),
+                ),
             },
         });
         if (!importMap) {
-            URL.revokeObjectURL(blobUrl);
+            for (const asset of mappedAssets) {
+                URL.revokeObjectURL(asset.blobUrl);
+            }
             chatgptImportPatchFailure = "浏览器未能插入缓存模块映射。";
             console.warn("[CheckerNext] 缓存模块映射未能插入页面。");
             return;
@@ -811,11 +773,83 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         chatgptInstalledPatchSettings = getChatgptImportPatchSettings();
         console.info(
             "[CheckerNext] 已创建缓存 import map 元素:",
-            cached.assetUrl,
+            cached.assets.map((asset) => asset.assetUrl),
         );
     }
 
-    function getChatgptAssetPatchFunctions() {
+    function patchChatgptRuntimeModelConversationAssetSource(sourceText) {
+        const singleMatch = (pattern) => {
+            const matches = [...sourceText.matchAll(pattern)];
+            return matches.length === 1 ? matches[0] : null;
+        };
+        const modelSetterMatch = singleMatch(
+            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\){([A-Za-z$_][\w$]*)\.set\(\2,\{\.\.\.\4\(\2\),\[([A-Za-z$_][\w$]*)\(\2\)\]:\3\}\),([A-Za-z$_][\w$]*)\(\2,!1\)\}/g,
+        );
+        const modelGetterMatch = singleMatch(
+            /([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)=>([A-Za-z$_][\w$]*)\(\(\)=>\{let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\3,([A-Za-z$_][\w$]*)\(\3\)\);if\(\5!=null\)return \5;/g,
+        );
+        const thinkingStoreMatch = singleMatch(
+            /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{if\(\1==null\)return;let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\(\1\);if\([^{}]{0,180}\)return ([A-Za-z$_][\w$]*)\(\1\)\.conversationThinkingEffort\$\(\)\}/g,
+        );
+        const thinkingLaneMatch = singleMatch(
+            /conversationThinkingEffort\$:[A-Za-z$_][\w$]*\(\(\)=>\{let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*\),[A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*\),[A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*\);if\([A-Za-z$_][\w$]*\)return/g,
+        );
+        const modelResolverMatch = singleMatch(
+            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{if\(!\3\|\|([A-Za-z$_][\w$]*)\(\)\.some\(([A-Za-z$_][\w$]*)=>\5\.model_slug===\3\)\)return;/g,
+        );
+        const surfaceSelectorName = modelSetterMatch?.[5];
+        const surfaceSelectorMatch = surfaceSelectorName
+            ? singleMatch(
+                  new RegExp(
+                      `function ${RegExp.escape(surfaceSelectorName)}\\(([A-Za-z$_][\\w$]*)\\)\\{return ([A-Za-z$_][\\w$]*)\\(\\1\\)\\?\`tpp\`:\`chat\`\\}`,
+                      "g",
+                  ),
+              )
+            : null;
+        if (
+            !modelSetterMatch ||
+            !modelGetterMatch ||
+            !thinkingStoreMatch ||
+            !thinkingLaneMatch ||
+            !modelResolverMatch ||
+            !surfaceSelectorMatch ||
+            modelGetterMatch[1] !== thinkingStoreMatch[2] ||
+            modelGetterMatch[1] !== thinkingLaneMatch[2] ||
+            modelSetterMatch[5] !== surfaceSelectorName
+        ) {
+            return null;
+        }
+
+        const patchedModelResolver = modelResolverMatch[0].replace(
+            `if(!${modelResolverMatch[3]}||${modelResolverMatch[4]}().some(${modelResolverMatch[5]}=>${modelResolverMatch[5]}.model_slug===${modelResolverMatch[3]}))return;`,
+            `if(!${modelResolverMatch[3]}||(${modelResolverMatch[4]}().some(${modelResolverMatch[5]}=>${modelResolverMatch[5]}.model_slug===${modelResolverMatch[3]})&&!globalThis.__checkerNextRuntimeModelBridge?.allows(${modelResolverMatch[3]})))return;`,
+        );
+        const patchedSurfaceSelector = surfaceSelectorMatch[0].replace(
+            `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){`,
+            `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${surfaceSelectorMatch[1]});if(checkerNextOrigin==="work")return"tpp";if(checkerNextOrigin==="chat")return"chat";`,
+        );
+        const patchedModelGetter = modelGetterMatch[0].replace(
+            `${modelGetterMatch[4]}(()=>{let ${modelGetterMatch[5]}=${modelGetterMatch[6]}(${modelGetterMatch[3]},${modelGetterMatch[7]}(${modelGetterMatch[3]}));`,
+            `${modelGetterMatch[4]}(()=>{globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[3]},${modelGetterMatch[1]},${modelSetterMatch[1]},${thinkingStoreMatch[3]},conversation=>${thinkingLaneMatch[3]}(${thinkingLaneMatch[1]}(conversation),${thinkingLaneMatch[2]}(conversation)));let ${modelGetterMatch[5]}=${modelGetterMatch[6]}(${modelGetterMatch[3]},${modelGetterMatch[7]}(${modelGetterMatch[3]}));`,
+        );
+        if (
+            patchedModelResolver === modelResolverMatch[0] ||
+            patchedSurfaceSelector === surfaceSelectorMatch[0] ||
+            patchedModelGetter === modelGetterMatch[0]
+        ) {
+            return null;
+        }
+
+        return sourceText
+            .replace(modelResolverMatch[0], patchedModelResolver)
+            .replace(surfaceSelectorMatch[0], patchedSurfaceSelector)
+            .replace(modelGetterMatch[0], patchedModelGetter);
+    }
+
+    function getChatgptAssetPatchFunctions(assetType) {
+        if (assetType === "conversation") {
+            return [patchChatgptRuntimeModelConversationAssetSource];
+        }
         const patchFunctions = [patchChatgptRuntimeModelAssetSource];
         if (isChatgptFakePlanRuntimeEnabled()) {
             patchFunctions.push(patchChatgptFakePlanAssetSource);
@@ -827,12 +861,26 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (!isChatgptImportPatchEnabled()) return;
 
         chatgptPendingPatchSettings = getChatgptImportPatchSettings();
-        const preload = [
+        const preloads = [
             ...document.querySelectorAll('link[rel="modulepreload"]'),
-        ].find((element) =>
-            /\/4813494d-[^/?]+\.js(?:[?#]|$)/.test(element.href),
-        );
-        if (!preload) {
+        ];
+        const targets = [
+            {
+                assetType: "shared",
+                preload: preloads.find((element) =>
+                    /\/4813494d-[^/?]+\.js(?:[?#]|$)/.test(element.href),
+                ),
+            },
+            {
+                assetType: "conversation",
+                preload: preloads.find((element) =>
+                    /\/conversation-small-[^/?]+\.js(?:[?#]|$)/.test(
+                        element.href,
+                    ),
+                ),
+            },
+        ];
+        if (targets.some((target) => !target.preload)) {
             chatgptImportPatchFailure =
                 "页面没有提供可补丁的 ChatGPT 目标模块，资源结构可能已经变化。";
             updateChatgptInjectionStatus();
@@ -840,14 +888,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return;
         }
 
-        const assetUrl = preload.href;
-        const assetFilename = new URL(assetUrl).pathname.split("/").pop();
+        const assetUrls = targets.map((target) => target.preload.href);
         const signature = getChatgptImportPatchSignature();
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
         if (
-            cached?.assetUrl === assetUrl &&
+            cached?.assets?.every(
+                (asset, index) => asset.assetUrl === assetUrls[index],
+            ) &&
             cached?.signature === signature &&
-            typeof cached.sourceText === "string"
+            cached.assets.length === targets.length
         ) {
             return;
         }
@@ -855,48 +904,65 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         chatgptImportPatchFailure = undefined;
         chatgptImportPatchNeedsReload = false;
         try {
-            const response = await originalFetch(assetUrl);
-            if (!response.ok) {
-                throw new Error(`${response.status} ${response.statusText}`);
-            }
-
-            let sourceText = await response.text();
-            for (const patch of getChatgptAssetPatchFunctions()) {
-                const patched = patch(sourceText);
-                if (typeof patched !== "string" || patched.length === 0) {
-                    const patchLabel =
-                        patch === patchChatgptRuntimeModelAssetSource
-                            ? "运行时模型"
-                            : "假装会员";
-                    setChatgptImportMapPatchCache(null);
-                    chatgptImportPatchFailure = `${patchLabel}补丁与当前 ChatGPT 模块不匹配。`;
-                    updateChatgptInjectionStatus();
-                    console.error(
-                        `[CheckerNext] 模块补丁未匹配: ${patch.name}`,
-                    );
-                    return;
-                }
-                sourceText = patched;
-            }
-
-            const assetBaseUrl = assetUrl.slice(0, assetUrl.lastIndexOf("/"));
-            sourceText = rewriteModuleImports(
-                sourceText,
-                assetUrl,
-                assetBaseUrl,
+            const responses = await Promise.all(
+                assetUrls.map((assetUrl) => originalFetch(assetUrl)),
             );
+            const assets = [];
+            for (const [index, response] of responses.entries()) {
+                if (!response.ok) {
+                    throw new Error(
+                        `${response.status} ${response.statusText}`,
+                    );
+                }
+
+                const target = targets[index];
+                const assetUrl = assetUrls[index];
+                let sourceText = await response.text();
+                for (const patch of getChatgptAssetPatchFunctions(
+                    target.assetType,
+                )) {
+                    const patched = patch(sourceText);
+                    if (typeof patched !== "string" || patched.length === 0) {
+                        const patchLabel =
+                            patch === patchChatgptFakePlanAssetSource
+                                ? "假装会员"
+                                : "运行时模型";
+                        setChatgptImportMapPatchCache(null);
+                        chatgptImportPatchFailure = `${patchLabel}补丁与当前 ChatGPT 模块不匹配。`;
+                        updateChatgptInjectionStatus();
+                        console.error(
+                            `[CheckerNext] 模块补丁未匹配: ${patch.name}`,
+                        );
+                        return;
+                    }
+                    sourceText = patched;
+                }
+
+                const assetBaseUrl = assetUrl.slice(
+                    0,
+                    assetUrl.lastIndexOf("/"),
+                );
+                assets.push({
+                    assetFilename: new URL(assetUrl).pathname.split("/").pop(),
+                    assetUrl,
+                    sourceText: rewriteModuleImports(
+                        sourceText,
+                        assetUrl,
+                        assetBaseUrl,
+                    ),
+                });
+            }
+
             if (!isChatgptImportPatchEnabled()) return;
             setChatgptImportMapPatchCache({
-                assetFilename,
-                assetUrl,
+                assets,
                 signature,
-                sourceText,
             });
             chatgptImportPatchNeedsReload = true;
             updateChatgptInjectionStatus();
             console.info(
                 "[CheckerNext] 模块补丁缓存已更新，重新载入后生效:",
-                assetUrl,
+                assetUrls,
             );
         } catch (error) {
             if (!isChatgptImportPatchEnabled()) return;
@@ -1037,17 +1103,23 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return option;
         };
         const models = chatgptRuntimeModelCatalogs[originSelect.value] || [];
-        const createPlaceholder = () => {
-            const option = createOption(
-                "",
-                chatgptRuntimeModelState?.available ? "默认" : "读取中…",
-            );
+        const createPlaceholder = (
+            text = chatgptRuntimeModelState?.available ? "默认" : "读取中…",
+        ) => {
+            const option = createOption("", text);
             option.disabled = true;
             return option;
         };
         const modelOptions = modelValue ? [] : [createPlaceholder()];
         modelOptions.push(
-            ...models.map((model) => createOption(model.slug, model.title)),
+            ...models.map((model) =>
+                createOption(
+                    model.slug,
+                    model.title === model.slug
+                        ? model.slug
+                        : `${model.slug}（${model.title}）`,
+                ),
+            ),
         );
         if (modelValue && !models.some((model) => model.slug === modelValue)) {
             modelOptions.push(createOption(modelValue));
@@ -1059,18 +1131,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         modelSelect.value = modelValue;
 
         const selectedModel = models.find((model) => model.slug === modelValue);
-        const catalogEfforts = models.flatMap((model) => model.thinkingEfforts);
-        const efforts = [
-            ...new Set(
-                (selectedModel?.thinkingEfforts.length
-                    ? selectedModel.thinkingEfforts
-                    : catalogEfforts.length
-                      ? catalogEfforts
-                      : chatgptRuntimeThinkingEfforts[originSelect.value] || []
-                ).filter(Boolean),
-            ),
-        ].map(String);
-        const thinkingOptions = thinkingValue ? [] : [createPlaceholder()];
+        const efforts = [...new Set(selectedModel?.thinkingEfforts || [])].map(
+            String,
+        );
+        const thinkingOptions = chatgptRuntimeModelState?.available
+            ? [createOption("", "未指定")]
+            : [createPlaceholder()];
         thinkingOptions.push(...efforts.map((effort) => createOption(effort)));
         if (thinkingValue && !efforts.includes(thinkingValue)) {
             thinkingOptions.push(createOption(thinkingValue));
@@ -1126,7 +1192,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             color = "#ffd700";
             description = chatgptRuntimeModelState
                 ? `当前页面已注入：\n${installedItems}\n\n刷新后生效：\n${pendingItems}`
-                : `刷新后注入：\n${pendingItems}`;
+                : `刷新后注入（可能要多试几次）：\n${pendingItems}`;
         } else if (chatgptRuntimeModelState) {
             label = "注入成功";
             color = "#98fb98";
@@ -1181,11 +1247,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             ) {
                 modelValue = state.model;
             }
-            if (
-                document.activeElement !== thinkingSelect &&
-                typeof state.thinkingEffort === "string"
-            ) {
-                thinkingValue = state.thinkingEffort;
+            if (document.activeElement !== thinkingSelect) {
+                thinkingValue =
+                    typeof state.thinkingEffort === "string"
+                        ? state.thinkingEffort
+                        : "";
             }
         }
         updateChatgptRuntimeModelOptions(modelValue, thinkingValue);
@@ -2700,6 +2766,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 apply({ origin: originSelect.value });
             });
             bindCustomOption(modelSelect, "输入模型 slug", (model) => {
+                thinkingSelect.value = "";
                 updateChatgptRuntimeModelOptions();
                 if (model) apply({ model });
             });
@@ -2707,7 +2774,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 thinkingSelect,
                 "输入思考强度",
                 (thinkingEffort) => {
-                    if (thinkingEffort) apply({ thinkingEffort });
+                    apply({ thinkingEffort: thinkingEffort || null });
                 },
             );
 
