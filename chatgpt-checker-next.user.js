@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      4.2.1
+// @version      4.2.2
 // @description  查看 ChatGPT、Codex 和 Grok 的账号、用量与服务信息。
 // @match        *://chatgpt.com/*
 // @match        *://grok.com/*
@@ -868,10 +868,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return matches.length === 1 ? matches[0] : null;
         };
         const modelSetterMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\){([A-Za-z$_][\w$]*)\.set\(\2,\{\.\.\.\4\(\2\),\[([A-Za-z$_][\w$]*)\(\2\)\]:\3\}\),([A-Za-z$_][\w$]*)\(\2,!1\)\}/g,
-        );
-        const modelGetterMatch = singleMatch(
-            /([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)=>([A-Za-z$_][\w$]*)\(\(\)=>\{let ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\(\3,([A-Za-z$_][\w$]*)\(\3\)\);if\(\5!=null\)return \5;/g,
+            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{(?:[^{}]|\{[^{}]*\}){0,500}?([A-Za-z$_][\w$]*)\.set\(\2,\{\.\.\.\4\(\2\),\[([A-Za-z$_][\w$]*)\(\2\)\]:\3\}\),([A-Za-z$_][\w$]*)\(\2,!1\)\}/g,
         );
         const thinkingStoreMatch = singleMatch(
             /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{if\(\1==null\)return;let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\(\1\);if\([^{}]{0,180}\)return ([A-Za-z$_][\w$]*)\(\1\)\.conversationThinkingEffort\$\(\)\}/g,
@@ -879,8 +876,20 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const thinkingLaneMatch = singleMatch(
             /conversationThinkingEffort\$:[A-Za-z$_][\w$]*\(\(\)=>\{let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*\),[A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*\),[A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*\);if\([A-Za-z$_][\w$]*\)return/g,
         );
+        const modelGetterName =
+            thinkingStoreMatch?.[2] === thinkingLaneMatch?.[2]
+                ? thinkingStoreMatch[2]
+                : null;
+        const modelGetterMatch = modelGetterName
+            ? singleMatch(
+                  new RegExp(
+                      `${RegExp.escape(modelGetterName)}=([A-Za-z$_][\\w$]*)\\(([A-Za-z$_][\\w$]*)=>([A-Za-z$_][\\w$]*)\\(\\(\\)=>\\{`,
+                      "g",
+                  ),
+              )
+            : null;
         const modelResolverMatch = singleMatch(
-            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{if\(!\3\|\|([A-Za-z$_][\w$]*)\(\)\.some\(([A-Za-z$_][\w$]*)=>\5\.model_slug===\3\)\)return;/g,
+            /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{if\((?:!\()?!\3\|\|([A-Za-z$_][\w$]*)\(\)\.some\(([A-Za-z$_][\w$]*)=>\5\.model_slug===\3\)(?:\))?\)return ?(?:[A-Za-z$_][\w$]*\(\2,\3\))?;?/g,
         );
         const surfaceSelectorName = modelSetterMatch?.[5];
         const surfaceSelectorMatch = surfaceSelectorName
@@ -893,30 +902,27 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             : null;
         if (
             !modelSetterMatch ||
+            !modelGetterName ||
             !modelGetterMatch ||
             !thinkingStoreMatch ||
             !thinkingLaneMatch ||
             !modelResolverMatch ||
             !surfaceSelectorMatch ||
-            modelGetterMatch[1] !== thinkingStoreMatch[2] ||
-            modelGetterMatch[1] !== thinkingLaneMatch[2] ||
             modelSetterMatch[5] !== surfaceSelectorName
         ) {
             return null;
         }
 
+        const deniedModel = `${modelResolverMatch[4]}().some(${modelResolverMatch[5]}=>${modelResolverMatch[5]}.model_slug===${modelResolverMatch[3]})`;
         const patchedModelResolver = modelResolverMatch[0].replace(
-            `if(!${modelResolverMatch[3]}||${modelResolverMatch[4]}().some(${modelResolverMatch[5]}=>${modelResolverMatch[5]}.model_slug===${modelResolverMatch[3]}))return;`,
-            `if(!${modelResolverMatch[3]}||(${modelResolverMatch[4]}().some(${modelResolverMatch[5]}=>${modelResolverMatch[5]}.model_slug===${modelResolverMatch[3]})&&!globalThis.__checkerNextRuntimeModelBridge?.allows(${modelResolverMatch[3]})))return;`,
+            deniedModel,
+            `(${deniedModel}&&!globalThis.__checkerNextRuntimeModelBridge?.allows(${modelResolverMatch[3]}))`,
         );
         const patchedSurfaceSelector = surfaceSelectorMatch[0].replace(
             `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){`,
             `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${surfaceSelectorMatch[1]});if(checkerNextOrigin==="work")return"tpp";if(checkerNextOrigin==="chat")return"chat";`,
         );
-        const patchedModelGetter = modelGetterMatch[0].replace(
-            `${modelGetterMatch[4]}(()=>{let ${modelGetterMatch[5]}=${modelGetterMatch[6]}(${modelGetterMatch[3]},${modelGetterMatch[7]}(${modelGetterMatch[3]}));`,
-            `${modelGetterMatch[4]}(()=>{globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[3]},${modelGetterMatch[1]},${modelSetterMatch[1]},${thinkingStoreMatch[3]},conversation=>${thinkingLaneMatch[3]}(${thinkingLaneMatch[1]}(conversation),${thinkingLaneMatch[2]}(conversation)));let ${modelGetterMatch[5]}=${modelGetterMatch[6]}(${modelGetterMatch[3]},${modelGetterMatch[7]}(${modelGetterMatch[3]}));`,
-        );
+        const patchedModelGetter = `${modelGetterMatch[0]}globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[2]},${modelGetterName},${modelSetterMatch[1]},${thinkingStoreMatch[3]},conversation=>${thinkingLaneMatch[3]}(${thinkingLaneMatch[1]}(conversation),${thinkingLaneMatch[2]}(conversation)));`;
         if (
             patchedModelResolver === modelResolverMatch[0] ||
             patchedSurfaceSelector === surfaceSelectorMatch[0] ||
