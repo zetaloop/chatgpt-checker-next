@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      4.2.2
+// @version      4.2.3
 // @description  查看 ChatGPT、Codex 和 Grok 的账号、用量与服务信息。
 // @match        *://chatgpt.com/*
 // @match        *://grok.com/*
@@ -80,6 +80,7 @@
     let chatgptPendingPatchSettings;
     let chatgptImportPatchTargets;
     let chatgptImportPatchFailure;
+    const chatgptReportedFailures = new Set();
     const chatgptRuntimeModelCatalogs = {
         chat: [],
         work: [],
@@ -248,6 +249,10 @@
                                 );
                                 grokActiveSubscriptions = subsArray;
                             } catch (e) {
+                                console.error(
+                                    "[CheckerNext] 解析 Grok activeSubscriptions 出错:",
+                                    e,
+                                );
                                 const stringsMatch =
                                     activeSubsMatch[1].match(/"([^"]+)"/g);
                                 if (stringsMatch) {
@@ -803,8 +808,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (window.__checkerNextImportMapInstalled) return;
 
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
+        if (!cached) return;
         if (
-            !cached ||
             typeof cached !== "object" ||
             !Array.isArray(cached.assets) ||
             cached.assets.length !== 2 ||
@@ -815,11 +820,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     typeof asset.sourceText !== "string",
             )
         ) {
+            reportChatgptFailure("缓存模块补丁格式无效。");
             return;
         }
         chatgptFakePlanCatalog = extractChatgptFakePlanCatalog(
             cached.assets[0].sourceText,
         );
+        if (!chatgptFakePlanCatalog) {
+            reportChatgptFailure("缓存模块中的 ChatGPT 会员枚举无法读取。");
+        }
         if (cached.signature !== getChatgptImportPatchSignature()) return;
 
         const assetBaseUrl = cached.assets[0].assetUrl.slice(
@@ -850,7 +859,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 URL.revokeObjectURL(asset.blobUrl);
             }
             chatgptImportPatchFailure = "浏览器未能插入缓存模块映射。";
-            console.warn("[CheckerNext] 缓存模块映射未能插入页面。");
+            reportChatgptFailure("缓存模块映射未能插入页面。");
             return;
         }
 
@@ -1176,6 +1185,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
     function updateChatgptRuntimeModelCatalog(origin, data) {
         if (!isChatgptMode || (origin !== "chat" && origin !== "work")) return;
+        if (!Array.isArray(data?.models)) {
+            reportChatgptFailure(`ChatGPT ${origin} 模型列表格式无效。`);
+        }
         chatgptRuntimeModelCatalogs[origin] = Array.isArray(data?.models)
             ? data.models.flatMap((model) => {
                   if (typeof model?.slug !== "string" || !model.slug.trim()) {
@@ -1292,6 +1304,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         thinkingSelect.value = thinkingValue;
     }
 
+    function reportChatgptFailure(message) {
+        if (chatgptReportedFailures.has(message)) return;
+        chatgptReportedFailures.add(message);
+        console.error(`[CheckerNext] ${message}`);
+    }
+
     function updateChatgptInjectionStatus() {
         if (!isChatgptMode) return;
         const status = document.getElementById("chatgpt-injection-status");
@@ -1345,6 +1363,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             label = "刷新重试";
             color = "#ffd700";
             description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
+            reportChatgptFailure("模块映射已经插入，但补丁模块没有执行。");
         }
 
         status.innerText = label;
@@ -1412,8 +1431,16 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         pageWindow.addEventListener(
             CHATGPT_RUNTIME_MODEL_STATE_EVENT,
             (event) => {
-                if (!event.detail || typeof event.detail !== "object") return;
+                if (!event.detail || typeof event.detail !== "object") {
+                    reportChatgptFailure("ChatGPT 运行时模型返回了无效状态。");
+                    return;
+                }
                 chatgptRuntimeModelState = event.detail;
+                if (event.detail.error) {
+                    reportChatgptFailure(
+                        `ChatGPT 运行时模型出错：${event.detail.error}`,
+                    );
+                }
                 updateChatgptRuntimeModelControls();
             },
         );
@@ -1497,11 +1524,16 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const existing = document.getElementById(
             "checker-next-copy-conversation-button",
         );
-        if (
-            !chatgptCopyButtonEnabled ||
-            !pageWindow.location.pathname.startsWith("/c/")
-        ) {
+        const pathname = pageWindow.location.pathname;
+        const isConversationPath =
+            /^\/(?:c|g\/[^/]+\/(?:shared\/)?c)\/[^/]+$/.test(pathname);
+        if (!chatgptCopyButtonEnabled || !isConversationPath) {
             existing?.remove();
+            if (chatgptCopyButtonEnabled && pathname.includes("/c/")) {
+                reportChatgptFailure(
+                    `未识别 ChatGPT 会话路径，复制按钮无法插入：${pathname}`,
+                );
+            }
             return;
         }
         const turns = chatgptModuleInjectionEnabled
@@ -1518,7 +1550,14 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const optionsButton = document.querySelector(
             'button[data-testid="conversation-options-button"]',
         );
-        if (!(optionsButton instanceof HTMLButtonElement)) return;
+        if (!(optionsButton instanceof HTMLButtonElement)) {
+            if (document.querySelector(".agent-turn")) {
+                reportChatgptFailure(
+                    "未找到 ChatGPT 会话选项按钮，复制按钮无法插入。",
+                );
+            }
+            return;
+        }
 
         const button = optionsButton.cloneNode(true);
         if (!(button instanceof HTMLButtonElement)) return;
@@ -1530,7 +1569,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         } else {
             const use = button.querySelector("use");
             const href = use?.getAttribute("href");
-            if (!use || !href) return;
+            if (!use || !href) {
+                reportChatgptFailure(
+                    "未找到可复用的 ChatGPT 复制图标，复制按钮无法插入。",
+                );
+                return;
+            }
             use.setAttribute(
                 "href",
                 `${href.split("#")[0]}#${CHATGPT_COPY_ICON_ID}`,
