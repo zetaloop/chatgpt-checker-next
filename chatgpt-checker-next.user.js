@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      4.2.3
+// @version      4.2.4
 // @description  查看 ChatGPT、Codex 和 Grok 的账号、用量与服务信息。
 // @match        *://chatgpt.com/*
 // @match        *://grok.com/*
@@ -51,9 +51,6 @@
         "checker-next-chatgpt-copy-button-enabled";
     const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
         "checker-next-chatgpt-selection-popover-disabled";
-    const CHATGPT_COPY_ICON_ID = "ce3544";
-    const CHATGPT_COPY_SUCCESS_ICON_ID = "fa1dbd";
-    const CHATGPT_COPY_ERROR_ICON_ID = "85f94b";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
         "checker-next-runtime-model-state";
     const CHATGPT_RUNTIME_MODEL_REQUEST_EVENT =
@@ -649,7 +646,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     const conversations=new Map;
     const customModels=new Set;
     const originOverrides=new Map;
-    let newConversation,stateScheduled=!1,modelGetter,modelSetter,thinkingStore,thinkingLane;
+    let newConversation,stateScheduled=!1,modelGetter,modelSetter,thinkingStore;
     const getServerId=conversation=>typeof conversation.serverId$==="function"?conversation.serverId$():null;
     const getOriginKey=conversation=>getServerId(conversation)??conversation.id;
     const getOriginOverride=conversation=>conversation?originOverrides.get(getOriginKey(conversation)):void 0;
@@ -693,12 +690,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         stateScheduled=!0;
         queueMicrotask(()=>{try{emitState()}finally{stateScheduled=!1}});
     };
-    const register=(conversation,nextModelGetter,nextModelSetter,nextThinkingStore,nextThinkingLane)=>{
+    const register=(conversation,nextModelGetter,nextModelSetter,nextThinkingStore)=>{
         if(!conversation)return;
         modelGetter=nextModelGetter;
         modelSetter=nextModelSetter;
         thinkingStore=nextThinkingStore;
-        thinkingLane=nextThinkingLane;
         if(conversation.id!=null)conversations.set(conversation.id,conversation);
         const serverId=getServerId(conversation);
         if(serverId!=null){
@@ -728,7 +724,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             if(model){customModels.add(model);modelSetter(conversation,model)}
             const hasThinkingEffort=Object.hasOwn(detail,"thinkingEffort")&&(detail.thinkingEffort===null||typeof detail.thinkingEffort==="string");
             const thinkingEffort=typeof detail.thinkingEffort==="string"?detail.thinkingEffort.trim():void 0;
-            if(hasThinkingEffort)thinkingStore(conversation).setThinkingEffort(thinkingEffort||void 0,thinkingLane(conversation),modelGetter(conversation).id);
+            if(hasThinkingEffort)thinkingStore(conversation).setThinkingEffort(thinkingEffort||void 0,modelGetter(conversation).id);
         }catch(error){emitState(error);return}
         scheduleState();
     });
@@ -882,13 +878,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const thinkingStoreMatch = singleMatch(
             /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{if\(\1==null\)return;let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\(\1\);if\([^{}]{0,180}\)return ([A-Za-z$_][\w$]*)\(\1\)\.conversationThinkingEffort\$\(\)\}/g,
         );
-        const thinkingLaneMatch = singleMatch(
-            /conversationThinkingEffort\$:[A-Za-z$_][\w$]*\(\(\)=>\{let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*\),[A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*\),[A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\([A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*\);if\([A-Za-z$_][\w$]*\)return/g,
-        );
-        const modelGetterName =
-            thinkingStoreMatch?.[2] === thinkingLaneMatch?.[2]
-                ? thinkingStoreMatch[2]
-                : null;
+        const modelGetterName = thinkingStoreMatch?.[2] || null;
         const modelGetterMatch = modelGetterName
             ? singleMatch(
                   new RegExp(
@@ -914,7 +904,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             !modelGetterName ||
             !modelGetterMatch ||
             !thinkingStoreMatch ||
-            !thinkingLaneMatch ||
             !modelResolverMatch ||
             !surfaceSelectorMatch ||
             modelSetterMatch[5] !== surfaceSelectorName
@@ -931,7 +920,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){`,
             `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${surfaceSelectorMatch[1]});if(checkerNextOrigin==="work")return"tpp";if(checkerNextOrigin==="chat")return"chat";`,
         );
-        const patchedModelGetter = `${modelGetterMatch[0]}globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[2]},${modelGetterName},${modelSetterMatch[1]},${thinkingStoreMatch[3]},conversation=>${thinkingLaneMatch[3]}(${thinkingLaneMatch[1]}(conversation),${thinkingLaneMatch[2]}(conversation)));`;
+        const patchedModelGetter = `${modelGetterMatch[0]}globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[2]},${modelGetterName},${modelSetterMatch[1]},${thinkingStoreMatch[3]});`;
         if (
             patchedModelResolver === modelResolverMatch[0] ||
             patchedSurfaceSelector === surfaceSelectorMatch[0] ||
@@ -1490,20 +1479,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     }
 
     function setChatgptCopyButtonState(button, state) {
-        const use = button.querySelector("use");
-        const href = use?.getAttribute("href");
-        if (use && href) {
-            use.setAttribute(
-                "href",
-                `${href.split("#")[0]}#${
-                    state === "success"
-                        ? CHATGPT_COPY_SUCCESS_ICON_ID
-                        : state === "error"
-                          ? CHATGPT_COPY_ERROR_ICON_ID
-                          : CHATGPT_COPY_ICON_ID
-                }`,
-            );
-        }
         button.classList.toggle(
             "hover:bg-token-bg-tertiary!",
             state !== "idle",
@@ -1564,22 +1539,13 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const nativeCopyIcon = document.querySelector(
             'button[data-testid="copy-turn-action-button"] svg',
         );
-        if (nativeCopyIcon) {
-            button.replaceChildren(nativeCopyIcon.cloneNode(true));
-        } else {
-            const use = button.querySelector("use");
-            const href = use?.getAttribute("href");
-            if (!use || !href) {
-                reportChatgptFailure(
-                    "未找到可复用的 ChatGPT 复制图标，复制按钮无法插入。",
-                );
-                return;
-            }
-            use.setAttribute(
-                "href",
-                `${href.split("#")[0]}#${CHATGPT_COPY_ICON_ID}`,
+        if (!nativeCopyIcon) {
+            reportChatgptFailure(
+                "未找到可复用的 ChatGPT 复制图标，复制按钮无法插入。",
             );
+            return;
         }
+        button.replaceChildren(nativeCopyIcon.cloneNode(true));
 
         button.id = "checker-next-copy-conversation-button";
         button.type = "button";
