@@ -72,6 +72,7 @@
     let priceRegionCode = null;
     let chatgptRuntimeModelState;
     let chatgptFakePlanCatalog;
+    let chatgptCopyIcons;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
     let chatgptPendingPatchSettings;
@@ -778,17 +779,123 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         return items;
     }
 
+    async function extractChatgptCopyIcons(
+        sharedUrl,
+        sharedSource,
+        conversationSource,
+    ) {
+        const singleMatch = (pattern, sourceText) => {
+            const matches = [...sourceText.matchAll(pattern)];
+            return matches.length === 1 ? matches[0] : null;
+        };
+        const actionIconsMatch = singleMatch(
+            /id:`message-turn-actions`,icons:\{((?:[^{}]|\{[^{}]*\})+)\}\}/g,
+            conversationSource,
+        );
+        const checkMatch = actionIconsMatch
+            ? singleMatch(
+                  /(?:^|,)check:\{[^{}]*normal:([A-Za-z$_][\w$]*)[^{}]*\}/g,
+                  actionIconsMatch[1],
+              )
+            : null;
+        const copyMatch = actionIconsMatch
+            ? singleMatch(
+                  /(?:^|,)copy:\{[^{}]*normal:([A-Za-z$_][\w$]*)[^{}]*\}/g,
+                  actionIconsMatch[1],
+              )
+            : null;
+        const errorMessageMatch = singleMatch(
+            /\[([A-Za-z$_][\w$]*)\.danger\]:\{defaultMessage:`Error`,description:`Prefix for error toast announcements`,id:`toast\.error`\}/g,
+            sharedSource,
+        );
+        const iconMapMatch = errorMessageMatch
+            ? singleMatch(
+                  new RegExp(
+                      `\\{((?:\\[${RegExp.escape(errorMessageMatch[1])}\\.[A-Za-z]+\\]:[A-Za-z$_][\\w$]*,?){4,8})\\}`,
+                      "g",
+                  ),
+                  sharedSource,
+              )
+            : null;
+        const errorMatch = iconMapMatch
+            ? singleMatch(
+                  new RegExp(
+                      `\\[${RegExp.escape(errorMessageMatch[1])}\\.danger\\]:([A-Za-z$_][\\w$]*)`,
+                      "g",
+                  ),
+                  iconMapMatch[1],
+              )
+            : null;
+        if (!checkMatch || !copyMatch || !errorMatch) return null;
+
+        const inlineIcon = (localName) => {
+            const match = singleMatch(
+                new RegExp(
+                    `(?<![\\w$])${RegExp.escape(localName)}` +
+                        "=[A-Za-z$_][\\w$]*\\(\\{name:`[^`]+`,canvas:\\{width:\\d+,height:\\d+,viewBox:`([^`]+)`[\\s\\S]{0,2500}?body:`([^`]+)`\\}\\)",
+                    "g",
+                ),
+                conversationSource,
+            );
+            return match ? { viewBox: match[1], body: match[2] } : null;
+        };
+        const success = inlineIcon(checkMatch[1]);
+        const idle = inlineIcon(copyMatch[1]);
+        if (!idle || !success) return null;
+
+        const errorIconMatch = singleMatch(
+            new RegExp(
+                `(?<![\\w$])${RegExp.escape(errorMatch[1])}` +
+                    "=([A-Za-z$_][\\w$]*)\\(([A-Za-z$_][\\w$]*),`([^`]+)`,\\d+,\\d+(?:,!0)?\\)",
+                "g",
+            ),
+            sharedSource,
+        );
+        const spriteMatch = errorIconMatch
+            ? singleMatch(
+                  new RegExp(
+                      `(?<![\\w$])${RegExp.escape(errorIconMatch[2])}` +
+                          "=`([^`]+)`",
+                      "g",
+                  ),
+                  sharedSource,
+              )
+            : null;
+        if (!errorIconMatch || !spriteMatch) return null;
+
+        const spriteResponse = await originalFetch(
+            new URL(spriteMatch[1], new URL(sharedUrl).origin),
+        );
+        if (!spriteResponse.ok) {
+            throw new Error(
+                `${spriteResponse.status} ${spriteResponse.statusText}`,
+            );
+        }
+        const symbol = new DOMParser()
+            .parseFromString(await spriteResponse.text(), "image/svg+xml")
+            .getElementById(errorIconMatch[3]);
+        const viewBox = symbol?.getAttribute("viewBox");
+        if (symbol?.localName !== "symbol" || !viewBox) return null;
+
+        return {
+            idle,
+            success,
+            error: { viewBox, body: symbol.innerHTML },
+        };
+    }
+
     function getChatgptImportPatchSignature() {
         const { fakePlan } = getChatgptImportPatchSettings();
         const transformSignature = [
             rewriteModuleImports,
             extractChatgptFakePlanCatalog,
             findChatgptFakePlan,
+            extractChatgptCopyIcons,
             patchChatgptRuntimeModelAssetSource,
             patchChatgptRuntimeModelConversationAssetSource,
             patchChatgptFakePlanAssetSource,
         ].join("\n");
-        return `${transformSignature}\n${fakePlan}`;
+        return [transformSignature, fakePlan].join("\n");
     }
 
     function setChatgptImportMapPatchCache(value) {
@@ -826,6 +933,17 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             reportChatgptFailure("缓存模块中的 ChatGPT 会员枚举无法读取。");
         }
         if (cached.signature !== getChatgptImportPatchSignature()) return;
+        if (
+            ["idle", "success", "error"].some(
+                (state) =>
+                    typeof cached.copyIcons?.[state]?.viewBox !== "string" ||
+                    typeof cached.copyIcons[state].body !== "string",
+            )
+        ) {
+            reportChatgptFailure("缓存模块补丁格式无效。");
+            return;
+        }
+        chatgptCopyIcons = cached.copyIcons;
 
         const assetBaseUrl = cached.assets[0].assetUrl.slice(
             0,
@@ -842,7 +960,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 mappedAssets.map((asset) => [asset.assetUrl, asset.blobUrl]),
             ),
             scopes: {
-                [`${assetBaseUrl}/`]: Object.fromEntries(
+                [assetBaseUrl.concat("/")]: Object.fromEntries(
                     mappedAssets.map((asset) => [
                         `./${asset.assetFilename}`,
                         asset.blobUrl,
@@ -878,7 +996,13 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const thinkingStoreMatch = singleMatch(
             /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{if\(\1==null\)return;let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\(\1\);if\([^{}]{0,180}\)return ([A-Za-z$_][\w$]*)\(\1\)\.conversationThinkingEffort\$\(\)\}/g,
         );
-        const modelGetterName = thinkingStoreMatch?.[2] || null;
+        const thinkingSetterMatch = singleMatch(
+            /setThinkingEffort:\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)=>\{if\(([A-Za-z$_][\w$]*)\(\)\)\{[A-Za-z$_][\w$]*\.set\(\1\),[A-Za-z$_][\w$]*\(\1,\2\?\?([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\.id\);return\}[A-Za-z$_][\w$]*\.setThinkingEffort\(\1\)\}\}/g,
+        );
+        const modelGetterName =
+            thinkingStoreMatch?.[2] === thinkingSetterMatch?.[4]
+                ? thinkingStoreMatch[2]
+                : null;
         const modelGetterMatch = modelGetterName
             ? singleMatch(
                   new RegExp(
@@ -904,6 +1028,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             !modelGetterName ||
             !modelGetterMatch ||
             !thinkingStoreMatch ||
+            !thinkingSetterMatch ||
             !modelResolverMatch ||
             !surfaceSelectorMatch ||
             modelSetterMatch[5] !== surfaceSelectorName
@@ -996,8 +1121,15 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 (asset, index) => asset.assetUrl === assetUrls[index],
             ) &&
             cached?.signature === signature &&
-            cached.assets.length === targets.length
+            cached.assets.length === targets.length &&
+            ["idle", "success", "error"].every(
+                (state) =>
+                    typeof cached.copyIcons?.[state]?.viewBox === "string" &&
+                    typeof cached.copyIcons[state].body === "string",
+            )
         ) {
+            chatgptCopyIcons = cached.copyIcons;
+            syncChatgptCopyButton();
             return;
         }
 
@@ -1008,6 +1140,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 assetUrls.map((assetUrl) => originalFetch(assetUrl)),
             );
             const assets = [];
+            let sharedSource;
+            let conversationSource;
             for (const [index, response] of responses.entries()) {
                 if (!response.ok) {
                     throw new Error(
@@ -1018,7 +1152,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 const target = targets[index];
                 const assetUrl = assetUrls[index];
                 let sourceText = await response.text();
+                if (target.assetType === "conversation") {
+                    conversationSource = sourceText;
+                }
                 if (target.assetType === "shared") {
+                    sharedSource = sourceText;
                     chatgptFakePlanCatalog =
                         extractChatgptFakePlanCatalog(sourceText);
                     if (!chatgptFakePlanCatalog) {
@@ -1070,11 +1208,29 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 });
             }
 
+            const copyIcons = await extractChatgptCopyIcons(
+                targets.find((target) => target.assetType === "shared")
+                    .assetUrl,
+                sharedSource,
+                conversationSource,
+            );
+            if (!copyIcons) {
+                setChatgptImportMapPatchCache(null);
+                chatgptImportPatchFailure =
+                    "复制按钮图标与当前 ChatGPT 模块不匹配。";
+                updateChatgptInjectionStatus();
+                console.error("[CheckerNext] 未能读取 ChatGPT 复制按钮图标。");
+                return;
+            }
+
             if (!isChatgptImportPatchEnabled()) return;
+            chatgptCopyIcons = copyIcons;
             setChatgptImportMapPatchCache({
                 assets,
+                copyIcons,
                 signature: getChatgptImportPatchSignature(),
             });
+            syncChatgptCopyButton();
             chatgptImportPatchNeedsReload = true;
             updateChatgptInjectionStatus();
             console.info(
@@ -1478,7 +1634,14 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         return transcript;
     }
 
-    function setChatgptCopyButtonState(button, state) {
+    function setChatgptCopyButtonState(button, state, icons) {
+        const icon =
+            state === "success"
+                ? icons.success
+                : state === "error"
+                  ? icons.error
+                  : icons.idle;
+        button.replaceChildren(icon.cloneNode(true));
         button.classList.toggle(
             "hover:bg-token-bg-tertiary!",
             state !== "idle",
@@ -1535,7 +1698,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         }
 
         const button = optionsButton.cloneNode(true);
-        if (!(button instanceof HTMLButtonElement)) return;
+        if (!(button instanceof HTMLButtonElement) || !chatgptCopyIcons) return;
         const nativeCopyIcon = document.querySelector(
             'button[data-testid="copy-turn-action-button"] svg',
         );
@@ -1545,7 +1708,14 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             );
             return;
         }
-        button.replaceChildren(nativeCopyIcon.cloneNode(true));
+        const icons = Object.fromEntries(
+            ["idle", "success", "error"].map((state) => {
+                const icon = nativeCopyIcon.cloneNode(false);
+                icon.setAttribute("viewBox", chatgptCopyIcons[state].viewBox);
+                icon.innerHTML = chatgptCopyIcons[state].body;
+                return [state, icon];
+            }),
+        );
 
         button.id = "checker-next-copy-conversation-button";
         button.type = "button";
@@ -1555,12 +1725,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         button.removeAttribute("aria-expanded");
         button.removeAttribute("aria-haspopup");
         button.disabled = !ready;
-        setChatgptCopyButtonState(button, "idle");
+        setChatgptCopyButtonState(button, "idle", icons);
         let copying = false;
         button.addEventListener("click", async () => {
             if (copying) return;
             copying = true;
-            setChatgptCopyButtonState(button, "loading");
+            setChatgptCopyButtonState(button, "loading", icons);
             try {
                 const currentTurns =
                     pageWindow.__checkerNextRuntimeModelBridge?.getTurns?.();
@@ -1570,14 +1740,17 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 await pageWindow.navigator.clipboard.writeText(
                     formatChatgptConversation(currentTurns),
                 );
-                setChatgptCopyButtonState(button, "success");
+                setChatgptCopyButtonState(button, "success", icons);
             } catch (error) {
                 console.error("[CheckerNext] 复制会话失败:", error);
-                setChatgptCopyButtonState(button, "error");
+                setChatgptCopyButtonState(button, "error", icons);
             } finally {
                 copying = false;
             }
-            setTimeout(() => setChatgptCopyButtonState(button, "idle"), 1000);
+            setTimeout(
+                () => setChatgptCopyButtonState(button, "idle", icons),
+                1000,
+            );
         });
         optionsButton.parentElement?.before(button);
     }
