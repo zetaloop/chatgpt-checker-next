@@ -73,6 +73,7 @@
     let chatgptRuntimeModelState;
     let chatgptFakePlanCatalog;
     let chatgptCopyIcons;
+    let chatgptImportMapInserted = false;
     let chatgptImportPatchNeedsReload = false;
     let chatgptInstalledPatchSettings;
     let chatgptPendingPatchSettings;
@@ -567,10 +568,19 @@
     }
 
     function injectImportMap(importMapJson) {
-        return GM_addElement("script", {
-            type: "importmap",
-            textContent: JSON.stringify(importMapJson),
-        });
+        const withNonce = document.querySelector("script[nonce], link[nonce]");
+        const nonce =
+            document.currentScript?.nonce ||
+            withNonce?.nonce ||
+            withNonce?.getAttribute("nonce");
+        if (!nonce || !document.head) return null;
+
+        const script = document.createElement("script");
+        script.type = "importmap";
+        script.nonce = nonce;
+        script.textContent = JSON.stringify(importMapJson);
+        document.head.insertBefore(script, document.head.firstChild);
+        return script;
     }
 
     function patchChatgptRuntimeModelAssetSource(sourceText) {
@@ -884,6 +894,18 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         };
     }
 
+    function isChatgptFakePlanCatalog(value) {
+        return Array.isArray(value?.options) && Array.isArray(value.planTypes);
+    }
+
+    function isChatgptCopyIcons(value) {
+        return ["idle", "success", "error"].every(
+            (state) =>
+                typeof value?.[state]?.viewBox === "string" &&
+                typeof value[state].body === "string",
+        );
+    }
+
     function getChatgptImportPatchSignature() {
         const { fakePlan } = getChatgptImportPatchSettings();
         const transformSignature = [
@@ -908,7 +930,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
     function installCachedChatgptImportMapPatch() {
         if (!isChatgptImportPatchEnabled()) return;
-        if (window.__checkerNextImportMapInstalled) return;
+        if (pageWindow.__checkerNextImportMapInstalled) return;
 
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
         if (!cached) return;
@@ -919,36 +941,25 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             cached.assets.some(
                 (asset) =>
                     typeof asset?.assetUrl !== "string" ||
-                    typeof asset.assetFilename !== "string" ||
                     typeof asset.sourceText !== "string",
             )
         ) {
             reportChatgptFailure("缓存模块补丁格式无效。");
             return;
         }
-        chatgptFakePlanCatalog = extractChatgptFakePlanCatalog(
-            cached.assets[0].sourceText,
-        );
-        if (!chatgptFakePlanCatalog) {
+        chatgptFakePlanCatalog =
+            cached.fakePlanCatalog ||
+            extractChatgptFakePlanCatalog(cached.assets[0].sourceText);
+        if (!isChatgptFakePlanCatalog(chatgptFakePlanCatalog)) {
             reportChatgptFailure("缓存模块中的 ChatGPT 会员枚举无法读取。");
+            return;
         }
         if (cached.signature !== getChatgptImportPatchSignature()) return;
-        if (
-            ["idle", "success", "error"].some(
-                (state) =>
-                    typeof cached.copyIcons?.[state]?.viewBox !== "string" ||
-                    typeof cached.copyIcons[state].body !== "string",
-            )
-        ) {
+        if (!isChatgptCopyIcons(cached.copyIcons)) {
             reportChatgptFailure("缓存模块补丁格式无效。");
             return;
         }
         chatgptCopyIcons = cached.copyIcons;
-
-        const assetBaseUrl = cached.assets[0].assetUrl.slice(
-            0,
-            cached.assets[0].assetUrl.lastIndexOf("/"),
-        );
         const mappedAssets = cached.assets.map((asset) => ({
             ...asset,
             blobUrl: URL.createObjectURL(
@@ -959,25 +970,18 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             imports: Object.fromEntries(
                 mappedAssets.map((asset) => [asset.assetUrl, asset.blobUrl]),
             ),
-            scopes: {
-                [assetBaseUrl.concat("/")]: Object.fromEntries(
-                    mappedAssets.map((asset) => [
-                        `./${asset.assetFilename}`,
-                        asset.blobUrl,
-                    ]),
-                ),
-            },
         });
         if (!importMap) {
             for (const asset of mappedAssets) {
                 URL.revokeObjectURL(asset.blobUrl);
             }
-            chatgptImportPatchFailure = "浏览器未能插入缓存模块映射。";
-            reportChatgptFailure("缓存模块映射未能插入页面。");
+            chatgptImportPatchFailure =
+                "页面尚未提供可同步插入模块映射的脚本 nonce。";
+            reportChatgptFailure(chatgptImportPatchFailure);
             return;
         }
 
-        window.__checkerNextImportMapInstalled = true;
+        chatgptImportMapInserted = true;
         chatgptInstalledPatchSettings = getChatgptImportPatchSettings();
         console.info(
             "[CheckerNext] 已创建缓存 import map 元素:",
@@ -1045,7 +1049,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){`,
             `function ${surfaceSelectorName}(${surfaceSelectorMatch[1]}){let checkerNextOrigin=globalThis.__checkerNextRuntimeModelBridge?.getOrigin(${surfaceSelectorMatch[1]});if(checkerNextOrigin==="work")return"tpp";if(checkerNextOrigin==="chat")return"chat";`,
         );
-        const patchedModelGetter = `${modelGetterMatch[0]}globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[2]},${modelGetterName},${modelSetterMatch[1]},${thinkingStoreMatch[3]});`;
+        const patchedModelGetter = `${modelGetterMatch[0]}if(globalThis.__checkerNextRuntimeModelBridge){globalThis.__checkerNextRuntimeModelBridge.register(${modelGetterMatch[2]},${modelGetterName},${modelSetterMatch[1]},${thinkingStoreMatch[3]});globalThis.__checkerNextImportMapInstalled=!0}else console.error("[CheckerNext] 运行时模型 bridge 未注册。");`;
         if (
             patchedModelResolver === modelResolverMatch[0] ||
             patchedSurfaceSelector === surfaceSelectorMatch[0] ||
@@ -1108,10 +1112,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const targets = chatgptImportPatchTargets;
         const assetUrls = targets.map((target) => target.assetUrl);
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
-        if (!chatgptFakePlanCatalog && Array.isArray(cached?.assets)) {
-            chatgptFakePlanCatalog = extractChatgptFakePlanCatalog(
-                cached.assets[0]?.sourceText || "",
-            );
+        if (
+            !chatgptFakePlanCatalog &&
+            isChatgptFakePlanCatalog(cached?.fakePlanCatalog)
+        ) {
+            chatgptFakePlanCatalog = cached.fakePlanCatalog;
             updateChatgptFakePlanControls();
             chatgptPendingPatchSettings = getChatgptImportPatchSettings();
         }
@@ -1122,11 +1127,8 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             ) &&
             cached?.signature === signature &&
             cached.assets.length === targets.length &&
-            ["idle", "success", "error"].every(
-                (state) =>
-                    typeof cached.copyIcons?.[state]?.viewBox === "string" &&
-                    typeof cached.copyIcons[state].body === "string",
-            )
+            isChatgptFakePlanCatalog(cached.fakePlanCatalog) &&
+            isChatgptCopyIcons(cached.copyIcons)
         ) {
             chatgptCopyIcons = cached.copyIcons;
             syncChatgptCopyButton();
@@ -1198,7 +1200,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     assetUrl.lastIndexOf("/"),
                 );
                 assets.push({
-                    assetFilename: new URL(assetUrl).pathname.split("/").pop(),
                     assetUrl,
                     sourceText: rewriteModuleImports(
                         sourceText,
@@ -1228,6 +1229,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             setChatgptImportMapPatchCache({
                 assets,
                 copyIcons,
+                fakePlanCatalog: chatgptFakePlanCatalog,
                 signature: getChatgptImportPatchSignature(),
             });
             syncChatgptCopyButton();
@@ -1475,8 +1477,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         let color = "#bbbbbb";
         let description = "正在检查 ChatGPT 模块补丁。";
         const injectionInstalled = Boolean(
-            Reflect.get(window, "__checkerNextImportMapInstalled") ||
-                chatgptRuntimeModelState,
+            Reflect.get(pageWindow, "__checkerNextImportMapInstalled"),
         );
 
         if (!chatgptModuleInjectionEnabled) {
@@ -1500,11 +1501,14 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             description = chatgptRuntimeModelState
                 ? `当前页面已注入：\n${installedItems}\n\n刷新后生效：\n${pendingItems}`
                 : `刷新后注入（可能要多试几次）：\n${pendingItems}`;
-        } else if (chatgptRuntimeModelState) {
+        } else if (injectionInstalled) {
             label = "注入成功";
             color = "#98fb98";
             description = `当前页面已注入：\n${installedItems}`;
-        } else if (document.readyState === "complete" && injectionInstalled) {
+        } else if (
+            document.readyState === "complete" &&
+            chatgptImportMapInserted
+        ) {
             label = "刷新重试";
             color = "#ffd700";
             description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
@@ -2912,7 +2916,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     chatgptPendingPatchSettings =
                         getChatgptImportPatchSettings();
                     chatgptImportPatchNeedsReload = !Reflect.get(
-                        window,
+                        pageWindow,
                         "__checkerNextImportMapInstalled",
                     );
                     void prepareChatgptImportMapPatchCache();
