@@ -1670,7 +1670,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         const isConversationPath =
             /^\/(?:c|g\/[^/]+\/(?:shared\/)?c)\/[^/]+$/.test(pathname);
         if (!chatgptCopyButtonEnabled || !isConversationPath) {
-            existing?.remove();
+            existing?.parentElement?.remove();
             if (chatgptCopyButtonEnabled && pathname.includes("/c/")) {
                 reportChatgptFailure(
                     `未识别 ChatGPT 会话路径，复制按钮无法插入：${pathname}`,
@@ -1678,14 +1678,21 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             }
             return;
         }
+        if (
+            existing instanceof HTMLButtonElement &&
+            existing.dataset.pathname === pathname &&
+            chatgptModuleInjectionEnabled &&
+            !existing.disabled
+        ) {
+            return;
+        }
         const turns = chatgptModuleInjectionEnabled
             ? pageWindow.__checkerNextRuntimeModelBridge?.getTurns?.()
             : undefined;
         const ready = Array.isArray(turns) && turns.length > 0;
-        if (existing) {
-            if (existing instanceof HTMLButtonElement) {
-                existing.disabled = !ready;
-            }
+        if (existing instanceof HTMLButtonElement) {
+            existing.dataset.pathname = pathname;
+            existing.disabled = !ready;
             return;
         }
 
@@ -1701,20 +1708,25 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return;
         }
 
+        const optionsItem = optionsButton.parentElement?.parentElement;
         const button = optionsButton.cloneNode(true);
-        if (!(button instanceof HTMLButtonElement) || !chatgptCopyIcons) return;
-        const nativeCopyIcon = document.querySelector(
-            'button[data-testid="copy-turn-action-button"] svg',
-        );
-        if (!nativeCopyIcon) {
+        if (
+            !(optionsItem instanceof HTMLElement) ||
+            !(button instanceof HTMLButtonElement) ||
+            !chatgptCopyIcons
+        ) {
+            return;
+        }
+        const nativeIcon = button.querySelector("svg");
+        if (!nativeIcon) {
             reportChatgptFailure(
-                "未找到可复用的 ChatGPT 复制图标，复制按钮无法插入。",
+                "未找到可复用的 ChatGPT 按钮图标，复制按钮无法插入。",
             );
             return;
         }
         const icons = Object.fromEntries(
             ["idle", "success", "error"].map((state) => {
-                const icon = nativeCopyIcon.cloneNode(false);
+                const icon = nativeIcon.cloneNode(false);
                 icon.setAttribute("viewBox", chatgptCopyIcons[state].viewBox);
                 icon.innerHTML = chatgptCopyIcons[state].body;
                 return [state, icon];
@@ -1723,6 +1735,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
 
         button.id = "checker-next-copy-conversation-button";
         button.type = "button";
+        button.dataset.pathname = pathname;
         button.removeAttribute("data-testid");
         button.removeAttribute("data-state");
         button.removeAttribute("aria-controls");
@@ -1756,7 +1769,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 1000,
             );
         });
-        optionsButton.parentElement?.before(button);
+        const item = optionsItem.cloneNode(false);
+        item.append(button);
+        optionsItem.before(item);
     }
 
     // 全局状态：记录弹窗是否正在显示
