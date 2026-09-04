@@ -3393,7 +3393,11 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                         : "附加用量";
                 appendRateLimit(
                     additionalRateLimit?.rate_limit,
-                    name === "GPT-5.3-Codex-Spark" ? "Spark" : name,
+                    name === "GPT-5.3-Codex-Spark"
+                        ? "Spark"
+                        : name === "gpt-reserve"
+                          ? "Reserve Luna"
+                          : name,
                 );
             }
         }
