@@ -1027,10 +1027,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             /function [A-Za-z$_][\w$]*\(([A-Za-z$_][\w$]*)\)\{if\(\1==null\)return;let [A-Za-z$_][\w$]*=([A-Za-z$_][\w$]*)\(\1\);if\([^{}]{0,180}\)return ([A-Za-z$_][\w$]*)\(\1\)\.conversationThinkingEffort\$\(\)\}/g,
         );
         const thinkingSetterMatch = singleMatch(
-            /setThinkingEffort:\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)=>\{if\(([A-Za-z$_][\w$]*)\(\)\)\{[A-Za-z$_][\w$]*\.set\(\1\),[A-Za-z$_][\w$]*\(\1,\2\?\?([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\.id\);return\}[A-Za-z$_][\w$]*\.setThinkingEffort\(\1\)\}/g,
+            /setThinkingEffort:\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)=>\{if\(([A-Za-z$_][\w$]*)\(\)\)\{[A-Za-z$_][\w$]*\(\(\)=>\{let ([A-Za-z$_][\w$]*)=\2\?\?([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\.id,(?:[^{}]|\{[^{}]*\}){0,500}?[A-Za-z$_][\w$]*\.set\(\1\),[A-Za-z$_][\w$]*\(\1,\4\)\}\);return\}[A-Za-z$_][\w$]*\.setThinkingEffort\(\1\)\}/g,
         );
         const modelGetterName =
-            thinkingStoreMatch?.[2] === thinkingSetterMatch?.[4]
+            thinkingStoreMatch?.[2] === thinkingSetterMatch?.[5]
                 ? thinkingStoreMatch[2]
                 : null;
         const modelGetterMatch = modelGetterName
