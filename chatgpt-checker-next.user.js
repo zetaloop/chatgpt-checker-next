@@ -676,7 +676,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         __SURFACE_SWITCH__({conversation,nextMode:origin==="work"?__SURFACE_MODE__.TPP:__SURFACE_MODE__.Chat});
     };
     const getCurrentConversation=()=>{
-        const routeId=globalThis.location.pathname.match(/\\/c\\/([^/?#]+)/)?.[1];
+        const routeId=globalThis.location.pathname.match(/\\/(?:c|share)\\/([^/?#]+)/)?.[1];
         if(routeId)return conversations.get(routeId);
         return newConversation&&getServerId(newConversation)==null?newConversation:void 0;
     };
@@ -707,6 +707,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         modelSetter=nextModelSetter;
         thinkingStore=nextThinkingStore;
         if(conversation.id!=null)conversations.set(conversation.id,conversation);
+        if(conversation.config?.sharedConversationId!=null)conversations.set(conversation.config.sharedConversationId,conversation);
         const serverId=getServerId(conversation);
         if(serverId!=null){
             conversations.set(serverId,conversation);
@@ -798,6 +799,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             const matches = [...sourceText.matchAll(pattern)];
             return matches.length === 1 ? matches[0] : null;
         };
+        const buttonMatch = singleMatch(
+            /let [A-Za-z$_][\w$]*=[A-Za-z$_][\w$]*\?\?`([^`]+)`,[A-Za-z$_][\w$]*=[A-Za-z$_][\w$]*!=null&&`max-md:hidden`[\s\S]{0,1800}?default:\{let [A-Za-z$_][\w$]*=\(0,[A-Za-z$_][\w$]*\.jsx\)\(`button`,\{\.\.\.[A-Za-z$_][\w$]*,className:[A-Za-z$_][\w$]*\([A-Za-z$_][\w$]*===`primary`\?`([^`]+)`:[A-Za-z$_][\w$]*===`tertiary`\?`[^`]+`:`[^`]+`,`([^`]+)`,`([^`]+)`,[A-Za-z$_][\w$]*\.className\)/g,
+            conversationSource,
+        );
         const actionIconsMatch = singleMatch(
             /id:`message-turn-actions`,icons:\{((?:[^{}]|\{[^{}]*\})+)\}\}/g,
             conversationSource,
@@ -836,18 +841,27 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                   iconMapMatch[1],
               )
             : null;
-        if (!checkMatch || !copyMatch || !errorMatch) return null;
+        if (!buttonMatch || !checkMatch || !copyMatch || !errorMatch) {
+            return null;
+        }
 
         const inlineIcon = (localName) => {
             const match = singleMatch(
                 new RegExp(
                     `(?<![\\w$])${RegExp.escape(localName)}` +
-                        "=[A-Za-z$_][\\w$]*\\(\\{name:`[^`]+`,canvas:\\{width:\\d+,height:\\d+,viewBox:`([^`]+)`[\\s\\S]{0,2500}?body:`([^`]+)`\\}\\)",
+                        "=[A-Za-z$_][\\w$]*\\(\\{name:`[^`]+`,canvas:\\{width:(\\d+),height:(\\d+),viewBox:`([^`]+)`[\\s\\S]{0,2500}?body:`([^`]+)`\\}\\)",
                     "g",
                 ),
                 conversationSource,
             );
-            return match ? { viewBox: match[1], body: match[2] } : null;
+            return match
+                ? {
+                      width: match[1],
+                      height: match[2],
+                      viewBox: match[3],
+                      body: match[4],
+                  }
+                : null;
         };
         const success = inlineIcon(checkMatch[1]);
         const idle = inlineIcon(copyMatch[1]);
@@ -888,6 +902,12 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         if (symbol?.localName !== "symbol" || !viewBox) return null;
 
         return {
+            button: {
+                className: buttonMatch.slice(2).join(" "),
+                iconClassName: buttonMatch[1],
+                width: idle.width,
+                height: idle.height,
+            },
             idle,
             success,
             error: { viewBox, body: symbol.innerHTML },
@@ -899,10 +919,16 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
     }
 
     function isChatgptCopyIcons(value) {
-        return ["idle", "success", "error"].every(
-            (state) =>
-                typeof value?.[state]?.viewBox === "string" &&
-                typeof value[state].body === "string",
+        return (
+            typeof value?.button?.className === "string" &&
+            typeof value.button.iconClassName === "string" &&
+            typeof value.button.width === "string" &&
+            typeof value.button.height === "string" &&
+            ["idle", "success", "error"].every(
+                (state) =>
+                    typeof value?.[state]?.viewBox === "string" &&
+                    typeof value[state].body === "string",
+            )
         );
     }
 
@@ -1518,7 +1544,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             label = "刷新重试";
             color = "#ffd700";
             description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
-            reportChatgptFailure("模块映射已经插入，但补丁模块没有执行。");
         }
 
         status.innerText = label;
@@ -1597,6 +1622,7 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                     );
                 }
                 updateChatgptRuntimeModelControls();
+                syncChatgptCopyButton();
             },
         );
         pageWindow.addEventListener("load", updateChatgptInjectionStatus, {
@@ -1674,9 +1700,9 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         );
         const pathname = pageWindow.location.pathname;
         const isConversationPath =
-            /^\/(?:c|g\/[^/]+\/(?:shared\/)?c)\/[^/]+$/.test(pathname);
+            /^\/(?:c|share|g\/[^/]+\/(?:shared\/)?c)\/[^/]+$/.test(pathname);
         if (!chatgptCopyButtonEnabled || !isConversationPath) {
-            existing?.parentElement?.remove();
+            existing?.remove();
             if (chatgptCopyButtonEnabled && pathname.includes("/c/")) {
                 reportChatgptFailure(
                     `未识别 ChatGPT 会话路径，复制按钮无法插入：${pathname}`,
@@ -1702,38 +1728,40 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
             return;
         }
 
-        const optionsButton = document.querySelector(
-            'button[data-testid="conversation-options-button"]',
+        const actionContainer = document.getElementById(
+            "conversation-header-actions",
         );
-        if (!(optionsButton instanceof HTMLButtonElement)) {
+        const actions = actionContainer?.querySelector(
+            ":scope > div.flex.items-center",
+        );
+        if (
+            !(actionContainer instanceof HTMLElement) ||
+            !(actions instanceof HTMLElement)
+        ) {
             if (document.querySelector(".agent-turn")) {
                 reportChatgptFailure(
-                    "未找到 ChatGPT 会话选项按钮，复制按钮无法插入。",
+                    "未找到 ChatGPT 会话页头操作区，复制按钮无法插入。",
                 );
             }
             return;
         }
+        if (!chatgptCopyIcons) return;
 
-        const optionsItem = optionsButton.parentElement?.parentElement;
-        const button = optionsButton.cloneNode(true);
-        if (
-            !(optionsItem instanceof HTMLElement) ||
-            !(button instanceof HTMLButtonElement) ||
-            !chatgptCopyIcons
-        ) {
-            return;
-        }
-        const nativeIcon = button.querySelector("svg");
-        if (!nativeIcon) {
-            reportChatgptFailure(
-                "未找到可复用的 ChatGPT 按钮图标，复制按钮无法插入。",
-            );
-            return;
-        }
+        const button = document.createElement("button");
+        button.className = chatgptCopyIcons.button.className;
+        const nativeIcon = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "svg",
+        );
+        nativeIcon.setAttribute("width", chatgptCopyIcons.button.width);
+        nativeIcon.setAttribute("height", chatgptCopyIcons.button.height);
+        nativeIcon.setAttribute("aria-hidden", "true");
+        nativeIcon.setAttribute("class", chatgptCopyIcons.button.iconClassName);
         const icons = Object.fromEntries(
             ["idle", "success", "error"].map((state) => {
                 const icon = nativeIcon.cloneNode(false);
                 icon.setAttribute("viewBox", chatgptCopyIcons[state].viewBox);
+                icon.setAttribute("fill", "currentColor");
                 icon.innerHTML = chatgptCopyIcons[state].body;
                 return [state, icon];
             }),
@@ -1742,11 +1770,6 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
         button.id = "checker-next-copy-conversation-button";
         button.type = "button";
         button.dataset.pathname = pathname;
-        button.removeAttribute("data-testid");
-        button.removeAttribute("data-state");
-        button.removeAttribute("aria-controls");
-        button.removeAttribute("aria-expanded");
-        button.removeAttribute("aria-haspopup");
         button.disabled = !ready;
         setChatgptCopyButtonState(button, "idle", icons);
         let copying = false;
@@ -1775,9 +1798,10 @@ globalThis.__checkerNextRuntimeModelBridge=(()=>{
                 1000,
             );
         });
-        const item = optionsItem.cloneNode(false);
-        item.append(button);
-        optionsItem.before(item);
+        actions.prepend(button);
+        const gap = getComputedStyle(actionContainer).columnGap;
+        actions.style.columnGap = gap;
+        actionContainer.parentElement.style.columnGap = gap;
     }
 
     // 全局状态：记录弹窗是否正在显示
