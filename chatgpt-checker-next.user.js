@@ -733,21 +733,35 @@
                 };
             },
             approval(fn, React) {
-                const subscribe = (listener) => {
-                    pageWindow.addEventListener(
-                        CHATGPT_MATERIALIZE_EVENT,
-                        listener,
-                    );
-                    return () =>
-                        pageWindow.removeEventListener(
-                            CHATGPT_MATERIALIZE_EVENT,
-                            listener,
-                        );
-                };
-                const snapshot = () => chatgptMaterializeEnabled;
                 return function (props) {
                     const card = fn(props);
-                    const enabled = React.useSyncExternalStore(
+                    const scope = appScope;
+                    const id = props.conversationId;
+                    const subscribe = React.useCallback(
+                        (listener) => {
+                            const stop = scope.watch((scope) => {
+                                scope.get(native.status, id);
+                                listener();
+                            });
+                            pageWindow.addEventListener(
+                                CHATGPT_MATERIALIZE_EVENT,
+                                listener,
+                            );
+                            return () => {
+                                stop();
+                                pageWindow.removeEventListener(
+                                    CHATGPT_MATERIALIZE_EVENT,
+                                    listener,
+                                );
+                            };
+                        },
+                        [scope, id],
+                    );
+                    const snapshot = () =>
+                        chatgptMaterializeEnabled
+                            ? scope.get(native.status, id)
+                            : null;
+                    const status = React.useSyncExternalStore(
                         subscribe,
                         snapshot,
                         snapshot,
@@ -756,7 +770,8 @@
                     const { actions } = card.props;
                     const target = props.item.allowTargetMessageId;
                     const automatic =
-                        enabled &&
+                        status !== null &&
+                        status !== "error" &&
                         props.item.request?.body.approval_reason ===
                             "mcp_attachment_materialization" &&
                         !actions.approveDisabled;
@@ -766,13 +781,14 @@
                     React.useEffect(() => {
                         if (
                             !automatic ||
+                            status !== "idle" ||
                             actions.isLoading ||
                             attempted.current === target
                         )
                             return;
                         attempted.current = target;
                         actions.onApprove();
-                    }, [automatic, actions, target]);
+                    }, [automatic, actions, target, status]);
                     return hidden ? null : card;
                 };
             },
@@ -1241,6 +1257,15 @@
                     );
                     bindings[name] = [imports[reference[1]], reference[2]];
                 }
+                const status = single(
+                    [
+                        ...content.source.matchAll(
+                            /isStreaming:\(0,[\w$]+\.[\w$]+\)\([\w$]+\(([\w$]+)\.([\w$]+),[\w$]+\)\)/g,
+                        ),
+                    ],
+                    "响应状态接口",
+                );
+                bindings.status = [imports[status[1]], status[2]];
             },
         );
 
