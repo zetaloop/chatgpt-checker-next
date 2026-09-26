@@ -696,15 +696,16 @@
         addEventListener("popstate", scheduleState);
     }
 
-    function createChatgptModulePatches(require) {
+    function getChatgptModules(require) {
         const bridge = pageWindow.__checkerNextRuntimeModelBridge;
         const sources = Object.entries(require.m).map(([id, factory]) => ({
             id,
             source: (bridge?.originals.get(id) ?? factory).toString(),
+            get exports() {
+                return require(id);
+            },
         }));
-        const patches = new Map();
         const symbols = {};
-        const bindings = {};
         const single = (items, label) => {
             if (items.length !== 1)
                 throw new Error(`${label}匹配到 ${items.length} 个结果`);
@@ -718,7 +719,7 @@
         const exported = (target, label, predicate) => {
             const candidates =
                 bridge?.symbols[target.id] ??
-                Object.entries(require(target.id))
+                Object.entries(target.exports)
                     .filter(([, value]) => typeof value === "function")
                     .map(([exportName, fn]) => ({
                         exportName,
@@ -744,6 +745,13 @@
                 toString: () => match.source,
             };
         };
+        return { module, exported, single, symbols };
+    }
+
+    function createChatgptModulePatches(modules) {
+        const { module, exported, single, symbols } = modules;
+        const patches = new Map();
+        const bindings = {};
         const append = (target, addition) => {
             const source = patches.get(target.id) ?? target.source;
             patches.set(target.id, `${source.slice(0, -1)};${addition}}`);
@@ -796,7 +804,7 @@
                 source.includes("isWorkConversation:"),
         );
         const [selectionExport] = single(
-            Object.entries(require(selection.id)),
+            Object.entries(selection.exports),
             "模型状态选择器",
         );
         bindings.selection = [selection.id, selectionExport];
@@ -831,7 +839,7 @@
                 !source.includes("function "),
         );
         const [contentExport] = single(
-            Object.entries(require(content.id)),
+            Object.entries(content.exports),
             "会话内容选择器",
         );
         bindings.turns = [content.id, contentExport];
@@ -1059,20 +1067,6 @@
             `const checkerNextMessageText=${copyText[2]};${api}.register({messageText:checkerNextMessageText});`,
         );
 
-        const plans = module(
-            "会员类型模块",
-            (source) =>
-                source.includes('.FREE="free"') &&
-                source.includes('.PRO="pro"') &&
-                source.includes('.EDUCATION_CBP="education"'),
-        );
-        const planEnum = single(
-            Object.values(require(plans.id)).filter(
-                (value) => value?.FREE === "free" && value?.PRO === "pro",
-            ),
-            "会员枚举",
-        );
-        const planTypes = Object.values(planEnum);
         const fakePlan = `localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_ENABLED_KEY)})==="true"?localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_KEY)})||"pro":""`;
         const accounts = module(
             "账号会员模块",
@@ -1125,27 +1119,55 @@
             auth,
             `{const original=${documentAuth.name};${documentAuth.name}=function(...args){const auth=original(...args),plan=${fakePlan};return !plan||auth==null?auth:{...auth,planType:plan,targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:plan}}}};`,
         );
-        const copyIcons = {};
-        for (const [state, name] of [
-            ["idle", "square-on-square-light-16"],
-            ["success", "checkmark-lg-light-16"],
-            ["error", "circle-exclamation-mark-light-16"],
-        ]) {
-            const target = module(`${state}图标模块`, (source) =>
-                source.includes(`name:"${name}"`),
+        return { patches, symbols, bindings };
+    }
+
+    function getChatgptModuleData({ module, single }) {
+        const data = {};
+        try {
+            const plans = module(
+                "会员类型模块",
+                (source) =>
+                    source.includes('.FREE="free"') &&
+                    source.includes('.PRO="pro"') &&
+                    source.includes('.EDUCATION_CBP="education"'),
             );
-            const icon = single(
-                Object.values(require(target.id)).filter(
-                    (value) =>
-                        value?.name === name &&
-                        value.canvas &&
-                        typeof value.body === "string",
+            const planEnum = single(
+                Object.values(plans.exports).filter(
+                    (value) => value?.FREE === "free" && value?.PRO === "pro",
                 ),
-                `${state}图标`,
+                "会员枚举",
             );
-            copyIcons[state] = { ...icon.canvas, body: icon.body };
+            data.planTypes = Object.values(planEnum);
+        } catch (error) {
+            reportChatgptFailure(`读取会员类型失败：${String(error)}`);
         }
-        return { patches, symbols, bindings, planTypes, copyIcons };
+        try {
+            const copyIcons = {};
+            for (const [state, name] of [
+                ["idle", "square-on-square-light-16"],
+                ["success", "checkmark-lg-light-16"],
+                ["error", "circle-exclamation-mark-light-16"],
+            ]) {
+                const target = module(`${state}图标模块`, (source) =>
+                    source.includes(`name:"${name}"`),
+                );
+                const icon = single(
+                    Object.values(target.exports).filter(
+                        (value) =>
+                            value?.name === name &&
+                            value.canvas &&
+                            typeof value.body === "string",
+                    ),
+                    `${state}图标`,
+                );
+                copyIcons[state] = { ...icon.canvas, body: icon.body };
+            }
+            data.copyIcons = copyIcons;
+        } catch (error) {
+            reportChatgptFailure(`读取复制图标失败：${String(error)}`);
+        }
+        return data;
     }
 
     function getChatgptImportPatchSettings() {
@@ -1176,7 +1198,9 @@
         return [
             rewriteModuleImports,
             installChatgptRuntimeBridge,
+            getChatgptModules,
             createChatgptModulePatches,
+            getChatgptModuleData,
         ].join("\n");
     }
 
@@ -1201,15 +1225,13 @@
         if (cached?.signature !== getChatgptImportPatchSignature()) return;
         if (
             typeof cached.assetUrl !== "string" ||
-            typeof cached.sourceText !== "string" ||
-            !Array.isArray(cached.planTypes) ||
-            !isChatgptCopyIcons(cached.copyIcons)
+            typeof cached.sourceText !== "string"
         ) {
             reportChatgptFailure("缓存模块补丁格式无效。");
             return;
         }
-        chatgptPlanTypes = cached.planTypes;
-        chatgptCopyIcons = cached.copyIcons;
+        if (isChatgptCopyIcons(cached.copyIcons))
+            chatgptCopyIcons = cached.copyIcons;
         const blobUrl = URL.createObjectURL(
             new Blob([cached.sourceText], { type: "text/javascript" }),
         );
@@ -1248,9 +1270,14 @@
             const assetUrl = new URL(match[1], entryUrl).href;
             const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
             const signature = getChatgptImportPatchSignature();
-            if (
+            const cachedSource =
                 cached?.assetUrl === assetUrl &&
                 cached.signature === signature &&
+                typeof cached.sourceText === "string"
+                    ? cached.sourceText
+                    : undefined;
+            if (
+                cachedSource !== undefined &&
                 isChatgptCopyIcons(cached.copyIcons) &&
                 Array.isArray(cached.planTypes)
             ) {
@@ -1260,44 +1287,54 @@
                 syncChatgptCopyButton();
                 return;
             }
-            chatgptImportPatchFailure = undefined;
-            chatgptImportPatchNeedsReload = false;
             const { __webpack_require__: require } = await import(assetUrl);
-            const { patches, symbols, bindings, planTypes, copyIcons } =
-                createChatgptModulePatches(require);
-            const response = await originalFetch(assetUrl);
-            if (!response.ok)
-                throw new Error(`${response.status} ${response.statusText}`);
-            let sourceText = await response.text();
-            const runtime = sourceText.match(
-                /export\{([\w$]+)\s+as\s+__webpack_require__\}/,
-            )?.[1];
-            if (!runtime) throw new Error("模块加载器导出未匹配");
-            const factories = [...patches]
-                .map(
-                    ([id, source]) =>
-                        `${JSON.stringify(id)}:Object.values({${source}})[0]`,
-                )
-                .join(",");
-            sourceText += `\n;(${installChatgptRuntimeBridge})(${runtime},{${factories}},${JSON.stringify(symbols)},${JSON.stringify(bindings)});`;
+            const modules = getChatgptModules(require);
+            const { planTypes, copyIcons } = getChatgptModuleData(modules);
+            let sourceText = cachedSource;
+            if (sourceText === undefined) {
+                chatgptImportPatchFailure = undefined;
+                chatgptImportPatchNeedsReload = false;
+                const { patches, symbols, bindings } =
+                    createChatgptModulePatches(modules);
+                const response = await originalFetch(assetUrl);
+                if (!response.ok)
+                    throw new Error(
+                        `${response.status} ${response.statusText}`,
+                    );
+                sourceText = await response.text();
+                const runtime = sourceText.match(
+                    /export\{([\w$]+)\s+as\s+__webpack_require__\}/,
+                )?.[1];
+                if (!runtime) throw new Error("模块加载器导出未匹配");
+                const factories = [...patches]
+                    .map(
+                        ([id, source]) =>
+                            `${JSON.stringify(id)}:Object.values({${source}})[0]`,
+                    )
+                    .join(",");
+                sourceText += `\n;(${installChatgptRuntimeBridge})(${runtime},{${factories}},${JSON.stringify(symbols)},${JSON.stringify(bindings)});`;
+                sourceText = rewriteModuleImports(sourceText, assetUrl);
+            }
             if (!isChatgptImportPatchEnabled()) return;
             chatgptPlanTypes = planTypes;
             chatgptCopyIcons = copyIcons;
             setChatgptImportMapPatchCache({
                 assetUrl,
-                sourceText: rewriteModuleImports(sourceText, assetUrl),
+                sourceText,
                 planTypes,
                 copyIcons,
                 signature,
             });
             updateChatgptFakePlanControls();
             syncChatgptCopyButton();
-            chatgptImportPatchNeedsReload = true;
+            if (cachedSource === undefined) {
+                chatgptImportPatchNeedsReload = true;
+                console.info(
+                    "[CheckerNext] 模块补丁缓存已更新，重新载入后生效:",
+                    assetUrl,
+                );
+            }
             updateChatgptInjectionStatus();
-            console.info(
-                "[CheckerNext] 模块补丁缓存已更新，重新载入后生效:",
-                assetUrl,
-            );
         } catch (error) {
             if (!isChatgptImportPatchEnabled()) return;
             setChatgptImportMapPatchCache(null);
