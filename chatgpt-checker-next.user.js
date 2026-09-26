@@ -496,7 +496,9 @@
                     const conversation = {
                         id: props.conversationId,
                         serverId: props.browserConversationId,
-                        turns: props.renderedTurns,
+                        turns: props.isReadOnly
+                            ? props.renderedTurns
+                            : undefined,
                         readOnly: props.isReadOnly,
                     };
                     conversations.set(conversation.id, conversation);
@@ -529,7 +531,13 @@
             },
             allows: (slug) => customModels.has(slug),
             homeOrigin: () => homeOrigin,
-            getTurns: () => current()?.turns,
+            getTurns() {
+                const conversation = current();
+                if (!conversation) return;
+                return conversation.readOnly
+                    ? conversation.turns
+                    : appScope?.get(native.turns, conversation.id);
+            },
             refreshAccounts() {
                 return appScope?.queryClient.invalidateQueries(
                     {
@@ -550,7 +558,9 @@
                         conversation.serverId ?? conversation.id,
                     );
                 }
-                return conversations.get(conversation.id).turns;
+                return conversation.readOnly
+                    ? conversation.turns
+                    : appScope.get(native.turns, conversation.id);
             },
             getMessageText(item) {
                 if (item.type === "user-message") return item.message;
@@ -751,6 +761,19 @@
             source.includes('queryKey:["chatgpt-conversation-full",'),
         );
         bindings.loadHistory = [history.id, loadHistory.exportName];
+        const content = module(
+            "会话内容模块",
+            (source) =>
+                source.includes("context_truncation_continuation:") &&
+                source.includes("getRenderTelemetry:") &&
+                source.includes("isStreaming:") &&
+                !source.includes("function "),
+        );
+        const [contentExport] = single(
+            Object.entries(require(content.id)),
+            "会话内容选择器",
+        );
+        bindings.turns = [content.id, contentExport];
 
         const conversation = module(
             "会话状态模块",
