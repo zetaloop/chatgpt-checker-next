@@ -1425,7 +1425,7 @@
     }
 
     async function updateChatgptFakePlan() {
-        if (!chatgptModuleInjectionEnabled) return;
+        if (!chatgptModuleInjectionStarted) return;
         try {
             await pageWindow.__checkerNextRuntimeModelBridge?.refreshAccounts();
             updateChatgptInjectionStatus();
@@ -1661,7 +1661,7 @@
                 : null;
         if (!originSelect || !modelSelect || !thinkingSelect) return;
 
-        const controlsDisabled = !chatgptModuleInjectionEnabled;
+        const controlsDisabled = !chatgptModuleInjectionStarted;
         originSelect.disabled = controlsDisabled;
         modelSelect.disabled = controlsDisabled;
         thinkingSelect.disabled = controlsDisabled;
@@ -1693,7 +1693,7 @@
     }
 
     function requestChatgptRuntimeModelState() {
-        if (!isChatgptMode || !chatgptModuleInjectionEnabled) return;
+        if (!isChatgptMode || !chatgptModuleInjectionStarted) return;
         pageWindow.dispatchEvent(
             new pageWindow.CustomEvent(CHATGPT_RUNTIME_MODEL_REQUEST_EVENT),
         );
@@ -1787,7 +1787,7 @@
             return;
         }
         const runtimeReady =
-            chatgptModuleInjectionEnabled &&
+            chatgptModuleInjectionStarted &&
             chatgptRuntimeModelState?.pathname === pathname;
         if (!runtimeReady) {
             existing?.remove();
@@ -2981,52 +2981,13 @@
                 return;
 
             toggle.checked = chatgptCopyButtonEnabled;
-            toggle.disabled = !chatgptModuleInjectionEnabled;
+            toggle.disabled = !chatgptModuleInjectionStarted;
             updateGrokDevToolsSliderStyle(
                 slider,
                 sliderDot,
-                chatgptModuleInjectionEnabled && chatgptCopyButtonEnabled,
+                chatgptModuleInjectionStarted && chatgptCopyButtonEnabled,
             );
             syncChatgptCopyButton();
-        }
-
-        function bindChatgptModuleInjectionToggle() {
-            const toggle = document.getElementById(
-                "chatgpt-module-injection-toggle",
-            );
-            const slider = document.getElementById(
-                "chatgpt-module-injection-slider",
-            );
-            const sliderDot = document.getElementById(
-                "chatgpt-module-injection-slider-dot",
-            );
-            if (!(toggle instanceof HTMLInputElement) || !slider || !sliderDot)
-                return;
-
-            const apply = () => {
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    chatgptModuleInjectionEnabled,
-                );
-                updateChatgptCopyButtonToggle();
-            };
-
-            toggle.checked = chatgptModuleInjectionEnabled;
-            apply();
-
-            toggle.addEventListener("change", function () {
-                chatgptModuleInjectionEnabled = toggle.checked;
-                localStorage.setItem(
-                    CHATGPT_MODULE_INJECTION_ENABLED_KEY,
-                    String(chatgptModuleInjectionEnabled),
-                );
-                if (chatgptModuleInjectionEnabled)
-                    requestChatgptRuntimeModelState();
-
-                apply();
-                updateChatgptRuntimeModelControls();
-            });
         }
 
         function bindChatgptCopyButtonToggle() {
@@ -3114,7 +3075,7 @@
             if (!originSelect || !modelSelect || !thinkingSelect) return;
 
             function apply(detail) {
-                if (!chatgptModuleInjectionEnabled) return;
+                if (!chatgptModuleInjectionStarted) return;
                 pageWindow.dispatchEvent(
                     new pageWindow.CustomEvent(
                         CHATGPT_RUNTIME_MODEL_SET_EVENT,
@@ -3291,7 +3252,15 @@
         }
 
         if (isChatgptMode) {
-            bindChatgptModuleInjectionToggle();
+            bindToggle(
+                "chatgpt-module-injection",
+                chatgptModuleInjectionEnabled,
+                CHATGPT_MODULE_INJECTION_ENABLED_KEY,
+                (value) => {
+                    chatgptModuleInjectionEnabled = value;
+                    updateChatgptInjectionStatus();
+                },
+            );
             bindChatgptCopyButtonToggle();
             bindToggle(
                 "chatgpt-selection-popover",
