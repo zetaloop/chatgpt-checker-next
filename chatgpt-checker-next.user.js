@@ -582,17 +582,17 @@
         };
         const extendModels = (data) => {
             if (!data || customModels.size === 0) return data;
-            const modelConfigBySlug = { ...data.modelConfigBySlug };
-            const internalOptions = [...(data.internalOptions ?? [])];
+            let modelConfigBySlug = data.modelConfigBySlug;
+            let internalOptions = data.internalOptions;
             const options = [
                 ...(data.options ?? []),
-                ...internalOptions,
+                ...(internalOptions ?? []),
                 ...(data.versionOptions?.flatMap(
                     (version) => version.options,
                 ) ?? []),
             ];
             for (const [slug, efforts] of customModels) {
-                const model = modelConfigBySlug[slug] ?? { title: slug };
+                const model = modelConfigBySlug?.[slug] ?? { title: slug };
                 const additions = [...efforts].filter(
                     (effort) =>
                         effort !== null &&
@@ -600,17 +600,21 @@
                             (item) => item.thinking_effort === effort,
                         ),
                 );
-                modelConfigBySlug[slug] = additions.length
-                    ? {
-                          ...model,
-                          thinkingEfforts: [
-                              ...(model.thinkingEfforts ?? []),
-                              ...additions.map((thinking_effort) => ({
-                                  thinking_effort,
-                              })),
-                          ],
-                      }
-                    : model;
+                if (!modelConfigBySlug?.[slug] || additions.length) {
+                    if (modelConfigBySlug === data.modelConfigBySlug)
+                        modelConfigBySlug = { ...modelConfigBySlug };
+                    modelConfigBySlug[slug] = additions.length
+                        ? {
+                              ...model,
+                              thinkingEfforts: [
+                                  ...(model.thinkingEfforts ?? []),
+                                  ...additions.map((thinking_effort) => ({
+                                      thinking_effort,
+                                  })),
+                              ],
+                          }
+                        : model;
+                }
                 for (const thinkingEffort of efforts) {
                     if (
                         options.some(
@@ -625,6 +629,8 @@
                         (option) => option.slug === slug,
                     );
                     const title = model.title ?? option?.modelTitle ?? slug;
+                    if (internalOptions === data.internalOptions)
+                        internalOptions = [...(internalOptions ?? [])];
                     internalOptions.push({
                         ...option,
                         slug,
@@ -638,7 +644,10 @@
                     });
                 }
             }
-            return { ...data, modelConfigBySlug, internalOptions };
+            return modelConfigBySlug === data.modelConfigBySlug &&
+                internalOptions === data.internalOptions
+                ? data
+                : { ...data, modelConfigBySlug, internalOptions };
         };
         const bridge = {
             register(values) {
@@ -829,7 +838,12 @@
                                             "chatgpt-tpp-models",
                                         ].includes(queryKey[0]),
                                 },
-                                extendModels,
+                                (data) => {
+                                    const extended = extendModels(data);
+                                    return extended === data
+                                        ? undefined
+                                        : extended;
+                                },
                             );
                         }
                         active.onModelChange(model);
