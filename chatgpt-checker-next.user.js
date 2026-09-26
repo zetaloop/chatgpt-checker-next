@@ -532,7 +532,11 @@
             getTurns: () => current()?.turns,
             refreshAccounts() {
                 return appScope?.queryClient.invalidateQueries(
-                    { queryKey: ["accounts", "check"] },
+                    {
+                        queryKey: ["accounts"],
+                        predicate: ({ queryKey }) =>
+                            ["check", "full"].includes(queryKey[1]),
+                    },
                     { throwOnError: true },
                 );
             },
@@ -976,6 +980,25 @@
         append(
             accounts,
             `{const original=${readAccounts.name};${readAccounts.name}=async function(...args){const result=await original(...args),plan=${fakePlan};return plan?{...result,accounts:result.accounts.map(account=>({...account,plan_type:plan}))}:result}};`,
+        );
+        const fullAccounts = module(
+            "完整账号模块",
+            (source) =>
+                source.includes('queryKey:["accounts","full",') &&
+                source.includes('"/accounts/check/{version}"'),
+        );
+        const accountQuery = single(
+            [
+                ...fullAccounts.source.matchAll(
+                    /queryFn:(async [\w$]+=>\{[\s\S]*?\})(?=,staleTime:)/g,
+                ),
+            ],
+            "完整账号查询接口",
+        );
+        replace(
+            fullAccounts,
+            accountQuery[1],
+            `async (...args)=>{const result=await (${accountQuery[1]})(...args),plan=${fakePlan};return plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result}`,
         );
         const auth = module(
             "账号会话模块",
