@@ -9,8 +9,6 @@
 // @match        *://chatgpt.com/*
 // @match        *://grok.com/*
 // @grant        GM_addElement
-// @grant        GM_getValue
-// @grant        GM_setValue
 // @grant        unsafeWindow
 // @sandbox      raw
 // @run-at       document-start
@@ -43,8 +41,6 @@
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
         "checker-next-chatgpt-fake-plan-enabled";
-    const CHATGPT_IMPORT_MAP_CACHE_KEY =
-        "checker-next-chatgpt-import-map-cache";
     const CHATGPT_MODULE_INJECTION_ENABLED_KEY =
         "checker-next-chatgpt-module-injection-enabled";
     const CHATGPT_COPY_BUTTON_ENABLED_KEY =
@@ -73,11 +69,8 @@
     let chatgptRuntimeModelState;
     let chatgptPlanTypes;
     let chatgptCopyIcons;
-    let chatgptImportMapInserted = false;
-    let chatgptImportPatchNeedsReload = false;
-    let chatgptInstalledPatchSettings;
-    let chatgptPendingPatchSettings;
-    let chatgptImportPatchFailure;
+    let chatgptModuleInjectionStarted = false;
+    let chatgptInjectionFailure;
     const chatgptReportedFailures = new Set();
     const chatgptRuntimeModelCatalogs = {
         chat: [],
@@ -85,7 +78,7 @@
     };
 
     if (isChatgptMode) {
-        installCachedChatgptImportMapPatch();
+        if (chatgptModuleInjectionEnabled) installChatgptModuleInjection();
         chatgptSelectionPopoverStyle = GM_addElement("style", {
             media: chatgptSelectionPopoverDisabled ? "all" : "not all",
             textContent:
@@ -366,43 +359,115 @@
         isChatgptMode &&
         localStorage.getItem(CHATGPT_AGE_VERIFICATION_SETTING_KEY) === "true";
 
-    function rewriteModuleImports(sourceText, assetUrl) {
-        return sourceText
-            .replaceAll("import.meta.url", JSON.stringify(assetUrl))
-            .replace(
-                /((?:from|import)\s*(?:\(\s*)?)(["'])(\.\.?\/[^"']*)\2/g,
-                (_, prefix, quote, specifier) =>
-                    `${prefix}${quote}${new URL(specifier, assetUrl).href}${quote}`,
-            );
+    function installChatgptModuleInjection() {
+        chatgptModuleInjectionStarted = true;
+        const prototype = pageWindow.Function.prototype;
+        const original = prototype.call;
+        let runtime;
+        const fail = (error) => {
+            chatgptInjectionFailure = String(error);
+            reportChatgptFailure(`模块注入失败：${error}`);
+            updateChatgptInjectionStatus();
+        };
+        const install = (require) => {
+            const { patches, bindings } = createChatgptModulePatches();
+            const entries = patches.concat(createChatgptModuleData());
+            installChatgptRuntimeBridge(require, bindings);
+            const processed = new WeakMap();
+            const patch = (id, factory) => {
+                if (processed.has(factory)) return processed.get(factory);
+                const source = factory.toString();
+                const target = { id, source };
+                try {
+                    for (const entry of entries) {
+                        if (!entry.predicate(source)) continue;
+                        if (entry.id !== undefined && entry.id !== id)
+                            throw new Error(`${entry.label}匹配到多个模块`);
+                        if (entry.read) {
+                            if (entry.id === undefined) {
+                                queueMicrotask(() => {
+                                    try {
+                                        entry.read(require(id));
+                                    } catch (error) {
+                                        reportChatgptFailure(
+                                            `读取${entry.label}失败：${error}`,
+                                        );
+                                    }
+                                });
+                            }
+                        } else {
+                            entry.apply(target);
+                        }
+                        entry.id = id;
+                    }
+                    const result =
+                        target.source === source
+                            ? factory
+                            : compileChatgptModule(target.source);
+                    processed.set(factory, result);
+                    return result;
+                } catch (error) {
+                    fail(error);
+                    processed.set(factory, factory);
+                    return factory;
+                }
+            };
+            for (const [id, factory] of Object.entries(require.m))
+                require.m[id] = patch(id, factory);
+            require.m = new Proxy(require.m, {
+                set(target, id, factory) {
+                    target[id] = patch(id, factory);
+                    return true;
+                },
+            });
+        };
+        const hook = new Proxy(original, {
+            apply(target, factory, args) {
+                const [receiver, module, exports, require] = args;
+                if (
+                    !runtime &&
+                    typeof require === "function" &&
+                    typeof require.C === "function" &&
+                    require.m?.[module?.id] === factory &&
+                    require.c?.[module.id] === module &&
+                    receiver === exports &&
+                    exports === module.exports
+                ) {
+                    runtime = require;
+                    if (prototype.call === hook) prototype.call = original;
+                    try {
+                        install(require);
+                    } catch (error) {
+                        fail(error);
+                    }
+                    return Reflect.apply(
+                        require.m[module.id],
+                        receiver,
+                        args.slice(1),
+                    );
+                }
+                return Reflect.apply(target, factory, args);
+            },
+        });
+        prototype.call = hook;
     }
 
-    function injectImportMap(importMap) {
-        const nonce = document.querySelector("script[nonce]")?.nonce;
-        if (!nonce || !document.head) return null;
-        const script = document.createElement("script");
-        script.type = "importmap";
-        script.nonce = nonce;
-        script.textContent = JSON.stringify(importMap);
-        document.head.prepend(script);
-        return script;
-    }
-
-    function installChatgptRuntimeBridge(
-        require,
-        factories,
-        symbols,
-        bindings,
-    ) {
-        const originals = new Map();
+    function installChatgptRuntimeBridge(require, bindings) {
+        const { location } = pageWindow;
         const conversations = new Map();
         const origins = new Map();
         const customModels = new Set();
-        const native = {};
-        for (const [name, [id, exportName]] of Object.entries(bindings)) {
-            Object.defineProperty(native, name, {
-                get: () => require(id)[exportName],
-            });
-        }
+        const native = new Proxy(
+            {},
+            {
+                get(target, name) {
+                    const binding = bindings[name];
+                    return binding
+                        ? require(binding[0])[binding[1]]
+                        : target[name];
+                },
+            },
+        );
         let appScope,
             watchedScope,
             stopWatching,
@@ -495,14 +560,17 @@
                     thinkingEffort: model?.thinkingEffort ?? null,
                 };
                 if (state.available)
-                    globalThis.__checkerNextImportMapInstalled = true;
+                    pageWindow.__checkerNextModulesInstalled = true;
                 const serialized = JSON.stringify(state);
                 if (serialized === lastState) return;
                 lastState = serialized;
-                dispatchEvent(
-                    new CustomEvent("checker-next-runtime-model-state", {
-                        detail: state,
-                    }),
+                pageWindow.dispatchEvent(
+                    new pageWindow.CustomEvent(
+                        "checker-next-runtime-model-state",
+                        {
+                            detail: state,
+                        },
+                    ),
                 );
             });
         };
@@ -513,8 +581,6 @@
                 : { ...conversation, conversation_origin: origin };
         };
         const bridge = {
-            originals,
-            symbols,
             register(values) {
                 Object.assign(native, values);
             },
@@ -551,7 +617,7 @@
             },
             turns(fn) {
                 return after(fn, ([props]) => {
-                    globalThis.__checkerNextImportMapInstalled = true;
+                    pageWindow.__checkerNextModulesInstalled = true;
                     const conversation = {
                         id: props.conversationId,
                         serverId: props.browserConversationId,
@@ -626,741 +692,676 @@
                 return "";
             },
         };
-        globalThis.__checkerNextRuntimeModelBridge = bridge;
-        require.m = new Proxy(require.m, {
-            set(target, id, factory) {
-                if (factories[id]) originals.set(id, factory);
-                target[id] = factories[id] ?? factory;
-                return true;
+        pageWindow.__checkerNextRuntimeModelBridge = bridge;
+        pageWindow.addEventListener(
+            "checker-next-runtime-model-request",
+            () => {
+                lastState = undefined;
+                scheduleState();
             },
-        });
-        addEventListener("checker-next-runtime-model-request", () => {
-            lastState = undefined;
-            scheduleState();
-        });
-        addEventListener("checker-next-runtime-model-set", (event) => {
-            try {
-                const detail = event.detail;
-                const active =
-                    picker?.pathname === location.pathname ? picker : null;
-                if (!active) throw new Error("当前页面的模型控件尚未载入");
-                if (detail.origin === "chat" || detail.origin === "work") {
-                    const conversation = current();
-                    if (routeId() !== null) {
-                        if (!conversation || !appScope)
-                            throw new Error("当前会话状态尚未载入");
-                        const origin = detail.origin === "work" ? "tpp" : null;
-                        origins.set(conversation.id, origin);
-                        if (conversation.serverId)
-                            origins.set(conversation.serverId, origin);
-                        native.setOrigin(appScope, conversation.id, origin);
-                        appScope.queryClient.setQueryData(
-                            [
-                                "chatgpt-conversation",
-                                conversation.serverId ?? conversation.id,
-                            ],
-                            applyOrigin,
-                        );
-                    } else {
-                        if (homeScope?.pathname !== location.pathname)
-                            throw new Error("新会话状态尚未载入");
-                        homeOrigin = detail.origin;
-                        native.setHome(homeScope.scope, detail.origin);
+        );
+        pageWindow.addEventListener(
+            "checker-next-runtime-model-set",
+            (event) => {
+                try {
+                    const detail = event.detail;
+                    const active =
+                        picker?.pathname === location.pathname ? picker : null;
+                    if (!active) throw new Error("当前页面的模型控件尚未载入");
+                    if (detail.origin === "chat" || detail.origin === "work") {
+                        const conversation = current();
+                        if (routeId() !== null) {
+                            if (!conversation || !appScope)
+                                throw new Error("当前会话状态尚未载入");
+                            const origin =
+                                detail.origin === "work" ? "tpp" : null;
+                            origins.set(conversation.id, origin);
+                            if (conversation.serverId)
+                                origins.set(conversation.serverId, origin);
+                            native.setOrigin(appScope, conversation.id, origin);
+                            appScope.queryClient.setQueryData(
+                                [
+                                    "chatgpt-conversation",
+                                    conversation.serverId ?? conversation.id,
+                                ],
+                                applyOrigin,
+                            );
+                        } else {
+                            if (homeScope?.pathname !== location.pathname)
+                                throw new Error("新会话状态尚未载入");
+                            homeOrigin = detail.origin;
+                            native.setHome(homeScope.scope, detail.origin);
+                        }
                     }
+                    if (typeof detail.model === "string" && detail.model) {
+                        customModels.add(detail.model);
+                        active.onModelChange({
+                            slug: detail.model,
+                            thinkingEffort: null,
+                            versionId: null,
+                        });
+                    }
+                    if (Object.hasOwn(detail, "thinkingEffort")) {
+                        const model = readModel(active.scope).selectedModel;
+                        customModels.add(model.slug);
+                        active.onModelChange({
+                            ...model,
+                            thinkingEffort: detail.thinkingEffort,
+                        });
+                    }
+                } catch (error) {
+                    report(error);
+                    pageWindow.dispatchEvent(
+                        new pageWindow.CustomEvent(
+                            "checker-next-runtime-model-state",
+                            {
+                                detail: {
+                                    ready: true,
+                                    available: false,
+                                    error: String(error),
+                                },
+                            },
+                        ),
+                    );
                 }
-                if (typeof detail.model === "string" && detail.model) {
-                    customModels.add(detail.model);
-                    active.onModelChange({
-                        slug: detail.model,
-                        thinkingEffort: null,
-                        versionId: null,
-                    });
-                }
-                if (Object.hasOwn(detail, "thinkingEffort")) {
-                    const model = readModel(active.scope).selectedModel;
-                    customModels.add(model.slug);
-                    active.onModelChange({
-                        ...model,
-                        thinkingEffort: detail.thinkingEffort,
-                    });
-                }
-            } catch (error) {
-                report(error);
-                dispatchEvent(
-                    new CustomEvent("checker-next-runtime-model-state", {
-                        detail: {
-                            ready: true,
-                            available: false,
-                            error: String(error),
-                        },
-                    }),
-                );
-            }
-        });
-        addEventListener("popstate", scheduleState);
+            },
+        );
+        pageWindow.addEventListener("popstate", scheduleState);
     }
 
-    function getChatgptModules(require) {
-        const bridge = pageWindow.__checkerNextRuntimeModelBridge;
-        const sources = Object.entries(require.m).map(([id, factory]) => ({
-            id,
-            source: (bridge?.originals.get(id) ?? factory).toString(),
-            get exports() {
-                return require(id);
-            },
-        }));
-        const symbols = {};
+    function compileChatgptModule(source) {
+        const script = document.createElement("script");
+        script.nonce = document.querySelector("script[nonce]")?.nonce ?? "";
+        script.textContent = `"use strict";globalThis.__checkerNextModule=Object.values({${source}})[0];`;
+        try {
+            document.head.append(script);
+            const factory = pageWindow.__checkerNextModule;
+            if (typeof factory !== "function")
+                throw new Error("页面未能执行模块补丁");
+            return factory;
+        } finally {
+            script.remove();
+            delete pageWindow.__checkerNextModule;
+        }
+    }
+
+    function getChatgptModuleExports(source) {
+        const [, exports, require] = source.match(
+            /^[^(]+\([^,]+,([^,]+),([^)]*)\)\{/,
+        );
+        const pattern = new RegExp(
+            `${RegExp.escape(require)}\\.d\\(${RegExp.escape(exports)},\\{([^{}]*)\\}(?:,\\{([^{}]*)\\})?`,
+            "g",
+        );
+        return Object.fromEntries(
+            [...source.matchAll(pattern)].flatMap((match) =>
+                [match[1], match[2] ?? ""].flatMap((table) =>
+                    [
+                        ...table.matchAll(
+                            /(?:^|,)([\w$]+):(?:\(\)=>)?([\w$.]+)/g,
+                        ),
+                    ].map((entry) => [entry[1], entry[2]]),
+                ),
+            ),
+        );
+    }
+
+    function createChatgptModulePatches() {
+        const patches = [];
+        const bindings = {};
+        const module = (label, predicate, apply) =>
+            patches.push({ label, predicate, apply });
         const single = (items, label) => {
             if (items.length !== 1)
                 throw new Error(`${label}匹配到 ${items.length} 个结果`);
             return items[0];
         };
-        const module = (label, predicate) =>
-            single(
-                sources.filter(({ source }) => predicate(source)),
-                label,
-            );
         const exported = (target, label, predicate) => {
-            const candidates =
-                bridge?.symbols[target.id] ??
-                Object.entries(target.exports)
-                    .filter(([, value]) => typeof value === "function")
-                    .map(([exportName, fn]) => ({
-                        exportName,
-                        name: fn.name,
-                        source: fn.toString(),
-                    }));
-            const matches = candidates.filter(({ exportName, source }) =>
-                typeof predicate === "string"
-                    ? exportName === predicate
-                    : predicate(source),
+            if (!target.functions) {
+                const declarations = new Set(
+                    [...target.source.matchAll(/\bfunction\s+([\w$]+)\(/g)].map(
+                        (match) => match[1],
+                    ),
+                );
+                const members = Object.entries(
+                    getChatgptModuleExports(target.source),
+                )
+                    .filter(([, name]) => declarations.has(name))
+                    .map(([key, name]) => `${JSON.stringify(key)}:${name}`)
+                    .join(",");
+                // 函数声明在入口前完成提升，提前返回即可读取其源码。
+                target.functions = compileChatgptModule(
+                    target.source.replace("{", `{return {${members}};`),
+                )();
+            }
+            const matches = Object.entries(target.functions).filter(
+                ([exportName, fn]) =>
+                    typeof predicate === "string"
+                        ? exportName === predicate
+                        : predicate(fn.toString()),
             );
-            const match = single(
-                [...new Map(matches.map((item) => [item.name, item])).values()],
+            const [exportName, fn] = single(
+                [
+                    ...new Map(
+                        matches.map((item) => [item[1].name, item]),
+                    ).values(),
+                ],
                 label,
             );
-            symbols[target.id] ??= [];
-            const selected = symbols[target.id];
-            if (!selected.some(({ name }) => name === match.name))
-                selected.push(match);
-            return {
-                exportName: match.exportName,
-                name: match.name,
-                toString: () => match.source,
-            };
+            return { exportName, name: fn.name, toString: () => fn.toString() };
         };
-        return { module, exported, single, symbols };
-    }
-
-    function createChatgptModulePatches(modules) {
-        const { module, exported, single, symbols } = modules;
-        const patches = new Map();
-        const bindings = {};
         const append = (target, addition) => {
-            const source = patches.get(target.id) ?? target.source;
-            patches.set(target.id, `${source.slice(0, -1)};${addition}}`);
+            target.source = `${target.source.slice(0, -1)};${addition}}`;
         };
         const replace = (target, from, to) => {
-            const source = patches.get(target.id) ?? target.source;
-            if (!source.includes(from)) throw new Error("原生函数定义未匹配");
-            patches.set(target.id, source.replace(from, to));
+            if (!target.source.includes(from))
+                throw new Error("原生函数定义未匹配");
+            target.source = target.source.replace(from, to);
         };
         const api = "globalThis.__checkerNextRuntimeModelBridge";
-        const scopes = module(
+        const fakePlan = `localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_ENABLED_KEY)})==="true"?localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_KEY)})||"pro":""`;
+
+        module(
             "响应式状态模块",
             (source) =>
                 source.includes("getOwnValue") &&
                 source.includes("createSubscriberStore") &&
                 source.includes("Missing parent scope"),
+            (scopes) => {
+                const useScope = exported(
+                    scopes,
+                    "状态作用域接口",
+                    (source) =>
+                        source.includes("getOwnValue") &&
+                        source.includes("useContext") &&
+                        source.includes(".watch="),
+                );
+                append(
+                    scopes,
+                    `${useScope.name}=${api}.scope(${useScope.name});`,
+                );
+            },
         );
-        const useScope = exported(
-            scopes,
-            "状态作用域接口",
-            (source) =>
-                source.includes("getOwnValue") &&
-                source.includes("useContext") &&
-                source.includes(".watch="),
-        );
-        append(scopes, `${useScope.name}=${api}.scope(${useScope.name});`);
 
-        const picker = module(
+        module(
             "模型控件模块",
             (source) =>
                 source.includes("xHighExperimentResetContextKey") &&
                 source.includes("onThinkingEffortChange"),
+            (picker) => {
+                const renderPicker = exported(
+                    picker,
+                    "模型控件",
+                    (source) =>
+                        source.includes("xHighExperimentResetContextKey") &&
+                        source.includes("onThinkingEffortChange"),
+                );
+                append(
+                    picker,
+                    `${renderPicker.name}=${api}.picker(${renderPicker.name});`,
+                );
+            },
         );
-        const renderPicker = exported(
-            picker,
-            "模型控件",
-            (source) =>
-                source.includes("xHighExperimentResetContextKey") &&
-                source.includes("onThinkingEffortChange"),
-        );
-        append(
-            picker,
-            `${renderPicker.name}=${api}.picker(${renderPicker.name});`,
-        );
-        const composer = module(
+
+        module(
             "输入框模块",
             (source) =>
                 source.includes("chatGptSelectionContext:") &&
                 source.includes("modelBeforeRateLimit") &&
                 source.includes("savedModelPending:"),
+            (composer) => {
+                const selection = single(
+                    [
+                        ...composer.source.matchAll(
+                            /\(0,[\w$]+\.[\w$]+\)\(([\w$]+)\.([\w$]+),[\w$]+\),\{savedModelPending:/g,
+                        ),
+                    ],
+                    "模型状态接口",
+                );
+                const selectionModule = single(
+                    [
+                        ...composer.source.matchAll(
+                            new RegExp(
+                                `(?:[\\s,;])${RegExp.escape(selection[1])}=[\\w$]+\\(["']([^"']+)["']\\)`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "模型状态模块",
+                )[1];
+                bindings.selection = [selectionModule, selection[2]];
+            },
         );
-        const selection = single(
-            [
-                ...composer.source.matchAll(
-                    /\(0,[\w$]+\.[\w$]+\)\(([\w$]+)\.([\w$]+),[\w$]+\),\{savedModelPending:/g,
-                ),
-            ],
-            "模型状态接口",
-        );
-        const selectionModule = single(
-            [
-                ...composer.source.matchAll(
-                    new RegExp(
-                        `(?:[\\s,;])${RegExp.escape(selection[1])}=[\\w$]+\\(["']([^"']+)["']\\)`,
-                        "g",
-                    ),
-                ),
-            ],
-            "模型状态模块",
-        )[1];
-        bindings.selection = [selectionModule, selection[2]];
 
-        const turns = module(
+        module(
             "会话渲染模块",
             (source) =>
                 source.includes('id:"pending-chatgpt-submit"') &&
                 source.includes("timestampSeparatorAtMs"),
+            (turns) => {
+                const renderTurns = exported(turns, "会话内容接口", (source) =>
+                    source.includes("timestampSeparatorAtMs"),
+                );
+                append(
+                    turns,
+                    `${renderTurns.name}=${api}.turns(${renderTurns.name});`,
+                );
+            },
         );
-        const renderTurns = exported(turns, "会话内容接口", (source) =>
-            source.includes("timestampSeparatorAtMs"),
-        );
-        append(turns, `${renderTurns.name}=${api}.turns(${renderTurns.name});`);
 
-        const history = module(
+        module(
             "完整会话模块",
             (source) =>
                 source.includes('queryKey:["chatgpt-conversation-full",') &&
                 source.includes("forceFull:!0"),
+            (history) => {
+                const loadHistory = exported(
+                    history,
+                    "完整会话加载接口",
+                    (source) =>
+                        source.includes(
+                            'queryKey:["chatgpt-conversation-full",',
+                        ),
+                );
+                bindings.loadHistory = [history.id, loadHistory.exportName];
+            },
         );
-        const loadHistory = exported(history, "完整会话加载接口", (source) =>
-            source.includes('queryKey:["chatgpt-conversation-full",'),
-        );
-        bindings.loadHistory = [history.id, loadHistory.exportName];
-        const content = module(
+
+        module(
             "会话内容模块",
             (source) =>
                 source.includes("context_truncation_continuation:") &&
                 source.includes("getRenderTelemetry:") &&
                 source.includes("isStreaming:") &&
                 !source.includes("function "),
+            (content) => {
+                const [contentExport] = single(
+                    Object.entries(getChatgptModuleExports(content.source)),
+                    "会话内容选择器",
+                );
+                bindings.turns = [content.id, contentExport];
+            },
         );
-        const [contentExport] = single(
-            Object.entries(content.exports),
-            "会话内容选择器",
-        );
-        bindings.turns = [content.id, contentExport];
-        const router = module(
+
+        module(
             "页面路由模块",
             (source) =>
                 source.includes(".value.pathname") &&
                 source.includes(".value.search") &&
                 source.includes("replace:!0"),
+            (router) => {
+                const matchesLocation = exported(
+                    router,
+                    "页面地址接口",
+                    (source) => source.includes(".pathname==="),
+                );
+                const locationSignal = single(
+                    [
+                        ...matchesLocation
+                            .toString()
+                            .matchAll(/\.get\(([\w$]+)\)/g),
+                    ],
+                    "页面地址信号",
+                )[1];
+                const locationExport = single(
+                    [
+                        ...router.source.matchAll(
+                            new RegExp(
+                                `(?:[,{])([\\w$]+):${RegExp.escape(locationSignal)}(?=[,}])`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "页面地址导出",
+                )[1];
+                bindings.location = [router.id, locationExport];
+            },
         );
-        const matchesLocation = exported(router, "页面地址接口", (source) =>
-            source.includes(".pathname==="),
-        );
-        const locationSignal = single(
-            [...matchesLocation.toString().matchAll(/\.get\(([\w$]+)\)/g)],
-            "页面地址信号",
-        )[1];
-        const locationExport = single(
-            [
-                ...router.source.matchAll(
-                    new RegExp(
-                        `(?:[,{])([\\w$]+):${RegExp.escape(locationSignal)}(?=[,}])`,
-                        "g",
-                    ),
-                ),
-            ],
-            "页面地址导出",
-        )[1];
-        bindings.location = [router.id, locationExport];
 
-        const conversation = module(
+        module(
             "会话状态模块",
             (source) =>
                 source.includes("conversationOrigin:") &&
                 source.includes("asyncStatus:") &&
                 source.includes("currentNode:") &&
                 source.includes("serverConversationId:"),
+            (conversation) => {
+                const setOrigin = exported(
+                    conversation,
+                    "会话模式接口",
+                    (source) =>
+                        /^function [\w$]+\([\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\([\w$]+\.get,[\w$]+\);/.test(
+                            source,
+                        ) && /conversationOrigin:[\w$]+\?\?null/.test(source),
+                );
+                const store = single(
+                    [
+                        ...setOrigin
+                            .toString()
+                            .matchAll(/&&([\w$]+)\([\w$]+,\{\.\.\./g),
+                    ],
+                    "会话存储接口",
+                )[1];
+                append(conversation, `${store}=${api}.conversation(${store});`);
+                bindings.setOrigin = [conversation.id, setOrigin.exportName];
+            },
         );
-        const setOrigin = exported(
-            conversation,
-            "会话模式接口",
-            (source) =>
-                /^function [\w$]+\([\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\([\w$]+\.get,[\w$]+\);/.test(
-                    source,
-                ) && /conversationOrigin:[\w$]+\?\?null/.test(source),
-        );
-        const store = single(
-            [...setOrigin.toString().matchAll(/&&([\w$]+)\([\w$]+,\{\.\.\./g)],
-            "会话存储接口",
-        )[1];
-        append(conversation, `${store}=${api}.conversation(${store});`);
-        bindings.setOrigin = [conversation.id, setOrigin.exportName];
-        const queries = module(
+
+        module(
             "会话查询模块",
             (source) =>
                 source.includes('queryKey:["chatgpt-conversation",') &&
                 source.includes('queryKey:["chatgpt-shared-conversation",'),
+            (queries) => {
+                const query = exported(queries, "会话查询接口", (source) =>
+                    source.includes('queryKey:["chatgpt-conversation",'),
+                );
+                append(queries, `${query.name}=${api}.query(${query.name});`);
+            },
         );
-        const query = exported(queries, "会话查询接口", (source) =>
-            source.includes('queryKey:["chatgpt-conversation",'),
-        );
-        append(queries, `${query.name}=${api}.query(${query.name});`);
 
-        const home = module(
+        module(
             "首页模式模块",
             (source) =>
                 source.includes('"codex_composer_mode"') &&
                 source.includes('"oai-chat-surface-mode"') &&
                 source.includes("persistedMode:"),
+            (home) => {
+                const setHome = exported(
+                    home,
+                    "首页模式接口",
+                    (source) =>
+                        /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(source) &&
+                        source.includes('"chat"===') &&
+                        source.includes(".set("),
+                );
+                const homeSource = setHome.toString();
+                const homeGuard = single(
+                    [
+                        ...homeSource.matchAll(
+                            /"chat"===([\w$]+)&&([\w$]+)\.get\(([\w$.]+)\)\|\|/g,
+                        ),
+                    ],
+                    "首页模式选择条件",
+                );
+                replace(
+                    home,
+                    homeSource,
+                    homeSource.replace(
+                        homeGuard[0],
+                        `${api}.homeOrigin()!=="chat"&&"chat"===${homeGuard[1]}&&${homeGuard[2]}.get(${homeGuard[3]})||`,
+                    ),
+                );
+                const resolveHome = exported(
+                    home,
+                    "首页模式解析接口",
+                    (source) =>
+                        source.includes("persistedMode:") &&
+                        source.includes('return"extension"'),
+                );
+                const parameter = single(
+                    [
+                        ...resolveHome
+                            .toString()
+                            .matchAll(/^function [\w$]+\(([\w$]+)\)\{/g),
+                    ],
+                    "首页模式参数",
+                )[1];
+                replace(
+                    home,
+                    resolveHome.toString(),
+                    resolveHome
+                        .toString()
+                        .replace(
+                            "{",
+                            `{if(${api}.homeOrigin()==="chat")${parameter}={...${parameter},workOnlyModeEnabled:false};`,
+                        ),
+                );
+                bindings.setHome = [home.id, setHome.exportName];
+            },
         );
-        const setHome = exported(
-            home,
-            "首页模式接口",
-            (source) =>
-                /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(source) &&
-                source.includes('"chat"===') &&
-                source.includes(".set("),
-        );
-        const homeSource = setHome.toString();
-        const homeGuard = single(
-            [
-                ...homeSource.matchAll(
-                    /"chat"===([\w$]+)&&([\w$]+)\.get\(([\w$.]+)\)\|\|/g,
-                ),
-            ],
-            "首页模式选择条件",
-        );
-        replace(
-            home,
-            homeSource,
-            homeSource.replace(
-                homeGuard[0],
-                `${api}.homeOrigin()!=="chat"&&"chat"===${homeGuard[1]}&&${homeGuard[2]}.get(${homeGuard[3]})||`,
-            ),
-        );
-        const resolveHome = exported(
-            home,
-            "首页模式解析接口",
-            (source) =>
-                source.includes("persistedMode:") &&
-                source.includes('return"extension"'),
-        );
-        const parameter = single(
-            [
-                ...resolveHome
-                    .toString()
-                    .matchAll(/^function [\w$]+\(([\w$]+)\)\{/g),
-            ],
-            "首页模式参数",
-        )[1];
-        replace(
-            home,
-            resolveHome.toString(),
-            resolveHome
-                .toString()
-                .replace(
-                    "{",
-                    `{if(${api}.homeOrigin()==="chat")${parameter}={...${parameter},workOnlyModeEnabled:false};`,
-                ),
-        );
-        bindings.setHome = [home.id, setHome.exportName];
 
-        const models = module(
+        module(
             "模型解析模块",
             (source) =>
                 source.includes("default_slider_upgrades") &&
                 source.includes("workspace_model_policy") &&
                 source.includes("modelConfigBySlug"),
+            (models) => {
+                const findModel = exported(
+                    models,
+                    "模型查找接口",
+                    (source) =>
+                        source.includes("thinkingEffort") &&
+                        source.includes("internalOptions") &&
+                        source.includes(".find(") &&
+                        !source.includes("modelConfigBySlug"),
+                );
+                const normalize = exported(
+                    models,
+                    "思考强度解析接口",
+                    (source) =>
+                        source.includes("thinkingEffort:") &&
+                        source.includes("thinking_effort") &&
+                        source.includes(".some("),
+                );
+                const accepts = exported(
+                    models,
+                    "模型校验接口",
+                    (source) =>
+                        source.includes("modelConfigBySlug?.[") &&
+                        source.includes("thinkingEffort:null"),
+                );
+                for (const [fn, expression] of [
+                    [
+                        findModel,
+                        `{slug:$model.slug,thinkingEffort:$model.thinkingEffort,title:$model.slug}`,
+                    ],
+                    [normalize, "$model"],
+                    [accepts, "true"],
+                ]) {
+                    const source = fn.toString();
+                    const params = source
+                        .match(/^function [\w$]+\(([^)]*)\)/)?.[1]
+                        .split(",");
+                    if (params?.length !== 2)
+                        throw new Error("模型接口参数未匹配");
+                    const model = params[1];
+                    const slug = fn === accepts ? model : `${model}.slug`;
+                    const result = expression.replaceAll("$model", model);
+                    replace(
+                        models,
+                        source,
+                        source.replace(
+                            "{",
+                            `{if(${api}.allows(${slug}))return ${result};`,
+                        ),
+                    );
+                }
+            },
         );
-        const findModel = exported(
-            models,
-            "模型查找接口",
-            (source) =>
-                source.includes("thinkingEffort") &&
-                source.includes("internalOptions") &&
-                source.includes(".find(") &&
-                !source.includes("modelConfigBySlug"),
-        );
-        const normalize = exported(
-            models,
-            "思考强度解析接口",
-            (source) =>
-                source.includes("thinkingEffort:") &&
-                source.includes("thinking_effort") &&
-                source.includes(".some("),
-        );
-        const accepts = exported(
-            models,
-            "模型校验接口",
-            (source) =>
-                source.includes("modelConfigBySlug?.[") &&
-                source.includes("thinkingEffort:null"),
-        );
-        for (const [fn, expression] of [
-            [
-                findModel,
-                `{slug:$model.slug,thinkingEffort:$model.thinkingEffort,title:$model.slug}`,
-            ],
-            [normalize, "$model"],
-            [accepts, "true"],
-        ]) {
-            const source = fn.toString();
-            const params = source
-                .match(/^function [\w$]+\(([^)]*)\)/)?.[1]
-                .split(",");
-            if (params?.length !== 2) throw new Error("模型接口参数未匹配");
-            const model = params[1];
-            const slug = fn === accepts ? model : `${model}.slug`;
-            const result = expression.replaceAll("$model", model);
-            replace(
-                models,
-                source,
-                source.replace(
-                    "{",
-                    `{if(${api}.allows(${slug}))return ${result};`,
-                ),
-            );
-        }
-        const limits = module(
+
+        module(
             "模型额度模块",
             (source) =>
                 source.includes("using_default_model_slug") &&
                 source.includes("work_subscription_required"),
-        );
-        const resolveLimit = exported(
-            limits,
-            "模型额度解析接口",
-            (source) =>
-                source.includes("using_default_model_slug") &&
-                source.includes("versionId:"),
-        );
-        const limitModel = resolveLimit
-            .toString()
-            .match(/^function [\w$]+\([^,]+,([^,]+),/)?.[1];
-        if (!limitModel) throw new Error("模型额度参数未匹配");
-        replace(
-            limits,
-            resolveLimit.toString(),
-            resolveLimit
-                .toString()
-                .replace(
-                    "{",
-                    `{if(${api}.allows(${limitModel}.slug))return ${limitModel};`,
-                ),
+            (limits) => {
+                const resolveLimit = exported(
+                    limits,
+                    "模型额度解析接口",
+                    (source) =>
+                        source.includes("using_default_model_slug") &&
+                        source.includes("versionId:"),
+                );
+                const limitModel = resolveLimit
+                    .toString()
+                    .match(/^function [\w$]+\([^,]+,([^,]+),/)?.[1];
+                if (!limitModel) throw new Error("模型额度参数未匹配");
+                replace(
+                    limits,
+                    resolveLimit.toString(),
+                    resolveLimit
+                        .toString()
+                        .replace(
+                            "{",
+                            `{if(${api}.allows(${limitModel}.slug))return ${limitModel};`,
+                        ),
+                );
+            },
         );
 
-        const messages = module(
+        module(
             "消息操作模块",
             (source) =>
                 source.includes("copyPlainTextFromSource") &&
                 source.includes("suppressCopyTurnToClipboardAnalytics") &&
                 source.includes("getCopyHtml"),
-        );
-        const copyText = single(
-            [
-                ...messages.source.matchAll(
-                    /([\w$]+)\?\.completed===!0\?(function\(([\w$]+)\)\{if\(null==\3\)return"";[\s\S]*?return [^;{}]+\.join\(""\)\})\(\1\)/g,
-                ),
-            ],
-            "原生消息复制接口",
-        );
-        replace(messages, copyText[2], "checkerNextMessageText");
-        append(
-            messages,
-            `const checkerNextMessageText=${copyText[2]};${api}.register({messageText:checkerNextMessageText});`,
+            (messages) => {
+                const copyText = single(
+                    [
+                        ...messages.source.matchAll(
+                            /([\w$]+)\?\.completed===!0\?(function\(([\w$]+)\)\{if\(null==\3\)return"";[\s\S]*?return [^;{}]+\.join\(""\)\})\(\1\)/g,
+                        ),
+                    ],
+                    "原生消息复制接口",
+                );
+                replace(messages, copyText[2], "checkerNextMessageText");
+                append(
+                    messages,
+                    `const checkerNextMessageText=${copyText[2]};${api}.register({messageText:checkerNextMessageText});`,
+                );
+            },
         );
 
-        const fakePlan = `localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_ENABLED_KEY)})==="true"?localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_KEY)})||"pro":""`;
-        const accounts = module(
+        module(
             "账号会员模块",
             (source) =>
                 source.includes("readAccounts") &&
                 source.includes("queryClient.fetchQuery"),
+            (accounts) => {
+                const readAccounts = exported(
+                    accounts,
+                    "账号会员接口",
+                    (source) =>
+                        source.includes("readAccounts") &&
+                        source.includes("queryClient.fetchQuery"),
+                );
+                append(
+                    accounts,
+                    `{const original=${readAccounts.name};${readAccounts.name}=async function(...args){const result=await original(...args),plan=${fakePlan};return plan?{...result,accounts:result.accounts.map(account=>({...account,plan_type:plan}))}:result}};`,
+                );
+            },
         );
-        const readAccounts = exported(
-            accounts,
-            "账号会员接口",
-            (source) =>
-                source.includes("readAccounts") &&
-                source.includes("queryClient.fetchQuery"),
-        );
-        append(
-            accounts,
-            `{const original=${readAccounts.name};${readAccounts.name}=async function(...args){const result=await original(...args),plan=${fakePlan};return plan?{...result,accounts:result.accounts.map(account=>({...account,plan_type:plan}))}:result}};`,
-        );
-        const fullAccounts = module(
+
+        module(
             "完整账号模块",
             (source) =>
                 source.includes('queryKey:["accounts","full",') &&
                 source.includes('"/accounts/check/{version}"'),
+            (fullAccounts) => {
+                const accountQuery = single(
+                    [
+                        ...fullAccounts.source.matchAll(
+                            /queryFn:(async [\w$]+=>\{[\s\S]*?\})(?=,staleTime:)/g,
+                        ),
+                    ],
+                    "完整账号查询接口",
+                );
+                replace(
+                    fullAccounts,
+                    accountQuery[1],
+                    `async (...args)=>{const result=await (${accountQuery[1]})(...args),plan=${fakePlan};return plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result}`,
+                );
+            },
         );
-        const accountQuery = single(
-            [
-                ...fullAccounts.source.matchAll(
-                    /queryFn:(async [\w$]+=>\{[\s\S]*?\})(?=,staleTime:)/g,
-                ),
-            ],
-            "完整账号查询接口",
-        );
-        replace(
-            fullAccounts,
-            accountQuery[1],
-            `async (...args)=>{const result=await (${accountQuery[1]})(...args),plan=${fakePlan};return plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result}`,
-        );
-        const auth = module(
+
+        module(
             "账号会话模块",
             (source) =>
                 source.includes("getBrowserChatGptDocumentAuth:") &&
                 source.includes("readChatGptTokenClaims:"),
+            (auth) => {
+                const documentAuth = exported(
+                    auth,
+                    "账号会话接口",
+                    "getBrowserChatGptDocumentAuth",
+                );
+                append(
+                    auth,
+                    `{const original=${documentAuth.name};${documentAuth.name}=function(...args){const auth=original(...args),plan=${fakePlan};return !plan||auth==null?auth:{...auth,planType:plan,targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:plan}}}};`,
+                );
+            },
         );
-        const documentAuth = exported(
-            auth,
-            "账号会话接口",
-            "getBrowserChatGptDocumentAuth",
-        );
-        append(
-            auth,
-            `{const original=${documentAuth.name};${documentAuth.name}=function(...args){const auth=original(...args),plan=${fakePlan};return !plan||auth==null?auth:{...auth,planType:plan,targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:plan}}}};`,
-        );
-        return { patches, symbols, bindings };
+        return { patches, bindings };
     }
 
-    function getChatgptModuleData({ module, single }) {
-        const data = {};
-        try {
-            const plans = module(
-                "会员类型模块",
-                (source) =>
+    function createChatgptModuleData() {
+        const single = (items, label) => {
+            if (items.length !== 1)
+                throw new Error(`${label}匹配到 ${items.length} 个结果`);
+            return items[0];
+        };
+        const data = [
+            {
+                label: "会员类型",
+                predicate: (source) =>
                     source.includes('.FREE="free"') &&
                     source.includes('.PRO="pro"') &&
                     source.includes('.EDUCATION_CBP="education"'),
-            );
-            const planEnum = single(
-                Object.values(plans.exports).filter(
-                    (value) => value?.FREE === "free" && value?.PRO === "pro",
-                ),
-                "会员枚举",
-            );
-            data.planTypes = Object.values(planEnum);
-        } catch (error) {
-            reportChatgptFailure(`读取会员类型失败：${String(error)}`);
-        }
-        try {
-            const copyIcons = {};
-            for (const [state, name] of [
-                ["idle", "square-on-square-light-16"],
-                ["success", "checkmark-lg-light-16"],
-                ["error", "circle-exclamation-mark-light-16"],
-            ]) {
-                const target = module(`${state}图标模块`, (source) =>
-                    source.includes(`name:"${name}"`),
-                );
-                const icon = single(
-                    Object.values(target.exports).filter(
-                        (value) =>
-                            value?.name === name &&
-                            value.canvas &&
-                            typeof value.body === "string",
-                    ),
-                    `${state}图标`,
-                );
-                copyIcons[state] = { ...icon.canvas, body: icon.body };
-            }
-            data.copyIcons = copyIcons;
-        } catch (error) {
-            reportChatgptFailure(`读取复制图标失败：${String(error)}`);
+                read(exports) {
+                    const planEnum = single(
+                        Object.values(exports).filter(
+                            (value) =>
+                                value?.FREE === "free" && value?.PRO === "pro",
+                        ),
+                        "会员枚举",
+                    );
+                    chatgptPlanTypes = Object.values(planEnum);
+                    updateChatgptFakePlanControls();
+                },
+            },
+        ];
+        const copyIcons = {};
+        for (const [state, name] of [
+            ["idle", "square-on-square-light-16"],
+            ["success", "checkmark-lg-light-16"],
+            ["error", "circle-exclamation-mark-light-16"],
+        ]) {
+            data.push({
+                label: `${state}图标`,
+                predicate: (source) => source.includes(`name:"${name}"`),
+                read(exports) {
+                    const icon = single(
+                        Object.values(exports).filter(
+                            (value) =>
+                                value?.name === name &&
+                                value.canvas &&
+                                typeof value.body === "string",
+                        ),
+                        `${state}图标`,
+                    );
+                    copyIcons[state] = { ...icon.canvas, body: icon.body };
+                    if (
+                        ["idle", "success", "error"].every(
+                            (state) => copyIcons[state],
+                        )
+                    ) {
+                        chatgptCopyIcons = copyIcons;
+                        syncChatgptCopyButton();
+                    }
+                },
+            });
         }
         return data;
     }
 
-    function getChatgptImportPatchSettings() {
-        return {
-            fakePlan:
-                localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true"
-                    ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
-                    : "",
-        };
-    }
-
-    function getChatgptImportPatchItems(settings) {
+    function getChatgptModuleItems() {
         const items = ["运行时模型切换"];
         if (chatgptCopyButtonEnabled) items.push("复制全文");
-        if (settings?.fakePlan) items.push(`假装会员：${settings.fakePlan}`);
+        if (chatgptFakePlanEnabled)
+            items.push(`假装会员：${chatgptFakePlanValue}`);
         return items;
-    }
-
-    function isChatgptCopyIcons(value) {
-        return ["idle", "success", "error"].every(
-            (state) =>
-                typeof value?.[state]?.viewBox === "string" &&
-                typeof value[state].body === "string",
-        );
-    }
-
-    function getChatgptImportPatchSignature() {
-        return [
-            rewriteModuleImports,
-            installChatgptRuntimeBridge,
-            getChatgptModules,
-            createChatgptModulePatches,
-            getChatgptModuleData,
-        ].join("\n");
-    }
-
-    function setChatgptImportMapPatchCache(value) {
-        GM_setValue(CHATGPT_IMPORT_MAP_CACHE_KEY, value);
-    }
-
-    function isChatgptImportPatchEnabled() {
-        return isChatgptMode && chatgptModuleInjectionEnabled;
-    }
-
-    function installCachedChatgptImportMapPatch() {
-        if (
-            !isChatgptImportPatchEnabled() ||
-            pageWindow.__checkerNextImportMapInstalled
-        )
-            return;
-        const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
-        if (Array.isArray(cached?.planTypes)) {
-            chatgptPlanTypes = cached.planTypes;
-        }
-        if (cached?.signature !== getChatgptImportPatchSignature()) return;
-        if (
-            typeof cached.assetUrl !== "string" ||
-            typeof cached.sourceText !== "string"
-        ) {
-            reportChatgptFailure("缓存模块补丁格式无效。");
-            return;
-        }
-        if (isChatgptCopyIcons(cached.copyIcons))
-            chatgptCopyIcons = cached.copyIcons;
-        const blobUrl = URL.createObjectURL(
-            new Blob([cached.sourceText], { type: "text/javascript" }),
-        );
-        if (!injectImportMap({ imports: { [cached.assetUrl]: blobUrl } })) {
-            URL.revokeObjectURL(blobUrl);
-            chatgptImportPatchFailure =
-                "页面尚未提供可同步插入模块映射的脚本 nonce。";
-            reportChatgptFailure(chatgptImportPatchFailure);
-            return;
-        }
-        chatgptImportMapInserted = true;
-        chatgptInstalledPatchSettings = getChatgptImportPatchSettings();
-        console.info(
-            "[CheckerNext] 已创建缓存 import map 元素:",
-            cached.assetUrl,
-        );
-    }
-
-    async function prepareChatgptImportMapPatchCache() {
-        if (!isChatgptImportPatchEnabled()) return;
-        chatgptPendingPatchSettings = getChatgptImportPatchSettings();
-        try {
-            const entry = pageWindow.__reactRouterManifest?.entry.module;
-            if (!entry) throw new Error("页面没有提供 ChatGPT 入口模块");
-            const entryUrl = new URL(entry, location.href).href;
-            const entryResponse = await originalFetch(entryUrl);
-            if (!entryResponse.ok)
-                throw new Error(
-                    `${entryResponse.status} ${entryResponse.statusText}`,
-                );
-            const entrySource = await entryResponse.text();
-            const match = entrySource.match(
-                /import\{__webpack_require__\s+as\s+[\w$]+\}from["']([^"']+)["']/,
-            );
-            if (!match) throw new Error("入口模块没有提供模块加载器");
-            const assetUrl = new URL(match[1], entryUrl).href;
-            const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
-            const signature = getChatgptImportPatchSignature();
-            const cachedSource =
-                cached?.assetUrl === assetUrl &&
-                cached.signature === signature &&
-                typeof cached.sourceText === "string"
-                    ? cached.sourceText
-                    : undefined;
-            if (
-                cachedSource !== undefined &&
-                isChatgptCopyIcons(cached.copyIcons) &&
-                Array.isArray(cached.planTypes)
-            ) {
-                chatgptCopyIcons = cached.copyIcons;
-                chatgptPlanTypes = cached.planTypes;
-                updateChatgptFakePlanControls();
-                syncChatgptCopyButton();
-                return;
-            }
-            const { __webpack_require__: require } = await import(assetUrl);
-            const modules = getChatgptModules(require);
-            const { planTypes, copyIcons } = getChatgptModuleData(modules);
-            let sourceText = cachedSource;
-            if (sourceText === undefined) {
-                chatgptImportPatchFailure = undefined;
-                chatgptImportPatchNeedsReload = false;
-                const { patches, symbols, bindings } =
-                    createChatgptModulePatches(modules);
-                const response = await originalFetch(assetUrl);
-                if (!response.ok)
-                    throw new Error(
-                        `${response.status} ${response.statusText}`,
-                    );
-                sourceText = await response.text();
-                const runtime = sourceText.match(
-                    /export\{([\w$]+)\s+as\s+__webpack_require__\}/,
-                )?.[1];
-                if (!runtime) throw new Error("模块加载器导出未匹配");
-                const factories = [...patches]
-                    .map(
-                        ([id, source]) =>
-                            `${JSON.stringify(id)}:Object.values({${source}})[0]`,
-                    )
-                    .join(",");
-                sourceText += `\n;(${installChatgptRuntimeBridge})(${runtime},{${factories}},${JSON.stringify(symbols)},${JSON.stringify(bindings)});`;
-                sourceText = rewriteModuleImports(sourceText, assetUrl);
-            }
-            if (!isChatgptImportPatchEnabled()) return;
-            chatgptPlanTypes = planTypes;
-            chatgptCopyIcons = copyIcons;
-            setChatgptImportMapPatchCache({
-                assetUrl,
-                sourceText,
-                planTypes,
-                copyIcons,
-                signature,
-            });
-            updateChatgptFakePlanControls();
-            syncChatgptCopyButton();
-            if (cachedSource === undefined) {
-                chatgptImportPatchNeedsReload = true;
-                console.info(
-                    "[CheckerNext] 模块补丁缓存已更新，重新载入后生效:",
-                    assetUrl,
-                );
-            }
-            updateChatgptInjectionStatus();
-        } catch (error) {
-            if (!isChatgptImportPatchEnabled()) return;
-            setChatgptImportMapPatchCache(null);
-            chatgptImportPatchFailure = `补丁缓存生成失败：${String(error)}`;
-            updateChatgptInjectionStatus();
-            console.error("[CheckerNext] 生成模块补丁缓存失败:", error);
-        }
     }
 
     let chatgptAgeVerificationSettingFetched = false;
@@ -1377,13 +1378,9 @@
     }
 
     async function updateChatgptFakePlan() {
-        if (!isChatgptImportPatchEnabled()) return;
-        const bridge = pageWindow.__checkerNextRuntimeModelBridge;
-        if (!bridge) return prepareChatgptImportMapPatchCache();
+        if (!chatgptModuleInjectionEnabled) return;
         try {
-            await bridge.refreshAccounts();
-            chatgptInstalledPatchSettings = getChatgptImportPatchSettings();
-            chatgptPendingPatchSettings = chatgptInstalledPatchSettings;
+            await pageWindow.__checkerNextRuntimeModelBridge?.refreshAccounts();
             updateChatgptInjectionStatus();
         } catch (error) {
             console.error("[CheckerNext] 更新会员设置失败:", error);
@@ -1570,55 +1567,30 @@
         );
         if (!status) return;
 
-        const formatItems = (settings) =>
-            getChatgptImportPatchItems(settings)
-                .map((item) => `• ${item}`)
-                .join("\n");
-        const installedItems = formatItems(chatgptInstalledPatchSettings);
-        const pendingItems = formatItems(
-            chatgptPendingPatchSettings || getChatgptImportPatchSettings(),
-        );
-        let label = "检查中";
+        const items = getChatgptModuleItems()
+            .map((item) => `• ${item}`)
+            .join("\n");
+        let label = "加载中";
         let color = "#bbbbbb";
-        let description = "正在检查 ChatGPT 模块补丁。";
-        const injectionInstalled = Boolean(
-            Reflect.get(pageWindow, "__checkerNextImportMapInstalled"),
-        );
-
-        if (!chatgptModuleInjectionEnabled) {
-            label = injectionInstalled ? "刷新生效" : "注入关闭";
-            color = injectionInstalled ? "#ffd700" : "#bbbbbb";
-            description = injectionInstalled
-                ? `当前页面仍已注入：\n${installedItems}\n\n刷新页面后关闭模块注入。`
-                : "模块注入已关闭。\n\n运行时模型和假装会员均不会生效。";
-        } else if (chatgptImportPatchFailure) {
-            label = "注入失败";
-            color = "#ff6b6b";
-            description = chatgptImportPatchFailure;
-            if (chatgptRuntimeModelState) {
-                description += `\n\n当前页面已注入：\n${installedItems}`;
-            } else {
-                description += `\n\n准备注入：\n${pendingItems}`;
-            }
-        } else if (chatgptImportPatchNeedsReload) {
+        let description = "正在加载 ChatGPT 页面模块。";
+        if (chatgptModuleInjectionEnabled !== chatgptModuleInjectionStarted) {
             label = "刷新生效";
             color = "#ffd700";
-            description = chatgptRuntimeModelState
-                ? `当前页面已注入：\n${installedItems}\n\n刷新后生效：\n${pendingItems}`
-                : `刷新后注入（可能要多试几次）：\n${pendingItems}`;
-        } else if (injectionInstalled) {
+            description = chatgptModuleInjectionEnabled
+                ? `刷新页面后启用模块注入：\n${items}`
+                : "刷新页面后关闭模块注入。";
+        } else if (!chatgptModuleInjectionEnabled) {
+            label = "注入关闭";
+            description = "模块注入已关闭。";
+        } else if (chatgptInjectionFailure) {
+            label = "注入失败";
+            color = "#ff6b6b";
+            description = chatgptInjectionFailure;
+        } else if (pageWindow.__checkerNextModulesInstalled) {
             label = "注入成功";
             color = "#98fb98";
-            description = `当前页面已注入：\n${installedItems}`;
-        } else if (
-            document.readyState === "complete" &&
-            chatgptImportMapInserted
-        ) {
-            label = "刷新重试";
-            color = "#ffd700";
-            description = `模块映射已经插入，但补丁模块没有执行。页面可能先载入了原模块，刷新页面可重新尝试。\n\n准备注入：\n${pendingItems}`;
+            description = `当前页面已注入：\n${items}`;
         }
-
         status.innerText = label;
         status.style.color = color;
         if (tooltip) tooltip.innerText = description;
@@ -3002,22 +2974,8 @@
                     CHATGPT_MODULE_INJECTION_ENABLED_KEY,
                     String(chatgptModuleInjectionEnabled),
                 );
-                chatgptImportPatchFailure = undefined;
-                chatgptImportPatchNeedsReload = false;
-
-                if (chatgptModuleInjectionEnabled) {
-                    chatgptPendingPatchSettings =
-                        getChatgptImportPatchSettings();
-                    chatgptImportPatchNeedsReload = !Reflect.get(
-                        pageWindow,
-                        "__checkerNextImportMapInstalled",
-                    );
-                    void prepareChatgptImportMapPatchCache();
+                if (chatgptModuleInjectionEnabled)
                     requestChatgptRuntimeModelState();
-                } else {
-                    setChatgptImportMapPatchCache(null);
-                    chatgptPendingPatchSettings = undefined;
-                }
 
                 apply();
                 updateChatgptRuntimeModelControls();
@@ -4547,16 +4505,4 @@
         }
         return response;
     };
-
-    if (isChatgptMode && isChatgptImportPatchEnabled()) {
-        if (document.readyState === "complete") {
-            void prepareChatgptImportMapPatchCache();
-        } else {
-            pageWindow.addEventListener(
-                "load",
-                () => void prepareChatgptImportMapPatchCache(),
-                { once: true },
-            );
-        }
-    }
 })();
