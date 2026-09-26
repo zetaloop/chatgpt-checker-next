@@ -406,8 +406,10 @@
         let appScope,
             watchedScope,
             stopWatching,
+            composerScope,
             homeScope,
             picker,
+            modelState,
             homeOrigin,
             scheduled = false,
             lastState;
@@ -432,47 +434,59 @@
             return match ? decodeURIComponent(match[1]) : null;
         };
         const current = () => conversations.get(routeId());
+        const readModel = (scope) =>
+            scope.get(native.selection, {
+                conversationId: scope.value.conversationId,
+                composerContext: scope.value.chatGptSelectionContext,
+            });
         const scheduleState = () => {
             if (scheduled) return;
             scheduled = true;
             queueMicrotask(() => {
                 scheduled = false;
-                if (stopWatching && watchedScope !== appScope) {
+                const active =
+                    picker?.pathname === location.pathname ? picker : null;
+                const scope = active?.scope ?? appScope;
+                if (stopWatching && watchedScope.node !== scope?.node) {
                     stopWatching();
                     stopWatching = undefined;
+                    modelState = undefined;
                 }
-                if (appScope && current() && !stopWatching) {
-                    watchedScope = appScope;
+                if (scope && (active || current()) && !stopWatching) {
+                    watchedScope = scope;
                     let pathname;
-                    stopWatching = appScope.watch(({ get }) => {
-                        const nextPathname = get(native.location)?.pathname;
-                        if (nextPathname === undefined) return;
-                        const id = routeId(nextPathname);
+                    stopWatching = scope.watch((scope) => {
+                        const nextPathname = scope.get(
+                            native.location,
+                        )?.pathname;
                         if (
+                            nextPathname !== undefined &&
                             nextPathname !== pathname &&
                             nextPathname === location.pathname
                         ) {
                             pathname = nextPathname;
-                            const conversation = conversations.get(id);
+                            const conversation = conversations.get(
+                                routeId(pathname),
+                            );
                             for (const [key, value] of conversations) {
                                 if (value !== conversation)
                                     conversations.delete(key);
                             }
                         }
+                        modelState = active ? readModel(scope) : undefined;
                         scheduleState();
                     });
                 }
-                const active =
-                    picker?.pathname === location.pathname
-                        ? picker.props
-                        : null;
-                const model = active?.selectedModel;
+                const model = active && modelState?.selectedModel;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
                     copyReady: current()?.copyReady ?? false,
                     available: Boolean(model && active.onModelChange),
-                    origin: active?.isTppConversation ? "work" : "chat",
+                    origin:
+                        active && modelState?.isWorkConversation
+                            ? "work"
+                            : "chat",
                     model: model?.slug ?? null,
                     thinkingEffort: model?.thinkingEffort ?? null,
                 };
@@ -509,18 +523,25 @@
                         appScope = scope;
                         scheduleState();
                     }
-                    if (
-                        scope.scope.__scopeBrand === "ComposerScope" &&
-                        scope.value.kind === "new" &&
-                        scope.value.entrypoint === "home"
-                    ) {
-                        homeScope = { pathname: location.pathname, scope };
+                    if (scope.scope.__scopeBrand === "ComposerScope") {
+                        if (scope.value.kind === "chatgpt")
+                            composerScope = scope;
+                        if (
+                            scope.value.kind === "new" &&
+                            scope.value.entrypoint === "home"
+                        ) {
+                            homeScope = { pathname: location.pathname, scope };
+                        }
                     }
                 });
             },
             picker(fn) {
                 return after(fn, ([props]) => {
-                    picker = { pathname: location.pathname, props };
+                    picker = {
+                        pathname: location.pathname,
+                        scope: composerScope,
+                        onModelChange: props.onModelChange,
+                    };
                     scheduleState();
                 });
             },
@@ -617,9 +638,7 @@
             try {
                 const detail = event.detail;
                 const active =
-                    picker?.pathname === location.pathname
-                        ? picker.props
-                        : null;
+                    picker?.pathname === location.pathname ? picker : null;
                 if (!active) throw new Error("当前页面的模型控件尚未载入");
                 if (detail.origin === "chat" || detail.origin === "work") {
                     const conversation = current();
@@ -654,9 +673,10 @@
                     });
                 }
                 if (Object.hasOwn(detail, "thinkingEffort")) {
-                    customModels.add(active.selectedModel.slug);
+                    const model = readModel(active.scope).selectedModel;
+                    customModels.add(model.slug);
                     active.onModelChange({
-                        ...active.selectedModel,
+                        ...model,
                         thinkingEffort: detail.thinkingEffort,
                     });
                 }
@@ -768,6 +788,18 @@
             picker,
             `${renderPicker.name}=${api}.picker(${renderPicker.name});`,
         );
+        const selection = module(
+            "模型状态模块",
+            (source) =>
+                source.includes("composerContext:") &&
+                source.includes("configurableThinkingEffort") &&
+                source.includes("isWorkConversation:"),
+        );
+        const [selectionExport] = single(
+            Object.entries(require(selection.id)),
+            "模型状态选择器",
+        );
+        bindings.selection = [selection.id, selectionExport];
 
         const turns = module(
             "会话渲染模块",
