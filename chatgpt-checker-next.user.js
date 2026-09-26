@@ -1649,11 +1649,8 @@
                 : state === "error"
                   ? icons.error
                   : icons.idle;
-        button.replaceChildren(icon.cloneNode(true));
-        button.classList.toggle(
-            "hover:bg-token-bg-tertiary!",
-            state !== "idle",
-        );
+        const targets = button.lastElementChild?.querySelectorAll("svg") ?? [];
+        for (const target of targets) target.replaceWith(icon.cloneNode(true));
         const label =
             state === "loading"
                 ? "正在复制"
@@ -1682,11 +1679,14 @@
             }
             return;
         }
-        const ready = Boolean(
+        const runtimeReady =
             chatgptModuleInjectionEnabled &&
-                chatgptRuntimeModelState?.pathname === pathname &&
-                chatgptRuntimeModelState.copyReady,
-        );
+            chatgptRuntimeModelState?.pathname === pathname;
+        if (!runtimeReady) {
+            existing?.remove();
+            return;
+        }
+        const ready = chatgptRuntimeModelState.copyReady;
         if (
             existing instanceof HTMLButtonElement &&
             existing.dataset.pathname === pathname &&
@@ -1707,27 +1707,25 @@
         ].findLast((button) => !button.closest('[aria-hidden="true"]'));
         if (!nativeButton || !chatgptCopyIcons) return;
 
-        const button = document.createElement("button");
-        button.className = nativeButton.className;
-        const nativeIcon = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            "svg",
-        );
-        nativeIcon.setAttribute("aria-hidden", "true");
-        nativeIcon.setAttribute(
-            "class",
-            nativeButton.querySelector("svg")?.getAttribute("class") ?? "",
-        );
+        const button = nativeButton.cloneNode(true);
+        const nativeIcons = [
+            ...(button.lastElementChild?.querySelectorAll("svg") ?? []),
+        ];
+        if (
+            !(button instanceof HTMLButtonElement) ||
+            nativeIcons.length === 0
+        ) {
+            return;
+        }
         const icons = Object.fromEntries(
             ["idle", "success", "error"].map((state) => {
-                const { width, height, viewBox, body } =
-                    chatgptCopyIcons[state];
-                const icon = nativeIcon.cloneNode(false);
-                icon.setAttribute("width", width);
-                icon.setAttribute("height", height);
-                icon.setAttribute("viewBox", viewBox);
+                const source = chatgptCopyIcons[state];
+                const icon = nativeIcons[0].cloneNode(false);
+                icon.setAttribute("width", source.width);
+                icon.setAttribute("height", source.height);
+                icon.setAttribute("viewBox", source.viewBox);
                 icon.setAttribute("fill", "currentColor");
-                icon.innerHTML = body;
+                icon.innerHTML = source.body;
                 return [state, icon];
             }),
         );
