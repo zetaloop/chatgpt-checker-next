@@ -456,7 +456,7 @@
         const { location } = pageWindow;
         const conversations = new Map();
         const origins = new Map();
-        const customModels = new Set();
+        const customModels = new Map();
         const native = new Proxy(
             {},
             {
@@ -580,6 +580,66 @@
                 ? conversation
                 : { ...conversation, conversation_origin: origin };
         };
+        const extendModels = (data) => {
+            if (!data || customModels.size === 0) return data;
+            const modelConfigBySlug = { ...data.modelConfigBySlug };
+            const internalOptions = [...(data.internalOptions ?? [])];
+            const options = [
+                ...(data.options ?? []),
+                ...internalOptions,
+                ...(data.versionOptions?.flatMap(
+                    (version) => version.options,
+                ) ?? []),
+            ];
+            for (const [slug, efforts] of customModels) {
+                const model = modelConfigBySlug[slug] ?? { title: slug };
+                const additions = [...efforts].filter(
+                    (effort) =>
+                        effort !== null &&
+                        !model.thinkingEfforts?.some(
+                            (item) => item.thinking_effort === effort,
+                        ),
+                );
+                modelConfigBySlug[slug] = additions.length
+                    ? {
+                          ...model,
+                          thinkingEfforts: [
+                              ...(model.thinkingEfforts ?? []),
+                              ...additions.map((thinking_effort) => ({
+                                  thinking_effort,
+                              })),
+                          ],
+                      }
+                    : model;
+                for (const thinkingEffort of efforts) {
+                    if (
+                        options.some(
+                            (option) =>
+                                option.slug === slug &&
+                                (option.thinkingEffort ?? null) ===
+                                    thinkingEffort,
+                        )
+                    )
+                        continue;
+                    const option = options.find(
+                        (option) => option.slug === slug,
+                    );
+                    const title = model.title ?? option?.modelTitle ?? slug;
+                    internalOptions.push({
+                        ...option,
+                        slug,
+                        thinkingEffort,
+                        title: thinkingEffort ?? title,
+                        modelTitle: title,
+                        selectedLabel:
+                            thinkingEffort === null
+                                ? title
+                                : `${title} ${thinkingEffort}`,
+                    });
+                }
+            }
+            return { ...data, modelConfigBySlug, internalOptions };
+        };
         const bridge = {
             register(values) {
                 Object.assign(native, values);
@@ -654,6 +714,11 @@
                     };
                 }
                 return wrapped;
+            },
+            models(fn) {
+                return function (...args) {
+                    return extendModels(fn.apply(this, args));
+                };
             },
             allows: (slug) => customModels.has(slug),
             homeOrigin: () => homeOrigin,
@@ -733,21 +798,41 @@
                             native.setHome(homeScope.scope, detail.origin);
                         }
                     }
+                    let model;
                     if (typeof detail.model === "string" && detail.model) {
-                        customModels.add(detail.model);
-                        active.onModelChange({
+                        model = {
                             slug: detail.model,
                             thinkingEffort: null,
                             versionId: null,
-                        });
+                        };
                     }
                     if (Object.hasOwn(detail, "thinkingEffort")) {
-                        const model = readModel(active.scope).selectedModel;
-                        customModels.add(model.slug);
-                        active.onModelChange({
-                            ...model,
+                        model = {
+                            ...(model ?? readModel(active.scope).selectedModel),
                             thinkingEffort: detail.thinkingEffort,
-                        });
+                        };
+                    }
+                    if (model) {
+                        let efforts = customModels.get(model.slug);
+                        if (!efforts) {
+                            efforts = new Set();
+                            customModels.set(model.slug, efforts);
+                        }
+                        const effort = model.thinkingEffort ?? null;
+                        if (!efforts.has(effort)) {
+                            efforts.add(effort);
+                            active.scope.queryClient.setQueriesData(
+                                {
+                                    predicate: ({ queryKey }) =>
+                                        [
+                                            "chatgpt-models",
+                                            "chatgpt-tpp-models",
+                                        ].includes(queryKey[0]),
+                                },
+                                extendModels,
+                            );
+                        }
+                        active.onModelChange(model);
                     }
                 } catch (error) {
                     report(error);
@@ -1128,56 +1213,18 @@
                 source.includes("workspace_model_policy") &&
                 source.includes("modelConfigBySlug"),
             (models) => {
-                const findModel = exported(
+                const parseModels = exported(
                     models,
-                    "模型查找接口",
+                    "模型目录解析接口",
                     (source) =>
-                        source.includes("thinkingEffort") &&
-                        source.includes("internalOptions") &&
-                        source.includes(".find(") &&
-                        !source.includes("modelConfigBySlug"),
+                        source.includes("modelConfigBySlug:") &&
+                        source.includes("internalOptions:") &&
+                        source.includes("workspaceModelPolicy:"),
                 );
-                const normalize = exported(
+                append(
                     models,
-                    "思考强度解析接口",
-                    (source) =>
-                        source.includes("thinkingEffort:") &&
-                        source.includes("thinking_effort") &&
-                        source.includes(".some("),
+                    `${parseModels.name}=${api}.models(${parseModels.name});`,
                 );
-                const accepts = exported(
-                    models,
-                    "模型校验接口",
-                    (source) =>
-                        source.includes("modelConfigBySlug?.[") &&
-                        source.includes("thinkingEffort:null"),
-                );
-                for (const [fn, expression] of [
-                    [
-                        findModel,
-                        `{slug:$model.slug,thinkingEffort:$model.thinkingEffort,title:$model.slug}`,
-                    ],
-                    [normalize, "$model"],
-                    [accepts, "true"],
-                ]) {
-                    const source = fn.toString();
-                    const params = source
-                        .match(/^function [\w$]+\(([^)]*)\)/)?.[1]
-                        .split(",");
-                    if (params?.length !== 2)
-                        throw new Error("模型接口参数未匹配");
-                    const model = params[1];
-                    const slug = fn === accepts ? model : `${model}.slug`;
-                    const result = expression.replaceAll("$model", model);
-                    replace(
-                        models,
-                        source,
-                        source.replace(
-                            "{",
-                            `{if(${api}.allows(${slug}))return ${result};`,
-                        ),
-                    );
-                }
             },
         );
 
