@@ -46,6 +46,8 @@
     const CHATGPT_COPY_BUTTON_ENABLED_KEY =
         "checker-next-chatgpt-copy-button-enabled";
     const CHATGPT_COPY_DETAILS_KEY = "checker-next-chatgpt-copy-details";
+    const CHATGPT_MATERIALIZE_KEY = "checker-next-chatgpt-materialize";
+    const CHATGPT_MATERIALIZE_EVENT = "checker-next-materialize";
     const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
         "checker-next-chatgpt-selection-popover-disabled";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
@@ -64,6 +66,9 @@
     let chatgptCopyDetailsEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_COPY_DETAILS_KEY) === "true";
+    let chatgptMaterializeEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_MATERIALIZE_KEY) !== "false";
     let chatgptSelectionPopoverDisabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
@@ -725,6 +730,50 @@
             models(fn) {
                 return function (...args) {
                     return extendModels(fn.apply(this, args));
+                };
+            },
+            approval(fn, React) {
+                const subscribe = (listener) => {
+                    pageWindow.addEventListener(
+                        CHATGPT_MATERIALIZE_EVENT,
+                        listener,
+                    );
+                    return () =>
+                        pageWindow.removeEventListener(
+                            CHATGPT_MATERIALIZE_EVENT,
+                            listener,
+                        );
+                };
+                const snapshot = () => chatgptMaterializeEnabled;
+                return function (props) {
+                    const card = fn(props);
+                    const enabled = React.useSyncExternalStore(
+                        subscribe,
+                        snapshot,
+                        snapshot,
+                    );
+                    const attempted = React.useRef(null);
+                    const { actions } = card.props;
+                    const target = props.item.allowTargetMessageId;
+                    const automatic =
+                        enabled &&
+                        props.item.request?.body.approval_reason ===
+                            "mcp_attachment_materialization" &&
+                        !actions.approveDisabled;
+                    const hidden =
+                        automatic &&
+                        (attempted.current !== target || actions.isLoading);
+                    React.useEffect(() => {
+                        if (
+                            !automatic ||
+                            actions.isLoading ||
+                            attempted.current === target
+                        )
+                            return;
+                        attempted.current = target;
+                        actions.onApprove();
+                    }, [automatic, actions, target]);
+                    return hidden ? null : card;
                 };
             },
             allows: (slug) => customModels.has(slug),
@@ -1457,6 +1506,49 @@
                     messages,
                     `const checkerNextMessageText=${copyText[2]};${api}.register({messageText:checkerNextMessageText});`,
                 );
+                const approval = single(
+                    [
+                        ...messages.source.matchAll(
+                            /let [\w$]+=([\w$]+);return [\w$]+\.request\?\.body\.codex_mcp_elicitation\?\.kind==="openaiForm"/g,
+                        ),
+                    ],
+                    "授权组件",
+                )[1];
+                const react = single(
+                    [
+                        ...new Set(
+                            [
+                                ...messages.source.matchAll(
+                                    /\(0,([\w$]+)\.useState\)/g,
+                                ),
+                            ].map((match) => match[1]),
+                        ),
+                    ],
+                    "React 接口",
+                );
+                append(
+                    messages,
+                    `${approval}=${api}.approval(${approval},${react});`,
+                );
+            },
+        );
+
+        module(
+            "授权请求模块",
+            (source) =>
+                source.includes("approve_tool_in_context_scope") &&
+                source.includes("split_action_options") &&
+                source.includes("codex_plugin_auth_required"),
+            (approval) => {
+                const body = single(
+                    [...approval.source.matchAll(/body:([\w$]+)\.object\(\{/g)],
+                    "授权原因字段",
+                );
+                replace(
+                    approval,
+                    body[0],
+                    `${body[0]}approval_reason:${body[1]}.string().nullish(),`,
+                );
             },
         );
 
@@ -1585,6 +1677,7 @@
     function getChatgptModuleItems() {
         const items = ["运行时模型切换"];
         if (chatgptCopyButtonEnabled) items.push("复制全文");
+        if (chatgptMaterializeEnabled) items.push("自动允许文件实体化");
         if (chatgptFakePlanEnabled)
             items.push(`假装会员：${chatgptFakePlanValue}`);
         return items;
@@ -2644,6 +2737,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-materialize-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>自动允许文件实体化
+                <span id="chatgpt-materialize-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-materialize-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-materialize-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-materialize-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-selection-popover-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>禁用划词悬浮窗
                 <span id="chatgpt-selection-popover-tooltip" style="
@@ -3025,6 +3159,11 @@
             "复制时包含思考内容、工具调用和返回结果。",
         );
 
+        const chatgptMaterializeTooltipBox = createTooltip(
+            "chatgpt-materialize-tooltip-box",
+            "自动允许插件返回的文件载入当前聊天。",
+        );
+
         const chatgptSelectionPopoverTooltipBox = createTooltip(
             "chatgpt-selection-popover-tooltip-box",
             "隐藏回答划词操作和编辑时的浮动格式菜单。",
@@ -3118,6 +3257,10 @@
             bindTooltipEvents(
                 "chatgpt-copy-details-tooltip",
                 chatgptCopyDetailsTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-materialize-tooltip",
+                chatgptMaterializeTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-selection-popover-tooltip",
@@ -3401,6 +3544,18 @@
                 CHATGPT_COPY_DETAILS_KEY,
                 (value) => {
                     chatgptCopyDetailsEnabled = value;
+                },
+            );
+            bindToggle(
+                "chatgpt-materialize",
+                chatgptMaterializeEnabled,
+                CHATGPT_MATERIALIZE_KEY,
+                (value) => {
+                    chatgptMaterializeEnabled = value;
+                    pageWindow.dispatchEvent(
+                        new pageWindow.Event(CHATGPT_MATERIALIZE_EVENT),
+                    );
+                    updateChatgptInjectionStatus();
                 },
             );
             bindToggle(
