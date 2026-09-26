@@ -71,7 +71,7 @@
     let userRegionValue = null;
     let priceRegionCode = null;
     let chatgptRuntimeModelState;
-    let chatgptFakePlanCatalog;
+    let chatgptPlanTypes;
     let chatgptCopyIcons;
     let chatgptImportMapInserted = false;
     let chatgptImportPatchNeedsReload = false;
@@ -939,19 +939,9 @@
             ),
             "会员枚举",
         );
-        const planTypes = Object.entries(planEnum).map(
-            ([planKey, planType]) => ({ planKey, planType }),
-        );
-        const fakePlanCatalog = {
-            planTypes,
-            options: planTypes.map((plan) => ({
-                ...plan,
-                subscriptionKey: plan.planKey,
-                subscriptionPlan: plan.planType,
-            })),
-        };
+        const planTypes = Object.values(planEnum);
         if (fakePlan) {
-            if (!planTypes.some(({ planType }) => planType === fakePlan))
+            if (!planTypes.includes(fakePlan))
                 throw new Error("所选会员类型不存在");
             const accounts = module(
                 "账号会员模块",
@@ -1006,19 +996,14 @@
             );
             copyIcons[state] = { ...icon.canvas, body: icon.body };
         }
-        return { patches, symbols, fakePlanCatalog, copyIcons };
+        return { patches, symbols, planTypes, copyIcons };
     }
 
     function getChatgptImportPatchSettings() {
         return {
             fakePlan:
                 localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true"
-                    ? (findChatgptFakePlan(
-                          chatgptFakePlanCatalog,
-                          localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro",
-                      )?.planType ??
-                      localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) ??
-                      "pro")
+                    ? localStorage.getItem(CHATGPT_FAKE_PLAN_KEY) || "pro"
                     : "",
         };
     }
@@ -1028,17 +1013,6 @@
         if (chatgptCopyButtonEnabled) items.push("复制全文");
         if (settings?.fakePlan) items.push(`假装会员：${settings.fakePlan}`);
         return items;
-    }
-
-    function findChatgptFakePlan(catalog, value) {
-        return catalog?.options.find(
-            ({ planType, subscriptionPlan }) =>
-                subscriptionPlan === value || planType === value,
-        );
-    }
-
-    function isChatgptFakePlanCatalog(value) {
-        return Array.isArray(value?.options) && Array.isArray(value.planTypes);
     }
 
     function isChatgptCopyIcons(value) {
@@ -1073,20 +1047,20 @@
         )
             return;
         const cached = GM_getValue(CHATGPT_IMPORT_MAP_CACHE_KEY, null);
-        if (isChatgptFakePlanCatalog(cached?.fakePlanCatalog)) {
-            chatgptFakePlanCatalog = cached.fakePlanCatalog;
+        if (Array.isArray(cached?.planTypes)) {
+            chatgptPlanTypes = cached.planTypes;
         }
         if (cached?.signature !== getChatgptImportPatchSignature()) return;
         if (
             typeof cached.assetUrl !== "string" ||
             typeof cached.sourceText !== "string" ||
-            !isChatgptFakePlanCatalog(cached.fakePlanCatalog) ||
+            !Array.isArray(cached.planTypes) ||
             !isChatgptCopyIcons(cached.copyIcons)
         ) {
             reportChatgptFailure("缓存模块补丁格式无效。");
             return;
         }
-        chatgptFakePlanCatalog = cached.fakePlanCatalog;
+        chatgptPlanTypes = cached.planTypes;
         chatgptCopyIcons = cached.copyIcons;
         const blobUrl = URL.createObjectURL(
             new Blob([cached.sourceText], { type: "text/javascript" }),
@@ -1130,10 +1104,10 @@
                 cached?.assetUrl === assetUrl &&
                 cached.signature === signature &&
                 isChatgptCopyIcons(cached.copyIcons) &&
-                isChatgptFakePlanCatalog(cached.fakePlanCatalog)
+                Array.isArray(cached.planTypes)
             ) {
                 chatgptCopyIcons = cached.copyIcons;
-                chatgptFakePlanCatalog = cached.fakePlanCatalog;
+                chatgptPlanTypes = cached.planTypes;
                 updateChatgptFakePlanControls();
                 syncChatgptCopyButton();
                 return;
@@ -1141,7 +1115,7 @@
             chatgptImportPatchFailure = undefined;
             chatgptImportPatchNeedsReload = false;
             const { __webpack_require__: require } = await import(assetUrl);
-            const { patches, symbols, fakePlanCatalog, copyIcons } =
+            const { patches, symbols, planTypes, copyIcons } =
                 createChatgptModulePatches(
                     require,
                     chatgptPendingPatchSettings.fakePlan,
@@ -1162,18 +1136,12 @@
                 .join(",");
             sourceText += `\n;(${installChatgptRuntimeBridge})(${runtime},{${factories}},${JSON.stringify(symbols)});`;
             if (!isChatgptImportPatchEnabled()) return;
-            const selectedPlan =
-                getChatgptFakePlan(chatgptFakePlanValue)?.planType;
-            chatgptFakePlanCatalog = fakePlanCatalog;
-            if (selectedPlan && chatgptFakePlanValue !== selectedPlan) {
-                chatgptFakePlanValue = selectedPlan;
-                localStorage.setItem(CHATGPT_FAKE_PLAN_KEY, selectedPlan);
-            }
+            chatgptPlanTypes = planTypes;
             chatgptCopyIcons = copyIcons;
             setChatgptImportMapPatchCache({
                 assetUrl,
                 sourceText: rewriteModuleImports(sourceText, assetUrl),
-                fakePlanCatalog,
+                planTypes,
                 copyIcons,
                 signature,
             });
@@ -1207,10 +1175,6 @@
         }
     }
 
-    function getChatgptFakePlan(value) {
-        return findChatgptFakePlan(chatgptFakePlanCatalog, value);
-    }
-
     function updateChatgptFakePlanControls() {
         const select = document.getElementById("chatgpt-fake-plan-select");
         const toggle = document.getElementById("chatgpt-fake-plan-toggle");
@@ -1220,34 +1184,23 @@
         );
         if (!(select instanceof HTMLSelectElement)) return;
 
-        const selectedPlan = getChatgptFakePlan(chatgptFakePlanValue);
-        if (
-            selectedPlan &&
-            chatgptFakePlanValue !== selectedPlan.subscriptionPlan
-        ) {
-            chatgptFakePlanValue = selectedPlan.subscriptionPlan;
-            localStorage.setItem(CHATGPT_FAKE_PLAN_KEY, chatgptFakePlanValue);
-        }
-        const options = (chatgptFakePlanCatalog?.options || []).map(
-            ({ subscriptionPlan, planType }) => {
-                const option = document.createElement("option");
-                option.value = subscriptionPlan;
-                option.textContent = planType;
-                return option;
-            },
-        );
+        const selectedPlan = chatgptPlanTypes?.includes(chatgptFakePlanValue);
+        const options = (chatgptPlanTypes ?? []).map((planType) => {
+            const option = document.createElement("option");
+            option.value = planType;
+            option.textContent = planType;
+            return option;
+        });
         if (!selectedPlan) {
             const placeholder = document.createElement("option");
             placeholder.value = "";
-            placeholder.textContent = chatgptFakePlanCatalog
-                ? "请选择"
-                : "读取中…";
+            placeholder.textContent = chatgptPlanTypes ? "请选择" : "读取中…";
             placeholder.disabled = true;
             options.unshift(placeholder);
         }
         select.replaceChildren(...options);
-        select.value = selectedPlan?.subscriptionPlan || "";
-        select.disabled = !chatgptFakePlanCatalog;
+        select.value = selectedPlan ? chatgptFakePlanValue : "";
+        select.disabled = !chatgptPlanTypes;
 
         if (
             toggle instanceof HTMLInputElement &&
@@ -1256,11 +1209,7 @@
         ) {
             toggle.checked = Boolean(selectedPlan && chatgptFakePlanEnabled);
             toggle.disabled = !selectedPlan;
-            updateGrokDevToolsSliderStyle(
-                slider,
-                sliderDot,
-                isChatgptFakePlanRuntimeEnabled(),
-            );
+            updateGrokDevToolsSliderStyle(slider, sliderDot, toggle.checked);
         }
     }
 
@@ -1270,12 +1219,6 @@
     let chatgptFakePlanEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
-
-    function isChatgptFakePlanRuntimeEnabled() {
-        return Boolean(
-            chatgptFakePlanEnabled && getChatgptFakePlan(chatgptFakePlanValue),
-        );
-    }
 
     function updateChatgptRuntimeModelCatalog(origin, data) {
         if (!isChatgptMode || (origin !== "chat" && origin !== "work")) return;
@@ -3038,9 +2981,8 @@
             updateChatgptFakePlanControls();
 
             select.addEventListener("change", function () {
-                const selectedPlan = getChatgptFakePlan(select.value);
-                if (!selectedPlan) return;
-                chatgptFakePlanValue = selectedPlan.subscriptionPlan;
+                if (!chatgptPlanTypes?.includes(select.value)) return;
+                chatgptFakePlanValue = select.value;
                 localStorage.setItem(
                     CHATGPT_FAKE_PLAN_KEY,
                     chatgptFakePlanValue,
