@@ -353,12 +353,6 @@
     let grokAsyncChatEnabled =
         isGrokMode && localStorage.getItem(GROK_ASYNC_CHAT_KEY) === "true";
 
-    const CHATGPT_AGE_VERIFICATION_SETTING_KEY =
-        "checker-next-chatgpt-age-verification-setting";
-    let chatgptAgeVerificationSettingEnabled =
-        isChatgptMode &&
-        localStorage.getItem(CHATGPT_AGE_VERIFICATION_SETTING_KEY) === "true";
-
     function installChatgptModuleInjection() {
         chatgptModuleInjectionStarted = true;
         const prototype = pageWindow.Function.prototype;
@@ -1425,9 +1419,6 @@
         return items;
     }
 
-    let chatgptAgeVerificationSettingFetched = false;
-    let chatgptAgeVerificationSettingDisplayValue = null;
-
     function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
         if (enabled) {
             slider.style.backgroundColor = "#4CAF50";
@@ -2398,47 +2389,6 @@
                     "></span>
                 </label>
             </div>
-            <div id="chatgpt-age-verification-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>年龄验证：<span id="chatgpt-age-verification-status">...</span>
-                <span id="chatgpt-age-verification-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-age-verification-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-age-verification-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-age-verification-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
             <div id="chatgpt-copy-button-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>复制按钮
                 <span id="chatgpt-copy-button-tooltip" style="
@@ -2861,12 +2811,6 @@
             "不显示［询问 ChatGPT丨开始写作］。",
         );
 
-        // 创建年龄验证提示框
-        const chatgptAgeVerificationSettingTooltipBox = createTooltip(
-            "chatgpt-age-verification-tooltip-box",
-            "ChatGPT 设置 - 账户 - 年龄验证，可以扫脸验证成人，没看到 True/False 的话请进入对话/设置来触发加载此配置。",
-        );
-
         // 创建假装会员提示框
         const chatgptFakePlanTooltipBox = createTooltip(
             "chatgpt-fake-plan-tooltip-box",
@@ -2927,10 +2871,6 @@
                 grokAllModelsTooltipBox,
             );
             bindTooltipEvents("grok-dev-tools-tooltip", grokDevToolsTooltipBox);
-            bindTooltipEvents(
-                "chatgpt-age-verification-tooltip",
-                chatgptAgeVerificationSettingTooltipBox,
-            );
             bindTooltipEvents(
                 "chatgpt-fake-plan-tooltip",
                 chatgptFakePlanTooltipBox,
@@ -3019,50 +2959,6 @@
                 );
                 updateChatgptCopyButtonToggle();
                 updateChatgptInjectionStatus();
-            });
-        }
-
-        function bindChatgptAgeVerificationSettingToggle() {
-            const container = document.getElementById(
-                "chatgpt-age-verification-container",
-            );
-            const toggle = document.getElementById(
-                "chatgpt-age-verification-toggle",
-            );
-            const slider = document.getElementById(
-                "chatgpt-age-verification-slider",
-            );
-            const sliderDot = document.getElementById(
-                "chatgpt-age-verification-slider-dot",
-            );
-            const statusEl = document.getElementById(
-                "chatgpt-age-verification-status",
-            );
-            if (!container || !toggle || !slider || !sliderDot || !statusEl)
-                return;
-
-            function apply() {
-                updateBooleanStatus(
-                    statusEl,
-                    chatgptAgeVerificationSettingDisplayValue,
-                );
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    chatgptAgeVerificationSettingEnabled,
-                );
-            }
-
-            toggle.checked = chatgptAgeVerificationSettingEnabled;
-            apply();
-
-            toggle.addEventListener("change", function () {
-                chatgptAgeVerificationSettingEnabled = toggle.checked;
-                localStorage.setItem(
-                    CHATGPT_AGE_VERIFICATION_SETTING_KEY,
-                    chatgptAgeVerificationSettingEnabled ? "true" : "false",
-                );
-                apply();
             });
         }
 
@@ -3288,7 +3184,6 @@
                 },
             );
             bindChatgptRuntimeModelControls();
-            bindChatgptAgeVerificationSettingToggle();
             bindChatgptFakePlanSelect();
         }
         bindAllTooltips();
@@ -3685,41 +3580,6 @@
             statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
         } else {
             statusEl.innerText = "...";
-        }
-    }
-
-    // 更新 ChatGPT 各自的开关状态显示
-    function updateChatgptAgeVerificationSettingStatus(
-        originalValue,
-        wasModified,
-    ) {
-        if (!isChatgptMode) return;
-        const statusEl = document.getElementById(
-            "chatgpt-age-verification-status",
-        );
-        if (!statusEl) return;
-
-        if (
-            (originalValue === null || originalValue === undefined) &&
-            chatgptAgeVerificationSettingFetched
-        ) {
-            updateBooleanStatus(
-                statusEl,
-                chatgptAgeVerificationSettingDisplayValue,
-            );
-            return;
-        }
-        if (typeof originalValue === "boolean") {
-            chatgptAgeVerificationSettingFetched = true;
-            if (wasModified) {
-                chatgptAgeVerificationSettingDisplayValue = true;
-            } else {
-                chatgptAgeVerificationSettingDisplayValue = originalValue;
-            }
-            updateBooleanStatus(
-                statusEl,
-                chatgptAgeVerificationSettingDisplayValue,
-            );
         }
     }
 
@@ -4339,42 +4199,6 @@
                 return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理功能用量响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("/backend-api/settings/is_adult") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isChatgptMode) return response;
-            try {
-                const data = await response.clone().json();
-
-                const originalValue =
-                    data.show_age_verification_setting === true;
-                let modified = false;
-
-                if (
-                    chatgptAgeVerificationSettingEnabled &&
-                    data.show_age_verification_setting !== true
-                ) {
-                    data.show_age_verification_setting = true;
-                    modified = true;
-                }
-
-                updateChatgptAgeVerificationSettingStatus(
-                    originalValue,
-                    modified,
-                );
-
-                if (modified) {
-                    return recreateResponseText(JSON.stringify(data), response);
-                }
-                return response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 is_adult 响应出错:", e);
                 return response;
             }
         }
