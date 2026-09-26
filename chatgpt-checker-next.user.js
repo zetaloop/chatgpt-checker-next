@@ -45,6 +45,7 @@
         "checker-next-chatgpt-module-injection-enabled";
     const CHATGPT_COPY_BUTTON_ENABLED_KEY =
         "checker-next-chatgpt-copy-button-enabled";
+    const CHATGPT_COPY_DETAILS_KEY = "checker-next-chatgpt-copy-details";
     const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
         "checker-next-chatgpt-selection-popover-disabled";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
@@ -60,6 +61,9 @@
     let chatgptCopyButtonEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_COPY_BUTTON_ENABLED_KEY) !== "false";
+    let chatgptCopyDetailsEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_COPY_DETAILS_KEY) === "true";
     let chatgptSelectionPopoverDisabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
@@ -735,7 +739,7 @@
                     { throwOnError: true },
                 );
             },
-            async loadTurns() {
+            async loadTurns(includeDetails = false) {
                 const conversation = current();
                 const scope = appScope;
                 if (!conversation) throw new Error("当前会话尚未载入");
@@ -746,11 +750,94 @@
                         conversation.serverId ?? conversation.id,
                     );
                 }
+                if (includeDetails) {
+                    if (!scope) throw new Error("当前会话状态尚未载入");
+                    const messages = native.messages({
+                        current_node: scope.get(
+                            native.currentNode,
+                            conversation.id,
+                        ),
+                        mapping: scope.get(native.mapping, conversation.id),
+                    });
+                    const turns = [];
+                    for (const message of messages) {
+                        const role = message.author.role;
+                        if (!["user", "assistant", "tool"].includes(role))
+                            continue;
+                        if (role === "user" || turns.length === 0)
+                            turns.push({ turn: { items: [] } });
+                        turns.at(-1).turn.items.push({
+                            type:
+                                role === "user"
+                                    ? "user-message"
+                                    : "assistant-message",
+                            source: message,
+                        });
+                    }
+                    return turns;
+                }
                 return conversation.readOnly
                     ? conversation.turns
                     : scope.get(native.turns, conversation.id);
             },
             getMessageText(item) {
+                if (item.source) {
+                    const message = item.source;
+                    const { content, metadata = {} } = message;
+                    if (content.content_type === "thoughts")
+                        return content.thoughts
+                            .map(
+                                (thought) => thought.content || thought.summary,
+                            )
+                            .filter(Boolean)
+                            .join("\n\n");
+                    if (content.content_type === "reasoning_recap")
+                        return content.content;
+                    const tool =
+                        message.author.role === "tool"
+                            ? message.author.name
+                            : message.recipient !== "all"
+                              ? message.recipient
+                              : null;
+                    if (tool) {
+                        let text = native.messageContent(message);
+                        if (text) {
+                            try {
+                                const value = JSON.parse(text);
+                                text =
+                                    typeof value?.text === "string"
+                                        ? value.text
+                                        : JSON.stringify(value, null, 2);
+                            } catch {}
+                        } else {
+                            const groups =
+                                metadata.inline_cot_expandable_content
+                                    ?.search_result_groups ??
+                                metadata.search_result_groups ??
+                                [];
+                            text = [
+                                native.searchQueries(metadata).join("\n"),
+                                ...groups
+                                    .flatMap((group) => group.entries ?? [])
+                                    .map((entry) =>
+                                        [entry.title, entry.url, entry.snippet]
+                                            .filter(Boolean)
+                                            .join("\n"),
+                                    ),
+                            ]
+                                .filter(Boolean)
+                                .join("\n\n");
+                        }
+                        return text ? `${tool}\n${text}` : "";
+                    }
+                    const rendered = native.renderMessage(message);
+                    return rendered
+                        ? native.messageText({
+                              content: rendered.markdown,
+                              contentReferences: rendered.contentReferences,
+                          })
+                        : "";
+                }
                 if (item.type === "user-message") return item.message;
                 if (item.type === "assistant-message") {
                     if (!native.messageText)
@@ -1073,6 +1160,90 @@
                     "会话内容选择器",
                 );
                 bindings.turns = [content.id, contentExport];
+                const imports = Object.fromEntries(
+                    [
+                        ...content.source.matchAll(
+                            /([\w$]+)=[\w$]+\("([^"]+)"\)/g,
+                        ),
+                    ].map((match) => [match[1], match[2]]),
+                );
+                for (const [name, field] of [
+                    ["currentNode", "current_node"],
+                    ["mapping", "mapping"],
+                ]) {
+                    const value = single(
+                        [
+                            ...content.source.matchAll(
+                                new RegExp(`${field}:([\\w$]+)`, "g"),
+                            ),
+                        ],
+                        field,
+                    )[1];
+                    const reference = single(
+                        [
+                            ...content.source.matchAll(
+                                new RegExp(
+                                    `(?:[,;])${RegExp.escape(value)}=[\\w$]+\\(([\\w$]+)\\.([\\w$]+),[\\w$]+\\)`,
+                                    "g",
+                                ),
+                            ),
+                        ],
+                        name,
+                    );
+                    bindings[name] = [imports[reference[1]], reference[2]];
+                }
+            },
+        );
+
+        module(
+            "消息数据模块",
+            (source) =>
+                source.includes("is_visually_hidden_from_conversation") &&
+                source.includes(".reverse().map(") &&
+                source.includes(".search_model_queries"),
+            (messages) => {
+                for (const [name, predicate] of [
+                    [
+                        "messages",
+                        (source) =>
+                            source.includes(".current_node") &&
+                            source.includes(".reverse().map("),
+                    ],
+                    [
+                        "messageContent",
+                        (source) =>
+                            source.includes(".parts.map(") &&
+                            source.includes(".text"),
+                    ],
+                    [
+                        "searchQueries",
+                        (source) => source.includes(".search_model_queries"),
+                    ],
+                ]) {
+                    const fn = exported(messages, name, predicate);
+                    bindings[name] = [messages.id, fn.exportName];
+                }
+            },
+        );
+
+        module(
+            "消息文本模块",
+            (source) =>
+                source.includes("hasUserAttachmentPreview:") &&
+                source.includes("sourceMarkdown:") &&
+                source.includes("codex_file_citation_authoritative"),
+            (messages) => {
+                const renderMessage = exported(
+                    messages,
+                    "消息文本接口",
+                    (source) =>
+                        source.includes("hasUserAttachmentPreview:") &&
+                        source.includes("sourceMarkdown:"),
+                );
+                bindings.renderMessage = [
+                    messages.id,
+                    renderMessage.exportName,
+                ];
             },
         );
 
@@ -1854,7 +2025,9 @@
             setChatgptCopyButtonState(button, "loading", icons);
             try {
                 const currentTurns =
-                    await pageWindow.__checkerNextRuntimeModelBridge.loadTurns();
+                    await pageWindow.__checkerNextRuntimeModelBridge.loadTurns(
+                        chatgptCopyDetailsEnabled,
+                    );
                 if (!Array.isArray(currentTurns)) {
                     throw new Error("当前会话尚未载入");
                 }
@@ -2430,6 +2603,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-copy-details-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>复制思考与工具
+                <span id="chatgpt-copy-details-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-copy-details-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-copy-details-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-copy-details-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-selection-popover-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>禁用划词悬浮窗
                 <span id="chatgpt-selection-popover-tooltip" style="
@@ -2806,6 +3020,11 @@
             "在右上角显示复制全文按钮。",
         );
 
+        const chatgptCopyDetailsTooltipBox = createTooltip(
+            "chatgpt-copy-details-tooltip-box",
+            "复制时包含思考内容、工具调用和返回结果。",
+        );
+
         const chatgptSelectionPopoverTooltipBox = createTooltip(
             "chatgpt-selection-popover-tooltip-box",
             "隐藏回答划词操作和编辑时的浮动格式菜单。",
@@ -2895,6 +3114,10 @@
             bindTooltipEvents(
                 "chatgpt-copy-button-tooltip",
                 chatgptCopyButtonTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-copy-details-tooltip",
+                chatgptCopyDetailsTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-selection-popover-tooltip",
@@ -3172,6 +3395,14 @@
                 },
             );
             bindChatgptCopyButtonToggle();
+            bindToggle(
+                "chatgpt-copy-details",
+                chatgptCopyDetailsEnabled,
+                CHATGPT_COPY_DETAILS_KEY,
+                (value) => {
+                    chatgptCopyDetailsEnabled = value;
+                },
+            );
             bindToggle(
                 "chatgpt-selection-popover",
                 chatgptSelectionPopoverDisabled,
