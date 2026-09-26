@@ -530,6 +530,12 @@
             allows: (slug) => customModels.has(slug),
             homeOrigin: () => homeOrigin,
             getTurns: () => current()?.turns,
+            refreshAccounts() {
+                return appScope?.queryClient.invalidateQueries(
+                    { queryKey: ["accounts", "check"] },
+                    { throwOnError: true },
+                );
+            },
             async loadTurns() {
                 const conversation = current();
                 if (!conversation) throw new Error("当前会话尚未载入");
@@ -627,7 +633,7 @@
         addEventListener("popstate", scheduleState);
     }
 
-    function createChatgptModulePatches(require, fakePlan) {
+    function createChatgptModulePatches(require) {
         const bridge = pageWindow.__checkerNextRuntimeModelBridge;
         const sources = Object.entries(require.m).map(([id, factory]) => ({
             id,
@@ -953,42 +959,39 @@
             "会员枚举",
         );
         const planTypes = Object.values(planEnum);
-        if (fakePlan) {
-            if (!planTypes.includes(fakePlan))
-                throw new Error("所选会员类型不存在");
-            const accounts = module(
-                "账号会员模块",
-                (source) =>
-                    source.includes("readAccounts") &&
-                    source.includes("queryClient.fetchQuery"),
-            );
-            const readAccounts = exported(
-                accounts,
-                "账号会员接口",
-                (source) =>
-                    source.includes("readAccounts") &&
-                    source.includes("queryClient.fetchQuery"),
-            );
-            append(
-                accounts,
-                `{const original=${readAccounts.name};${readAccounts.name}=async function(...args){const result=await original(...args);return {...result,accounts:result.accounts.map(account=>({...account,plan_type:${JSON.stringify(fakePlan)}}))}}};`,
-            );
-            const auth = module(
-                "账号会话模块",
-                (source) =>
-                    source.includes("getBrowserChatGptDocumentAuth:") &&
-                    source.includes("readChatGptTokenClaims:"),
-            );
-            const documentAuth = exported(
-                auth,
-                "账号会话接口",
-                "getBrowserChatGptDocumentAuth",
-            );
-            append(
-                auth,
-                `{const original=${documentAuth.name};${documentAuth.name}=function(...args){const auth=original(...args);return auth==null?auth:{...auth,planType:${JSON.stringify(fakePlan)},targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:${JSON.stringify(fakePlan)}}}}};`,
-            );
-        }
+        const fakePlan = `localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_ENABLED_KEY)})==="true"?localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_KEY)})||"pro":""`;
+        const accounts = module(
+            "账号会员模块",
+            (source) =>
+                source.includes("readAccounts") &&
+                source.includes("queryClient.fetchQuery"),
+        );
+        const readAccounts = exported(
+            accounts,
+            "账号会员接口",
+            (source) =>
+                source.includes("readAccounts") &&
+                source.includes("queryClient.fetchQuery"),
+        );
+        append(
+            accounts,
+            `{const original=${readAccounts.name};${readAccounts.name}=async function(...args){const result=await original(...args),plan=${fakePlan};return plan?{...result,accounts:result.accounts.map(account=>({...account,plan_type:plan}))}:result}};`,
+        );
+        const auth = module(
+            "账号会话模块",
+            (source) =>
+                source.includes("getBrowserChatGptDocumentAuth:") &&
+                source.includes("readChatGptTokenClaims:"),
+        );
+        const documentAuth = exported(
+            auth,
+            "账号会话接口",
+            "getBrowserChatGptDocumentAuth",
+        );
+        append(
+            auth,
+            `{const original=${documentAuth.name};${documentAuth.name}=function(...args){const auth=original(...args),plan=${fakePlan};return !plan||auth==null?auth:{...auth,planType:plan,targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:plan}}}};`,
+        );
         const copyIcons = {};
         for (const [state, name] of [
             ["idle", "square-on-square-light-16"],
@@ -1041,7 +1044,6 @@
             rewriteModuleImports,
             installChatgptRuntimeBridge,
             createChatgptModulePatches,
-            getChatgptImportPatchSettings().fakePlan,
         ].join("\n");
     }
 
@@ -1129,10 +1131,7 @@
             chatgptImportPatchNeedsReload = false;
             const { __webpack_require__: require } = await import(assetUrl);
             const { patches, symbols, bindings, planTypes, copyIcons } =
-                createChatgptModulePatches(
-                    require,
-                    chatgptPendingPatchSettings.fakePlan,
-                );
+                createChatgptModulePatches(require);
             const response = await originalFetch(assetUrl);
             if (!response.ok)
                 throw new Error(`${response.status} ${response.statusText}`);
@@ -1185,6 +1184,20 @@
         } else {
             slider.style.backgroundColor = "#555";
             sliderDot.style.transform = "translateX(0)";
+        }
+    }
+
+    async function updateChatgptFakePlan() {
+        if (!isChatgptImportPatchEnabled()) return;
+        const bridge = pageWindow.__checkerNextRuntimeModelBridge;
+        if (!bridge) return prepareChatgptImportMapPatchCache();
+        try {
+            await bridge.refreshAccounts();
+            chatgptInstalledPatchSettings = getChatgptImportPatchSettings();
+            chatgptPendingPatchSettings = chatgptInstalledPatchSettings;
+            updateChatgptInjectionStatus();
+        } catch (error) {
+            console.error("[CheckerNext] 更新会员设置失败:", error);
         }
     }
 
@@ -3001,7 +3014,7 @@
                     chatgptFakePlanValue,
                 );
                 updateChatgptFakePlanControls();
-                void prepareChatgptImportMapPatchCache();
+                void updateChatgptFakePlan();
             });
             toggle.addEventListener("change", function () {
                 chatgptFakePlanEnabled = toggle.checked;
@@ -3010,7 +3023,7 @@
                     chatgptFakePlanEnabled ? "true" : "false",
                 );
                 updateChatgptFakePlanControls();
-                void prepareChatgptImportMapPatchCache();
+                void updateChatgptFakePlan();
             });
         }
 
