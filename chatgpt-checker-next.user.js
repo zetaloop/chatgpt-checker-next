@@ -82,7 +82,7 @@
         chatgptSelectionPopoverStyle = GM_addElement("style", {
             media: chatgptSelectionPopoverDisabled ? "all" : "not all",
             textContent:
-                '[aria-live="polite"][popover="manual"][style*="position-anchor: --targeted-action-selection"] { display: none !important; }',
+                '[role="presentation"].pointer-events-auto.w-fit.max-w-full.overflow-hidden:is(.pointer-events-none.w-max.fixed > *, .flex-wrap) { display: none !important; }',
         });
     }
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
@@ -2808,7 +2808,7 @@
 
         const chatgptSelectionPopoverTooltipBox = createTooltip(
             "chatgpt-selection-popover-tooltip-box",
-            "不显示［询问 ChatGPT丨开始写作］。",
+            "隐藏回答划词操作和编辑时的浮动格式菜单。",
         );
 
         // 创建假装会员提示框
