@@ -5,9 +5,8 @@
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
 // @version      4.3.5
-// @description  查看 ChatGPT、Codex 和 Grok 的账号、用量与服务信息。
+// @description  查看 ChatGPT 和 Codex 的账号、用量与服务信息。
 // @match        *://chatgpt.com/*
-// @match        *://grok.com/*
 // @grant        GM_addElement
 // @grant        unsafeWindow
 // @sandbox      raw
@@ -22,22 +21,12 @@
 
     const MODE_CHATGPT = "chatgpt";
     const MODE_CODEX = "codex";
-    const MODE_GROK = "grok";
     const pageWindow = unsafeWindow;
-
-    function detectPageMode() {
-        const { hostname, pathname } = pageWindow.location;
-        if (hostname === "grok.com") return MODE_GROK;
-        if (hostname === "chatgpt.com" && pathname.startsWith("/codex")) {
-            return MODE_CODEX;
-        }
-        return MODE_CHATGPT;
-    }
-
-    const currentPageMode = detectPageMode();
+    const currentPageMode = pageWindow.location.pathname.startsWith("/codex")
+        ? MODE_CODEX
+        : MODE_CHATGPT;
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
-    const isGrokMode = currentPageMode === MODE_GROK;
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
         "checker-next-chatgpt-fake-plan-enabled";
@@ -99,272 +88,6 @@
         });
     }
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
-
-    let grokActiveSubscriptions = null;
-    let grokXSubscriptionType = null;
-    let grokCountryCode = null;
-    let grokUserInfoFetched = false;
-
-    let grokAvailableModels = null;
-    let grokModelsFetched = false;
-    let grokModeTitles = new Map();
-    let grokRateLimitData;
-    let grokRateLimitModelName;
-    let grokStorageUsageData;
-    let grokAutomationsCount;
-
-    let grokModelConfigOverrideValue;
-    let grokXaiEmployeeValue;
-    let grokCanUseDebugToolsValue;
-
-    let grokEarlyAccessDisplayValue;
-    let grokAsyncChatDisplayValue;
-    const grokMemberships = [
-        [
-            "isSuperGrokLiteUser",
-            "grok-super-grok-lite",
-            "SuperGrok Lite",
-            "checker-next-grok-super-grok-lite",
-        ],
-        [
-            "isSuperGrokUser",
-            "grok-super-grok",
-            "SuperGrok",
-            "checker-next-grok-super-grok",
-        ],
-        [
-            "isSuperGrokPlusUser",
-            "grok-super-grok-plus",
-            "SuperGrok Plus",
-            "checker-next-grok-super-grok-plus",
-        ],
-        [
-            "isSuperGrokProUser",
-            "grok-super-grok-pro",
-            "SuperGrok Pro",
-            "checker-next-grok-super-grok-pro",
-        ],
-        [
-            "isEnterpriseUser",
-            "grok-enterprise",
-            "Enterprise",
-            "checker-next-grok-enterprise",
-        ],
-        [
-            "isXPremiumUser",
-            "grok-x-premium",
-            "X Premium",
-            "checker-next-grok-x-premium",
-        ],
-    ].map(([field, id, label, storageKey]) => ({
-        field,
-        id,
-        label,
-        storageKey,
-        enabled: isGrokMode && localStorage.getItem(storageKey) === "true",
-    }));
-    const grokMembershipValues = new Map();
-
-    if (isGrokMode) {
-        pageWindow.__next_f = pageWindow.__next_f || [];
-        const originalPush = pageWindow.__next_f.push;
-        pageWindow.__next_f.push = function (...args) {
-            try {
-                if (args[0] && typeof args[0][1] === "string") {
-                    let dataString = args[0][1];
-                    const sessionUserPattern =
-                        /("user":\{"sessionId":"[^"]*","userId":"[^"]*","email":")([^"]*)("[\s\S]*?"canUseDebugTools":)(true|false)/;
-                    const sessionUserMatch =
-                        dataString.match(sessionUserPattern);
-                    if (sessionUserMatch) {
-                        const originalEmail = sessionUserMatch[2];
-                        const atIndex = originalEmail.lastIndexOf("@");
-                        const internalEmail = grokDevToolsEnabled
-                            ? `${atIndex > 0 ? originalEmail.slice(0, atIndex) : originalEmail || "checker-next"}@x.ai`
-                            : originalEmail;
-                        const canUseDebugTools =
-                            grokDevToolsEnabled ||
-                            sessionUserMatch[4] === "true";
-                        dataString = dataString.replace(
-                            sessionUserPattern,
-                            (_match, prefix, _email, suffix) =>
-                                `${prefix}${internalEmail}${suffix}${canUseDebugTools}`,
-                        );
-                        args[0][1] = dataString;
-                        const lowerEmail = internalEmail.toLowerCase();
-                        grokXaiEmployeeValue =
-                            lowerEmail.endsWith("@x.ai") ||
-                            lowerEmail.endsWith("@teachx.ai");
-                        grokCanUseDebugToolsValue = canUseDebugTools;
-                        updateGrokDevToolsStatus();
-                    }
-
-                    for (const membership of grokMemberships) {
-                        if (membership.enabled) {
-                            dataString = dataString.replace(
-                                new RegExp(`"${membership.field}":false`, "g"),
-                                `"${membership.field}":true`,
-                            );
-                            if (membership.field === "isXPremiumUser") {
-                                dataString = dataString
-                                    .replace(
-                                        /"xSubscriptionType"\s*:\s*(?:"[^"]*"|null)/g,
-                                        '"xSubscriptionType":"Premium"',
-                                    )
-                                    .replace(
-                                        /"effectiveXSubscriptionType"\s*:\s*(?:"[^"]*"|null)/g,
-                                        '"effectiveXSubscriptionType":"Premium"',
-                                    );
-                            }
-                            args[0][1] = dataString;
-                        }
-
-                        const valueMatch =
-                            membership.field === "isXPremiumUser"
-                                ? dataString.match(
-                                      /"xSubscriptionType"\s*:\s*"([^"]*)"/,
-                                  )
-                                : dataString.match(
-                                      new RegExp(
-                                          `"${membership.field}":(true|false)`,
-                                      ),
-                                  );
-                        if (valueMatch) {
-                            const value =
-                                membership.field === "isXPremiumUser"
-                                    ? valueMatch[1] === "Premium"
-                                    : valueMatch[1] === "true";
-                            grokMembershipValues.set(membership.field, value);
-                            updateBooleanStatus(
-                                `${membership.id}-status`,
-                                value,
-                            );
-                        }
-                    }
-
-                    if (!grokUserInfoFetched) {
-                        const activeSubsMatch = dataString.match(
-                            /"activeSubscriptions"\s*:\s*\[([^\]]*)\]/,
-                        );
-                        if (activeSubsMatch) {
-                            try {
-                                const subsArray = JSON.parse(
-                                    `[${activeSubsMatch[1]}]`,
-                                );
-                                grokActiveSubscriptions = subsArray;
-                            } catch (e) {
-                                console.error(
-                                    "[CheckerNext] 解析 Grok activeSubscriptions 出错:",
-                                    e,
-                                );
-                                const stringsMatch =
-                                    activeSubsMatch[1].match(/"([^"]+)"/g);
-                                if (stringsMatch) {
-                                    grokActiveSubscriptions = stringsMatch.map(
-                                        (s) => s.replace(/"/g, ""),
-                                    );
-                                }
-                            }
-                        }
-
-                        const subTypeMatch = dataString.match(
-                            /"xSubscriptionType"\s*:\s*"([^"]*)"/,
-                        );
-                        if (subTypeMatch) {
-                            grokXSubscriptionType = subTypeMatch[1];
-                        }
-
-                        const countryMatch = dataString.match(
-                            /"countryCode"\s*:\s*"([^"]*)"/,
-                        );
-                        if (countryMatch) {
-                            grokCountryCode = countryMatch[1];
-                        }
-
-                        if (grokXSubscriptionType && grokCountryCode) {
-                            grokUserInfoFetched = true;
-                            console.log(
-                                "[CheckerNext] Parsed Grok user info:",
-                                grokActiveSubscriptions,
-                                grokXSubscriptionType,
-                                grokCountryCode,
-                            );
-                            updateGrokUserInfo();
-                        }
-                    }
-
-                    if (
-                        grokEarlyAccessEnabled &&
-                        dataString.indexOf(
-                            '"enableEarlyAccessModels":false',
-                        ) !== -1
-                    ) {
-                        dataString = dataString.replace(
-                            /"enableEarlyAccessModels":false/g,
-                            '"enableEarlyAccessModels":true',
-                        );
-                        args[0][1] = dataString;
-                        console.log(
-                            "[CheckerNext] 已替换 enableEarlyAccessModels 为 true",
-                        );
-                    }
-                    const earlyAccessMatch = dataString.match(
-                        /"enableEarlyAccessModels":(true|false)/,
-                    );
-                    if (earlyAccessMatch) {
-                        grokEarlyAccessDisplayValue =
-                            earlyAccessMatch[1] === "true";
-                        updateBooleanStatus(
-                            "grok-early-access-status",
-                            grokEarlyAccessDisplayValue,
-                        );
-                    }
-
-                    if (
-                        grokAsyncChatEnabled &&
-                        dataString.indexOf('"isAsyncChat":false') !== -1
-                    ) {
-                        dataString = dataString.replace(
-                            /"isAsyncChat":false/g,
-                            '"isAsyncChat":true',
-                        );
-                        args[0][1] = dataString;
-                        console.log("[CheckerNext] 已替换 isAsyncChat 为 true");
-                    }
-                    const asyncChatMatch = dataString.match(
-                        /"isAsyncChat":(true|false)/,
-                    );
-                    if (asyncChatMatch) {
-                        grokAsyncChatDisplayValue =
-                            asyncChatMatch[1] === "true";
-                        updateBooleanStatus(
-                            "grok-async-chat-status",
-                            grokAsyncChatDisplayValue,
-                        );
-                    }
-                }
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Grok RSC 数据出错:", e);
-            }
-            return originalPush.apply(pageWindow.__next_f, args);
-        };
-    }
-
-    const GROK_DEV_TOOLS_KEY = "checker-next-grok-dev-tools";
-    let grokDevToolsEnabled =
-        isGrokMode && localStorage.getItem(GROK_DEV_TOOLS_KEY) === "true";
-
-    const GROK_ALL_MODELS_KEY = "checker-next-grok-all-models";
-    let grokAllModelsEnabled =
-        isGrokMode && localStorage.getItem(GROK_ALL_MODELS_KEY) === "true";
-
-    const GROK_EARLY_ACCESS_KEY = "checker-next-grok-early-access";
-    let grokEarlyAccessEnabled =
-        isGrokMode && localStorage.getItem(GROK_EARLY_ACCESS_KEY) === "true";
-
-    const GROK_ASYNC_CHAT_KEY = "checker-next-grok-async-chat";
-    let grokAsyncChatEnabled =
-        isGrokMode && localStorage.getItem(GROK_ASYNC_CHAT_KEY) === "true";
 
     function installChatgptModuleInjection() {
         chatgptModuleInjectionStarted = true;
@@ -1962,7 +1685,7 @@
         return items;
     }
 
-    function updateGrokDevToolsSliderStyle(slider, sliderDot, enabled) {
+    function updateToggleStyle(slider, sliderDot, enabled) {
         if (enabled) {
             slider.style.backgroundColor = "#4CAF50";
             sliderDot.style.transform = "translateX(12px)";
@@ -2016,7 +1739,7 @@
         ) {
             toggle.checked = Boolean(selectedPlan && chatgptFakePlanEnabled);
             toggle.disabled = !selectedPlan;
-            updateGrokDevToolsSliderStyle(slider, sliderDot, toggle.checked);
+            updateToggleStyle(slider, sliderDot, toggle.checked);
         }
     }
 
@@ -2471,13 +2194,10 @@
         contentWrapper.style.padding = "10px";
         contentWrapper.innerHTML = `
         <style>
-            #checker-next-displayBox[data-mode="codex"] :is(#pow-section, #chatgpt-runtime-model-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section, #grok-section),
-            #checker-next-displayBox[data-mode="grok"] :is(#pow-section, #chatgpt-runtime-model-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section, #codex-section),
-            #checker-next-displayBox[data-mode="chatgpt"] #grok-section {
+            #checker-next-displayBox[data-mode="codex"] :is(#pow-section, #chatgpt-runtime-model-section, #deep-research-section, #file-upload-section, #paste-text-to-file-section, #image-gen-section, #features-section) {
                 display: none !important;
             }
             #checker-next-displayBox[data-mode="codex"] #codex-section,
-            #checker-next-displayBox[data-mode="grok"] #grok-section,
             #checker-next-displayBox[data-mode="chatgpt"] #features-section {
                 display: block !important;
                 margin-top: 0 !important;
@@ -2645,236 +2365,6 @@
                 <div id="codex-reset-credits-expirations" style="margin-top: 2px; white-space: pre-line;"></div>
                 <a id="codex-reset-credits-link" href="${isCodexMode ? "/#settings/Usage" : "#settings/Usage"}" style="display: none; margin-top: 2px;">查看到期时间</a>
             </div>
-        </div>
-        <div id="grok-section" style="margin-top: 10px; display: none">
-            <div style="margin-bottom: 2px;">
-                <strong>Grok</strong>
-            </div>
-            Grok订阅：<span id="grok-active-subscriptions">...</span><br>
-            X订阅：<span id="grok-x-subscription-type">...</span><br>
-            账号地区：<span id="grok-country-code">...</span><br>
-            可用模型：<span id="grok-available-models">...</span>
-            <div id="grok-usage-section" style="margin-top: 10px; display: none;">
-                <div style="margin-bottom: 2px;">
-                    <strong>用量</strong>
-                </div>
-                <div id="grok-rate-limit-container" style="display: none;">模型额度：<span id="grok-rate-limit">...</span></div>
-                <div id="grok-storage-container" style="display: none;">存储：<span id="grok-storage">...</span></div>
-                <div id="grok-automations-container" style="display: none;">自动化：<span id="grok-automations">...</span></div>
-            </div>
-            <div style="margin-top: 10px; margin-bottom: 2px;">
-                <strong>功能</strong>
-                <span id="grok-feature-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span>
-            </div>
-            <div id="grok-dev-tools-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>开发工具：<span id="grok-dev-tools-status">...</span>
-                <span id="grok-dev-tools-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="grok-dev-tools-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="grok-dev-tools-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="grok-dev-tools-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
-            <div id="grok-async-chat-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>异步聊天：<span id="grok-async-chat-status">...</span>
-                <span id="grok-async-chat-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="grok-async-chat-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="grok-async-chat-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="grok-async-chat-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
-            <div id="grok-early-access-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>抢先体验模型：<span id="grok-early-access-status">...</span>
-                <span id="grok-early-access-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="grok-early-access-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="grok-early-access-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="grok-early-access-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
-            <div id="grok-all-models-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>解锁所有模型
-                <span id="grok-all-models-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="grok-all-models-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="grok-all-models-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="grok-all-models-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
-            ${grokMemberships
-                .map(
-                    ({ id, label }) => `
-            <div id="${id}-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>假装 ${label}：<span id="${id}-status">...</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="${id}-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="${id}-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="${id}-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>`,
-                )
-                .join("")}
         </div>
         <div id="features-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
@@ -3440,18 +2930,6 @@
             "单独购买的积分，可用于 Codex 任务。",
         );
 
-        // 创建 Grok 功能提示框
-        const grokFeatureTooltipBox = createTooltip(
-            "grok-feature-tooltip-box",
-            "刷新页面生效。",
-        );
-
-        // 创建 Grok 开发工具提示框
-        const grokDevToolsTooltipBox = createTooltip(
-            "grok-dev-tools-tooltip-box",
-            "本页会按 xAI 员工身份运行：显示 Dev Tools 与 Dev Flags，启用 Debug Menu、会话导出、Trace、Admin Inspect、Flags 覆盖、自定义模型 ID 及其他员工前端判断。前端 session 邮箱域名会改成 @x.ai，canUseDebugTools 与 show_model_config_override 会设为 true；不会修改账号资料或后端权限。True 表示三项均已载入。刷新页面生效。",
-        );
-
         // 创建功能提示框
         const featuresTooltipBox = createTooltip(
             "features-tooltip-box",
@@ -3500,24 +2978,6 @@
             "可能导致功能异常，不影响模型列表。",
         );
 
-        // 创建 Grok 所有模型提示框
-        const grokAllModelsTooltipBox = createTooltip(
-            "grok-all-models-tooltip-box",
-            "在界面上解锁不可用的模型，并没有实际作用。",
-        );
-
-        // 创建 Grok 抢先体验模型提示框
-        const grokEarlyAccessTooltipBox = createTooltip(
-            "grok-early-access-tooltip-box",
-            "将用户设置里的 enableEarlyAccessModels 设为 true。",
-        );
-
-        // 创建 Grok 异步聊天提示框
-        const grokAsyncChatTooltipBox = createTooltip(
-            "grok-async-chat-tooltip-box",
-            "将用户设置里的 isAsyncChat 设为 true。",
-        );
-
         function bindTooltipEvents(triggerId, tooltipElement) {
             const trigger = document.getElementById(triggerId);
             if (!trigger || !tooltipElement) return;
@@ -3548,23 +3008,9 @@
             bindTooltipEvents("difficulty-tooltip", tooltip);
             bindTooltipEvents("codex-tooltip", codexTooltipBox);
             bindTooltipEvents("codex-credits-tooltip", creditsTooltipBox);
-            bindTooltipEvents("grok-feature-tooltip", grokFeatureTooltipBox);
-            bindTooltipEvents(
-                "grok-all-models-tooltip",
-                grokAllModelsTooltipBox,
-            );
-            bindTooltipEvents("grok-dev-tools-tooltip", grokDevToolsTooltipBox);
             bindTooltipEvents(
                 "chatgpt-fake-plan-tooltip",
                 chatgptFakePlanTooltipBox,
-            );
-            bindTooltipEvents(
-                "grok-early-access-tooltip",
-                grokEarlyAccessTooltipBox,
-            );
-            bindTooltipEvents(
-                "grok-async-chat-tooltip",
-                grokAsyncChatTooltipBox,
             );
             bindTooltipEvents("features-tooltip", featuresTooltipBox);
             bindTooltipEvents(
@@ -3604,15 +3050,11 @@
             if (!toggle || !slider || !sliderDot) return;
 
             toggle.checked = enabled;
-            updateGrokDevToolsSliderStyle(slider, sliderDot, enabled);
+            updateToggleStyle(slider, sliderDot, enabled);
             toggle.addEventListener("change", function () {
                 setEnabled(toggle.checked);
                 localStorage.setItem(storageKey, String(toggle.checked));
-                updateGrokDevToolsSliderStyle(
-                    slider,
-                    sliderDot,
-                    toggle.checked,
-                );
+                updateToggleStyle(slider, sliderDot, toggle.checked);
             });
         }
 
@@ -3631,7 +3073,7 @@
 
             toggle.checked = chatgptCopyButtonEnabled;
             toggle.disabled = !chatgptModuleInjectionStarted;
-            updateGrokDevToolsSliderStyle(
+            updateToggleStyle(
                 slider,
                 sliderDot,
                 chatgptModuleInjectionStarted && chatgptCopyButtonEnabled,
@@ -3783,77 +3225,6 @@
                 updateChatgptFakePlanControls();
                 void updateChatgptFakePlan();
             });
-        }
-
-        if (isGrokMode) {
-            bindToggle(
-                "grok-dev-tools",
-                grokDevToolsEnabled,
-                GROK_DEV_TOOLS_KEY,
-                (value) => {
-                    grokDevToolsEnabled = value;
-                },
-            );
-            bindToggle(
-                "grok-all-models",
-                grokAllModelsEnabled,
-                GROK_ALL_MODELS_KEY,
-                (value) => {
-                    grokAllModelsEnabled = value;
-                },
-            );
-            bindToggle(
-                "grok-early-access",
-                grokEarlyAccessEnabled,
-                GROK_EARLY_ACCESS_KEY,
-                (value) => {
-                    grokEarlyAccessEnabled = value;
-                },
-            );
-            bindToggle(
-                "grok-async-chat",
-                grokAsyncChatEnabled,
-                GROK_ASYNC_CHAT_KEY,
-                (value) => {
-                    grokAsyncChatEnabled = value;
-                },
-            );
-            for (const membership of grokMemberships) {
-                bindToggle(
-                    membership.id,
-                    membership.enabled,
-                    membership.storageKey,
-                    (value) => {
-                        membership.enabled = value;
-                    },
-                );
-            }
-            updateGrokDevToolsStatus();
-            updateBooleanStatus(
-                "grok-early-access-status",
-                grokEarlyAccessDisplayValue,
-            );
-            updateBooleanStatus(
-                "grok-async-chat-status",
-                grokAsyncChatDisplayValue,
-            );
-            for (const membership of grokMemberships) {
-                updateBooleanStatus(
-                    `${membership.id}-status`,
-                    grokMembershipValues.get(membership.field),
-                );
-            }
-            updateGrokUserInfo();
-            updateGrokModels();
-            if (grokRateLimitData) {
-                updateGrokRateLimit(grokRateLimitData, grokRateLimitModelName);
-            }
-            if (grokStorageUsageData) {
-                updateGrokStorageUsage(grokStorageUsageData);
-            }
-            if (Number.isFinite(grokAutomationsCount)) {
-                updateGrokAutomations({ workspaceTotal: grokAutomationsCount });
-            }
         }
 
         if (isChatgptMode) {
@@ -4295,328 +3666,6 @@
     }
     setInterval(updateCodexCountdown, 1000);
 
-    function updateBooleanStatus(target, value) {
-        const statusEl =
-            typeof target === "string"
-                ? document.getElementById(target)
-                : target;
-        if (!statusEl) return;
-        if (value === true) {
-            statusEl.innerHTML = '<span style="color: #98fb98;">True</span>';
-        } else if (value === false) {
-            statusEl.innerHTML = '<span style="color: #ff6b6b;">False</span>';
-        } else {
-            statusEl.innerText = "...";
-        }
-    }
-
-    function updateGrokDevToolsStatus() {
-        if (!isGrokMode) return;
-
-        const values = [
-            grokModelConfigOverrideValue,
-            grokXaiEmployeeValue,
-            grokCanUseDebugToolsValue,
-        ];
-        updateBooleanStatus(
-            "grok-dev-tools-status",
-            values.every((value) => value === true)
-                ? true
-                : values.some((value) => value === false)
-                  ? false
-                  : undefined,
-        );
-    }
-
-    function updateGrokUserInfo() {
-        if (!isGrokMode) return;
-
-        const activeSubsEl = document.getElementById(
-            "grok-active-subscriptions",
-        );
-        const subTypeEl = document.getElementById("grok-x-subscription-type");
-        const countryEl = document.getElementById("grok-country-code");
-
-        if (activeSubsEl) {
-            if (
-                grokActiveSubscriptions &&
-                Array.isArray(grokActiveSubscriptions)
-            ) {
-                if (grokActiveSubscriptions.length === 0) {
-                    activeSubsEl.innerText = "无";
-                } else {
-                    activeSubsEl.innerText = grokActiveSubscriptions.join("、");
-                }
-            } else if (!grokUserInfoFetched) {
-                activeSubsEl.innerText = "...";
-            }
-        }
-
-        if (subTypeEl) {
-            if (grokXSubscriptionType) {
-                subTypeEl.innerText = grokXSubscriptionType;
-            } else if (!grokUserInfoFetched) {
-                subTypeEl.innerText = "...";
-            }
-        }
-
-        if (countryEl) {
-            if (grokCountryCode) {
-                countryEl.innerText = grokCountryCode;
-            } else if (!grokUserInfoFetched) {
-                countryEl.innerText = "...";
-            }
-        }
-    }
-
-    function processGrokModes(data) {
-        if (!Array.isArray(data?.modes)) return false;
-
-        let modified = false;
-        grokModeTitles = new Map();
-        for (const mode of data.modes) {
-            if (!mode || typeof mode.id !== "string") continue;
-            const title =
-                typeof mode.title === "string" && mode.title
-                    ? mode.title
-                    : mode.id;
-            grokModeTitles.set(mode.id, title);
-            if (
-                grokAllModelsEnabled &&
-                mode.availability?.available === undefined
-            ) {
-                mode.availability = { available: {} };
-                modified = true;
-            }
-        }
-
-        grokAvailableModels = data.modes
-            .filter((mode) => mode?.availability?.available !== undefined)
-            .map((mode) => `${grokModeTitles.get(mode.id)} (${mode.id})`);
-        grokModelsFetched = true;
-        updateGrokModels();
-        return modified;
-    }
-
-    function updateGrokModels() {
-        if (!isGrokMode) return;
-
-        const modelsEl = document.getElementById("grok-available-models");
-        if (!modelsEl) return;
-
-        if (grokAvailableModels && Array.isArray(grokAvailableModels)) {
-            const formattedModels = grokAvailableModels.map((model) => {
-                const match = model.match(/^(.+?)(\s*\([^)]+\))$/);
-                if (match) {
-                    return `${match[1]}<span style="color: #bbbbbb; font-size: 9px;">${match[2]}</span>`;
-                }
-                return model;
-            });
-            modelsEl.innerHTML = `<div style="display: block; padding-left: 0.5em; font-size: 12px; line-height: 1.2;">${formattedModels.join("<br>")}</div>`;
-        } else if (!grokModelsFetched) {
-            modelsEl.innerHTML = "...";
-        }
-    }
-
-    function processGrokServerClientData() {
-        const scriptEl = document.getElementById(
-            "server-client-data-experimentation",
-        );
-        if (!scriptEl) return false;
-
-        try {
-            const data = JSON.parse(scriptEl.textContent || "{}");
-            const serverConfig = data?.serverConfig;
-            if (serverConfig && typeof serverConfig === "object") {
-                const originalValue = serverConfig.show_model_config_override;
-                if (typeof originalValue === "boolean") {
-                    if (grokDevToolsEnabled && !originalValue) {
-                        serverConfig.show_model_config_override = true;
-                        scriptEl.textContent = JSON.stringify(data);
-                    }
-                    grokModelConfigOverrideValue =
-                        grokDevToolsEnabled || originalValue;
-                    updateGrokDevToolsStatus();
-                }
-            }
-
-            updateGrokUserInfo();
-        } catch (e) {
-            console.error(
-                "[CheckerNext] 处理 Grok server-client-data 出错:",
-                e,
-            );
-        }
-        return true;
-    }
-
-    function processGrokModesData() {
-        const scriptEl = document.getElementById("server-client-data-modes");
-        if (!scriptEl) return false;
-
-        try {
-            const data = JSON.parse(scriptEl.textContent || "{}");
-            if (processGrokModes(data)) {
-                scriptEl.textContent = JSON.stringify(data);
-            }
-        } catch (e) {
-            console.error("[CheckerNext] 处理 Grok modes 数据出错:", e);
-        }
-        return true;
-    }
-
-    function processGrokEmbeddedData() {
-        const serverDataReady = processGrokServerClientData();
-        const modesDataReady = processGrokModesData();
-        return serverDataReady && modesDataReady;
-    }
-
-    function initGrokDataProcessing() {
-        if (!isGrokMode || processGrokEmbeddedData()) return;
-
-        const grokObserver = new MutationObserver((mutations, obs) => {
-            if (processGrokEmbeddedData()) obs.disconnect();
-        });
-
-        if (document.documentElement) {
-            grokObserver.observe(document.documentElement, {
-                childList: true,
-                subtree: true,
-            });
-        } else {
-            document.addEventListener("DOMContentLoaded", () => {
-                processGrokEmbeddedData();
-            });
-        }
-    }
-
-    initGrokDataProcessing();
-
-    let grokFetched = false;
-
-    function showGrokUsageRow(containerId) {
-        const section = document.getElementById("grok-usage-section");
-        const container = document.getElementById(containerId);
-        if (!section || !container) return false;
-
-        section.style.display = "block";
-        container.style.display = "block";
-        if (!grokFetched) {
-            // Grok 品牌色
-            setIconColors("#000000", "#1D1D1D");
-            grokFetched = true;
-        }
-        return true;
-    }
-
-    function updateGrokRateLimit(data, modelName) {
-        if (!isGrokMode) return;
-        if (data && typeof data === "object") {
-            grokRateLimitData = data;
-            grokRateLimitModelName =
-                typeof modelName === "string" ? modelName : null;
-        }
-        if (!grokRateLimitData) return;
-
-        const remaining = Number.isFinite(grokRateLimitData.remainingQueries)
-            ? grokRateLimitData.remainingQueries
-            : grokRateLimitData.remainingTokens;
-        const total = Number.isFinite(grokRateLimitData.totalQueries)
-            ? grokRateLimitData.totalQueries
-            : grokRateLimitData.totalTokens;
-        const valueEl = document.getElementById("grok-rate-limit");
-        if (
-            !valueEl ||
-            !Number.isFinite(remaining) ||
-            !Number.isFinite(total) ||
-            !showGrokUsageRow("grok-rate-limit-container")
-        ) {
-            return;
-        }
-
-        const modeTitle =
-            grokModeTitles.get(grokRateLimitModelName) ||
-            grokRateLimitModelName ||
-            "";
-        let text = `${modeTitle ? `${modeTitle} ` : ""}${remaining}/${total}`;
-        if (
-            Number.isFinite(grokRateLimitData.waitTimeSeconds) &&
-            grokRateLimitData.waitTimeSeconds > 0
-        ) {
-            text += `（${formatCodexDuration(grokRateLimitData.waitTimeSeconds, true)}后重置）`;
-        } else if (
-            Number.isFinite(grokRateLimitData.windowSizeSeconds) &&
-            grokRateLimitData.windowSizeSeconds > 0
-        ) {
-            text += isCodexWindowDuration(
-                grokRateLimitData.windowSizeSeconds,
-                24 * 60 * 60,
-            )
-                ? "（每天）"
-                : `（每${formatCodexDuration(grokRateLimitData.windowSizeSeconds, true)}）`;
-        }
-        valueEl.innerText = text;
-    }
-
-    function formatGrokStorageSize(bytes) {
-        const units = ["B", "KB", "MB", "GB", "TB"];
-        let value = bytes;
-        let unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.length - 1) {
-            value /= 1024;
-            unitIndex++;
-        }
-        return `${Number(value.toFixed(value >= 100 ? 0 : 1))} ${units[unitIndex]}`;
-    }
-
-    function updateGrokStorageUsage(data) {
-        if (!isGrokMode) return;
-        if (data && typeof data === "object") grokStorageUsageData = data;
-        if (!grokStorageUsageData) return;
-
-        const used = Number(grokStorageUsageData.usedStorageBytes);
-        const total = Number(grokStorageUsageData.totalStorageBytes);
-        const valueEl = document.getElementById("grok-storage");
-        if (
-            !valueEl ||
-            !Number.isFinite(used) ||
-            !Number.isFinite(total) ||
-            total <= 0 ||
-            !showGrokUsageRow("grok-storage-container")
-        ) {
-            return;
-        }
-
-        valueEl.innerText = `${formatGrokStorageSize(used)}/${formatGrokStorageSize(total)}`;
-        const videoTotal = Number(
-            grokStorageUsageData.totalGeneratedVideoStorageBytes,
-        );
-        if (Number.isFinite(videoTotal) && videoTotal > 0) {
-            valueEl.innerText += `，视频 ${formatGrokStorageSize(Number(grokStorageUsageData.usedGeneratedVideoStorageBytes) || 0)}/${formatGrokStorageSize(videoTotal)}`;
-        }
-    }
-
-    function updateGrokAutomations(data) {
-        if (!isGrokMode) return;
-        if (data && typeof data === "object") {
-            const count = Number.isFinite(data.workspaceTotal)
-                ? data.workspaceTotal
-                : Array.isArray(data.automations)
-                  ? data.automations.length
-                  : null;
-            if (Number.isFinite(count)) grokAutomationsCount = count;
-        }
-
-        const valueEl = document.getElementById("grok-automations");
-        if (
-            valueEl &&
-            Number.isFinite(grokAutomationsCount) &&
-            showGrokUsageRow("grok-automations-container")
-        ) {
-            valueEl.innerText = String(grokAutomationsCount);
-        }
-    }
-
     function isResetTimestampNear(resetAfter, expectedTimestamp) {
         if (!resetAfter || typeof expectedTimestamp !== "number") return false;
         const timestamp = new Date(resetAfter).getTime();
@@ -4722,14 +3771,6 @@
             valueEl.innerText = "...";
             section.style.display = "none";
         }
-    }
-
-    function recreateResponseText(text, response) {
-        return new pageWindow.Response(text, {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-        });
     }
 
     // 拦截 fetch 请求
@@ -4935,7 +3976,6 @@
             finalMethod === "GET" &&
             response.ok
         ) {
-            if (!isChatgptMode && !isCodexMode) return response;
             try {
                 const data = await response.clone().json();
                 updateCodexInfo(getCodexUsageWindows(data));
@@ -4955,7 +3995,6 @@
             finalMethod === "GET" &&
             response.ok
         ) {
-            if (!isChatgptMode && !isCodexMode) return response;
             try {
                 updateCodexResetCredits(await response.clone().json());
                 return response;
@@ -4965,125 +4004,6 @@
             }
         }
 
-        if (
-            requestUrl.includes("grok.com/rest/user-settings") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isGrokMode) return response;
-            try {
-                const data = await response.clone().json();
-                const preferences = data?.preferences;
-                let modified = false;
-                if (preferences && typeof preferences === "object") {
-                    if (
-                        typeof preferences.enableEarlyAccessModels === "boolean"
-                    ) {
-                        if (
-                            grokEarlyAccessEnabled &&
-                            !preferences.enableEarlyAccessModels
-                        ) {
-                            preferences.enableEarlyAccessModels = true;
-                            modified = true;
-                        }
-                        grokEarlyAccessDisplayValue =
-                            preferences.enableEarlyAccessModels;
-                        updateBooleanStatus(
-                            "grok-early-access-status",
-                            grokEarlyAccessDisplayValue,
-                        );
-                    }
-                    if (typeof preferences.isAsyncChat === "boolean") {
-                        if (grokAsyncChatEnabled && !preferences.isAsyncChat) {
-                            preferences.isAsyncChat = true;
-                            modified = true;
-                        }
-                        grokAsyncChatDisplayValue = preferences.isAsyncChat;
-                        updateBooleanStatus(
-                            "grok-async-chat-status",
-                            grokAsyncChatDisplayValue,
-                        );
-                    }
-                }
-                return modified
-                    ? recreateResponseText(JSON.stringify(data), response)
-                    : response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Grok 用户设置响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("grok.com/rest/modes") &&
-            finalMethod === "POST" &&
-            response.ok
-        ) {
-            if (!isGrokMode) return response;
-            try {
-                const data = await response.clone().json();
-                return processGrokModes(data)
-                    ? recreateResponseText(JSON.stringify(data), response)
-                    : response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Grok modes 响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("grok.com/rest/rate-limits") &&
-            finalMethod === "POST" &&
-            response.ok
-        ) {
-            if (!isGrokMode) return response;
-            try {
-                const data = await response.clone().json();
-                let modelName;
-                const requestBody = Reflect.get(options, "body");
-                if (typeof requestBody === "string") {
-                    const requestData = JSON.parse(requestBody);
-                    if (typeof requestData?.modelName === "string") {
-                        modelName = requestData.modelName;
-                    }
-                }
-                updateGrokRateLimit(data, modelName);
-                return response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Grok 模型额度响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("grok.com/rest/automations") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isGrokMode) return response;
-            try {
-                updateGrokAutomations(await response.clone().json());
-                return response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Grok 自动化响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            requestUrl.includes("grok.com/rest/assets/storage-usage") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isGrokMode) return response;
-            try {
-                updateGrokStorageUsage(await response.clone().json());
-                return response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Grok 存储用量响应出错:", e);
-                return response;
-            }
-        }
         return response;
     };
 })();
