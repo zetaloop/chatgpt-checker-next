@@ -434,11 +434,15 @@
             return match ? decodeURIComponent(match[1]) : null;
         };
         const current = () => conversations.get(routeId());
-        const readModel = (scope) =>
-            scope.get(native.selection, {
-                conversationId: scope.value.conversationId,
-                composerContext: scope.value.chatGptSelectionContext,
-            });
+        const readModel = (scope) => {
+            const context = scope.value.chatGptSelectionContext;
+            if (!context) return;
+            return {
+                selectedModel: scope.get(native.selection, context)
+                    .selectedModel,
+                isWorkConversation: context.conversationOrigin === "tpp",
+            };
+        };
         const scheduleState = () => {
             if (scheduled) return;
             scheduled = true;
@@ -796,18 +800,33 @@
             picker,
             `${renderPicker.name}=${api}.picker(${renderPicker.name});`,
         );
-        const selection = module(
-            "模型状态模块",
+        const composer = module(
+            "输入框模块",
             (source) =>
-                source.includes("composerContext:") &&
-                source.includes("configurableThinkingEffort") &&
-                source.includes("isWorkConversation:"),
+                source.includes("chatGptSelectionContext:") &&
+                source.includes("modelBeforeRateLimit") &&
+                source.includes("savedModelPending:"),
         );
-        const [selectionExport] = single(
-            Object.entries(selection.exports),
-            "模型状态选择器",
+        const selection = single(
+            [
+                ...composer.source.matchAll(
+                    /\(0,[\w$]+\.[\w$]+\)\(([\w$]+)\.([\w$]+),[\w$]+\),\{savedModelPending:/g,
+                ),
+            ],
+            "模型状态接口",
         );
-        bindings.selection = [selection.id, selectionExport];
+        const selectionModule = single(
+            [
+                ...composer.source.matchAll(
+                    new RegExp(
+                        `(?:[\\s,;])${RegExp.escape(selection[1])}=[\\w$]+\\(["']([^"']+)["']\\)`,
+                        "g",
+                    ),
+                ),
+            ],
+            "模型状态模块",
+        )[1];
+        bindings.selection = [selectionModule, selection[2]];
 
         const turns = module(
             "会话渲染模块",
