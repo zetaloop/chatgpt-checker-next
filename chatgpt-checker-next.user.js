@@ -387,12 +387,22 @@
         return script;
     }
 
-    function installChatgptRuntimeBridge(require, factories, symbols) {
+    function installChatgptRuntimeBridge(
+        require,
+        factories,
+        symbols,
+        bindings,
+    ) {
         const originals = new Map();
         const conversations = new Map();
         const origins = new Map();
         const customModels = new Set();
         const native = {};
+        for (const [name, [id, exportName]] of Object.entries(bindings)) {
+            Object.defineProperty(native, name, {
+                get: () => require(id)[exportName],
+            });
+        }
         let appScope,
             homeScope,
             picker,
@@ -625,6 +635,7 @@
         }));
         const patches = new Map();
         const symbols = {};
+        const bindings = {};
         const single = (items, label) => {
             if (items.length !== 1)
                 throw new Error(`${label}匹配到 ${items.length} 个结果`);
@@ -658,7 +669,11 @@
             const selected = symbols[target.id];
             if (!selected.some(({ name }) => name === match.name))
                 selected.push(match);
-            return { name: match.name, toString: () => match.source };
+            return {
+                exportName: match.exportName,
+                name: match.name,
+                toString: () => match.source,
+            };
         };
         const append = (target, addition) => {
             const source = patches.get(target.id) ?? target.source;
@@ -725,7 +740,7 @@
         const loadHistory = exported(history, "完整会话加载接口", (source) =>
             source.includes('queryKey:["chatgpt-conversation-full",'),
         );
-        append(history, `${api}.register({loadHistory:${loadHistory.name}});`);
+        bindings.loadHistory = [history.id, loadHistory.exportName];
 
         const conversation = module(
             "会话状态模块",
@@ -747,10 +762,8 @@
             [...setOrigin.toString().matchAll(/&&([\w$]+)\([\w$]+,\{\.\.\./g)],
             "会话存储接口",
         )[1];
-        append(
-            conversation,
-            `${store}=${api}.conversation(${store});${api}.register({setOrigin:${setOrigin.name}});`,
-        );
+        append(conversation, `${store}=${api}.conversation(${store});`);
+        bindings.setOrigin = [conversation.id, setOrigin.exportName];
         const queries = module(
             "会话查询模块",
             (source) =>
@@ -819,7 +832,7 @@
                     `{if(${api}.homeOrigin()==="chat")${parameter}={...${parameter},workOnlyModeEnabled:false};`,
                 ),
         );
-        append(home, `${api}.register({setHome:${setHome.name}});`);
+        bindings.setHome = [home.id, setHome.exportName];
 
         const models = module(
             "模型解析模块",
@@ -996,7 +1009,7 @@
             );
             copyIcons[state] = { ...icon.canvas, body: icon.body };
         }
-        return { patches, symbols, planTypes, copyIcons };
+        return { patches, symbols, bindings, planTypes, copyIcons };
     }
 
     function getChatgptImportPatchSettings() {
@@ -1115,7 +1128,7 @@
             chatgptImportPatchFailure = undefined;
             chatgptImportPatchNeedsReload = false;
             const { __webpack_require__: require } = await import(assetUrl);
-            const { patches, symbols, planTypes, copyIcons } =
+            const { patches, symbols, bindings, planTypes, copyIcons } =
                 createChatgptModulePatches(
                     require,
                     chatgptPendingPatchSettings.fakePlan,
@@ -1134,7 +1147,7 @@
                         `${JSON.stringify(id)}:Object.values({${source}})[0]`,
                 )
                 .join(",");
-            sourceText += `\n;(${installChatgptRuntimeBridge})(${runtime},{${factories}},${JSON.stringify(symbols)});`;
+            sourceText += `\n;(${installChatgptRuntimeBridge})(${runtime},{${factories}},${JSON.stringify(symbols)},${JSON.stringify(bindings)});`;
             if (!isChatgptImportPatchEnabled()) return;
             chatgptPlanTypes = planTypes;
             chatgptCopyIcons = copyIcons;
