@@ -46,8 +46,8 @@
     const CHATGPT_COPY_BUTTON_ENABLED_KEY =
         "checker-next-chatgpt-copy-button-enabled";
     const CHATGPT_COPY_DETAILS_KEY = "checker-next-chatgpt-copy-details";
-    const CHATGPT_MATERIALIZE_KEY = "checker-next-chatgpt-materialize";
-    const CHATGPT_MATERIALIZE_EVENT = "checker-next-materialize";
+    const CHATGPT_APPROVAL_KEY = "checker-next-chatgpt-approval";
+    const CHATGPT_APPROVAL_EVENT = "checker-next-approval";
     const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
         "checker-next-chatgpt-selection-popover-disabled";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
@@ -66,9 +66,8 @@
     let chatgptCopyDetailsEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_COPY_DETAILS_KEY) === "true";
-    let chatgptMaterializeEnabled =
-        isChatgptMode &&
-        localStorage.getItem(CHATGPT_MATERIALIZE_KEY) !== "false";
+    let chatgptApprovalEnabled =
+        isChatgptMode && localStorage.getItem(CHATGPT_APPROVAL_KEY) !== "false";
     let chatgptSelectionPopoverDisabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
@@ -734,7 +733,55 @@
             },
             approval(fn, React) {
                 return function (props) {
-                    const card = fn(props);
+                    const item = React.useMemo(() => {
+                        if (!chatgptApprovalEnabled) return props.item;
+                        const request = props.item.request;
+                        const body = request?.body;
+                        const actions = body?.actions ?? [];
+                        const action =
+                            actions.find((action) => action.allow_once) ??
+                            actions.find(
+                                (action) =>
+                                    action.name === "allow_once" &&
+                                    action.allow,
+                            ) ??
+                            actions.find(
+                                (action) =>
+                                    action.name !== "approve_for_me" &&
+                                    action.allow,
+                            );
+                        const allow = action?.allow_once ?? action?.allow;
+                        if (!allow) return props.item;
+                        const elicitation = body.codex_mcp_elicitation;
+                        return {
+                            ...props.item,
+                            allowTargetMessageId: allow.target_message_id,
+                            request: {
+                                ...request,
+                                body: {
+                                    ...body,
+                                    actions: [
+                                        {
+                                            ...action,
+                                            name: "allow_once",
+                                            allow,
+                                            split_action_options: [],
+                                        },
+                                    ],
+                                    codex_mcp_elicitation:
+                                        elicitation == null
+                                            ? elicitation
+                                            : {
+                                                  ...elicitation,
+                                                  approval: { persist: [] },
+                                              },
+                                },
+                            },
+                        };
+                    }, [props.item, chatgptApprovalEnabled]);
+                    const card = fn(
+                        item === props.item ? props : { ...props, item },
+                    );
                     const scope = appScope;
                     const id = props.conversationId;
                     const subscribe = React.useCallback(
@@ -744,13 +791,13 @@
                                 listener();
                             });
                             pageWindow.addEventListener(
-                                CHATGPT_MATERIALIZE_EVENT,
+                                CHATGPT_APPROVAL_EVENT,
                                 listener,
                             );
                             return () => {
                                 stop();
                                 pageWindow.removeEventListener(
-                                    CHATGPT_MATERIALIZE_EVENT,
+                                    CHATGPT_APPROVAL_EVENT,
                                     listener,
                                 );
                             };
@@ -758,7 +805,7 @@
                         [scope, id],
                     );
                     const snapshot = () =>
-                        chatgptMaterializeEnabled
+                        chatgptApprovalEnabled
                             ? scope.get(native.status, id)
                             : null;
                     const status = React.useSyncExternalStore(
@@ -768,12 +815,10 @@
                     );
                     const attempted = React.useRef(null);
                     const { actions } = card.props;
-                    const target = props.item.allowTargetMessageId;
+                    const target = item.allowTargetMessageId;
                     const automatic =
                         status !== null &&
                         status !== "error" &&
-                        props.item.request?.body.approval_reason ===
-                            "mcp_attachment_materialization" &&
                         !actions.approveDisabled;
                     const hidden =
                         automatic &&
@@ -1559,25 +1604,6 @@
         );
 
         module(
-            "授权请求模块",
-            (source) =>
-                source.includes("approve_tool_in_context_scope") &&
-                source.includes("split_action_options") &&
-                source.includes("codex_plugin_auth_required"),
-            (approval) => {
-                const body = single(
-                    [...approval.source.matchAll(/body:([\w$]+)\.object\(\{/g)],
-                    "授权原因字段",
-                );
-                replace(
-                    approval,
-                    body[0],
-                    `${body[0]}approval_reason:${body[1]}.string().nullish(),`,
-                );
-            },
-        );
-
-        module(
             "账号会员模块",
             (source) =>
                 source.includes("readAccounts") &&
@@ -1702,7 +1728,7 @@
     function getChatgptModuleItems() {
         const items = ["运行时模型切换"];
         if (chatgptCopyButtonEnabled) items.push("复制全文");
-        if (chatgptMaterializeEnabled) items.push("自动允许文件实体化");
+        if (chatgptApprovalEnabled) items.push("自动批准工具请求");
         if (chatgptFakePlanEnabled)
             items.push(`假装会员：${chatgptFakePlanValue}`);
         return items;
@@ -2762,9 +2788,9 @@
                     "></span>
                 </label>
             </div>
-            <div id="chatgpt-materialize-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>自动允许文件实体化
-                <span id="chatgpt-materialize-tooltip" style="
+            <div id="chatgpt-approval-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>自动批准工具请求
+                <span id="chatgpt-approval-tooltip" style="
                     cursor: pointer;
                     color: #fff;
                     font-size: 12px;
@@ -2778,8 +2804,8 @@
                     margin-left: 3px;
                 ">?</span></span>
                 <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-materialize-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-materialize-slider" style="
+                    <input type="checkbox" id="chatgpt-approval-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-approval-slider" style="
                         position: absolute;
                         cursor: pointer;
                         top: 0;
@@ -2790,7 +2816,7 @@
                         transition: 0.3s;
                         border-radius: 16px;
                     "></span>
-                    <span id="chatgpt-materialize-slider-dot" style="
+                    <span id="chatgpt-approval-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -3181,12 +3207,12 @@
 
         const chatgptCopyDetailsTooltipBox = createTooltip(
             "chatgpt-copy-details-tooltip-box",
-            "复制时包含思考内容、工具调用和返回结果。",
+            "复制时包含思考内容、工具调用与结果。",
         );
 
-        const chatgptMaterializeTooltipBox = createTooltip(
-            "chatgpt-materialize-tooltip-box",
-            "自动允许插件返回的文件载入当前聊天。",
+        const chatgptApprovalTooltipBox = createTooltip(
+            "chatgpt-approval-tooltip-box",
+            "自动为每次工具请求选择允许。",
         );
 
         const chatgptSelectionPopoverTooltipBox = createTooltip(
@@ -3284,8 +3310,8 @@
                 chatgptCopyDetailsTooltipBox,
             );
             bindTooltipEvents(
-                "chatgpt-materialize-tooltip",
-                chatgptMaterializeTooltipBox,
+                "chatgpt-approval-tooltip",
+                chatgptApprovalTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-selection-popover-tooltip",
@@ -3572,13 +3598,13 @@
                 },
             );
             bindToggle(
-                "chatgpt-materialize",
-                chatgptMaterializeEnabled,
-                CHATGPT_MATERIALIZE_KEY,
+                "chatgpt-approval",
+                chatgptApprovalEnabled,
+                CHATGPT_APPROVAL_KEY,
                 (value) => {
-                    chatgptMaterializeEnabled = value;
+                    chatgptApprovalEnabled = value;
                     pageWindow.dispatchEvent(
-                        new pageWindow.Event(CHATGPT_MATERIALIZE_EVENT),
+                        new pageWindow.Event(CHATGPT_APPROVAL_EVENT),
                     );
                     updateChatgptInjectionStatus();
                 },
