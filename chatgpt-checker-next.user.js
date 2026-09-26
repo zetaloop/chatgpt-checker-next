@@ -404,6 +404,8 @@
             });
         }
         let appScope,
+            watchedScope,
+            stopWatching,
             homeScope,
             picker,
             homeOrigin,
@@ -423,8 +425,8 @@
             }
             return wrapped;
         };
-        const routeId = () => {
-            const match = location.pathname.match(
+        const routeId = (pathname = location.pathname) => {
+            const match = pathname.match(
                 /^\/(?:c|share|g\/[^/]+\/(?:shared\/)?c)\/([^/]+)$/,
             );
             return match ? decodeURIComponent(match[1]) : null;
@@ -435,6 +437,31 @@
             scheduled = true;
             queueMicrotask(() => {
                 scheduled = false;
+                if (stopWatching && watchedScope !== appScope) {
+                    stopWatching();
+                    stopWatching = undefined;
+                }
+                if (appScope && current() && !stopWatching) {
+                    watchedScope = appScope;
+                    let pathname;
+                    stopWatching = appScope.watch(({ get }) => {
+                        const nextPathname = get(native.location)?.pathname;
+                        if (nextPathname === undefined) return;
+                        const id = routeId(nextPathname);
+                        if (
+                            nextPathname !== pathname &&
+                            nextPathname === location.pathname
+                        ) {
+                            pathname = nextPathname;
+                            const conversation = conversations.get(id);
+                            for (const [key, value] of conversations) {
+                                if (value !== conversation)
+                                    conversations.delete(key);
+                            }
+                        }
+                        scheduleState();
+                    });
+                }
                 const active =
                     picker?.pathname === location.pathname
                         ? picker.props
@@ -442,6 +469,8 @@
                 const model = active?.selectedModel;
                 const state = {
                     ready: true,
+                    pathname: location.pathname,
+                    copyReady: current()?.copyReady ?? false,
                     available: Boolean(model && active.onModelChange),
                     origin: active?.isTppConversation ? "work" : "chat",
                     model: model?.slug ?? null,
@@ -473,8 +502,13 @@
             },
             scope(fn) {
                 return after(fn, (_, scope) => {
-                    if (scope.scope.__scopeBrand === "AppScope")
+                    if (
+                        scope.scope.__scopeBrand === "AppScope" &&
+                        (!appScope || appScope.node !== scope.node)
+                    ) {
                         appScope = scope;
+                        scheduleState();
+                    }
                     if (
                         scope.scope.__scopeBrand === "ComposerScope" &&
                         scope.value.kind === "new" &&
@@ -496,6 +530,7 @@
                     const conversation = {
                         id: props.conversationId,
                         serverId: props.browserConversationId,
+                        copyReady: props.renderedTurns.length > 0,
                         turns: props.isReadOnly
                             ? props.renderedTurns
                             : undefined,
@@ -531,13 +566,6 @@
             },
             allows: (slug) => customModels.has(slug),
             homeOrigin: () => homeOrigin,
-            getTurns() {
-                const conversation = current();
-                if (!conversation) return;
-                return conversation.readOnly
-                    ? conversation.turns
-                    : appScope?.get(native.turns, conversation.id);
-            },
             refreshAccounts() {
                 return appScope?.queryClient.invalidateQueries(
                     {
@@ -550,17 +578,18 @@
             },
             async loadTurns() {
                 const conversation = current();
+                const scope = appScope;
                 if (!conversation) throw new Error("当前会话尚未载入");
                 if (!conversation.readOnly) {
-                    if (!appScope) throw new Error("当前会话状态尚未载入");
+                    if (!scope) throw new Error("当前会话状态尚未载入");
                     await native.loadHistory(
-                        appScope,
+                        scope,
                         conversation.serverId ?? conversation.id,
                     );
                 }
                 return conversation.readOnly
                     ? conversation.turns
-                    : appScope.get(native.turns, conversation.id);
+                    : scope.get(native.turns, conversation.id);
             },
             getMessageText(item) {
                 if (item.type === "user-message") return item.message;
@@ -774,6 +803,32 @@
             "会话内容选择器",
         );
         bindings.turns = [content.id, contentExport];
+        const router = module(
+            "页面路由模块",
+            (source) =>
+                source.includes(".value.pathname") &&
+                source.includes(".value.search") &&
+                source.includes("replace:!0"),
+        );
+        const matchesLocation = exported(router, "页面地址接口", (source) =>
+            source.includes(".pathname==="),
+        );
+        const locationSignal = single(
+            [...matchesLocation.toString().matchAll(/\.get\(([\w$]+)\)/g)],
+            "页面地址信号",
+        )[1];
+        const locationExport = single(
+            [
+                ...router.source.matchAll(
+                    new RegExp(
+                        `(?:[,{])([\\w$]+):${RegExp.escape(locationSignal)}(?=[,}])`,
+                        "g",
+                    ),
+                ),
+            ],
+            "页面地址导出",
+        )[1];
+        bindings.location = [router.id, locationExport];
 
         const conversation = module(
             "会话状态模块",
@@ -1627,18 +1682,18 @@
             }
             return;
         }
+        const ready = Boolean(
+            chatgptModuleInjectionEnabled &&
+                chatgptRuntimeModelState?.pathname === pathname &&
+                chatgptRuntimeModelState.copyReady,
+        );
         if (
             existing instanceof HTMLButtonElement &&
             existing.dataset.pathname === pathname &&
-            chatgptModuleInjectionEnabled &&
-            !existing.disabled
+            existing.disabled === !ready
         ) {
             return;
         }
-        const turns = chatgptModuleInjectionEnabled
-            ? pageWindow.__checkerNextRuntimeModelBridge?.getTurns?.()
-            : undefined;
-        const ready = Array.isArray(turns) && turns.length > 0;
         if (existing instanceof HTMLButtonElement) {
             existing.dataset.pathname = pathname;
             existing.disabled = !ready;
