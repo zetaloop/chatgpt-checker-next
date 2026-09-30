@@ -3991,6 +3991,22 @@
         }
     }
 
+    function updatePersona(persona) {
+        if (!isChatgptMode || typeof persona !== "string" || !persona) return;
+        const container = document.getElementById("persona-container");
+        const valueEl = document.getElementById("persona");
+        if (!container || !valueEl) return;
+        valueEl.innerText = persona;
+        container.style.display = "block";
+    }
+
+    if (isChatgptMode) {
+        pageWindow.addEventListener("message", (event) => {
+            if (event.origin !== pageWindow.location.origin) return;
+            updatePersona(event.data?.result?.cachedChatReq?.persona);
+        });
+    }
+
     // 拦截 fetch 请求
     const originalFetch = pageWindow.fetch.bind(pageWindow);
     pageWindow.fetch = async function (resource, options = {}) {
@@ -4021,26 +4037,9 @@
                 const difficulty = data.proofofwork
                     ? data.proofofwork.difficulty
                     : "...";
-                const persona = data.persona || "...";
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = difficulty;
-
-                const personaContainer =
-                    document.getElementById("persona-container");
-                const personaElement = document.getElementById("persona");
-                if (personaContainer && personaElement) {
-                    if (
-                        persona &&
-                        typeof persona === "string" &&
-                        persona !== "..." &&
-                        !persona.toLowerCase().includes("free")
-                    ) {
-                        personaElement.innerText = persona;
-                    } else {
-                        personaElement.innerText = "...";
-                    }
-                    personaContainer.style.display = "block";
-                }
+                updatePersona(data.persona);
                 updateDifficultyIndicator(difficulty);
 
                 return response;
@@ -4049,9 +4048,6 @@
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = "...";
                 updateDifficultyIndicator("...");
-                const personaElement = document.getElementById("persona");
-                if (personaElement) personaElement.innerText = "...";
-
                 return response;
             }
         }
