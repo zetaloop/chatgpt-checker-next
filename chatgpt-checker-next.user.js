@@ -471,6 +471,11 @@
             register(values) {
                 Object.assign(native, values);
             },
+            formatDateToParts(value, options) {
+                return appScope
+                    ?.get(native.intl)
+                    ?.formatDateToParts(value, options);
+            },
             scope(fn) {
                 return after(fn, (_, scope) => {
                     if (!pageWindow.__checkerNextModulesInstalled) {
@@ -1183,6 +1188,20 @@
         };
         const api = "globalThis.__checkerNextRuntimeModelBridge";
         const fakePlan = `localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_ENABLED_KEY)})==="true"?localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_KEY)})||"pro":""`;
+
+        module(
+            "国际化状态模块",
+            (source) =>
+                source.includes('locale:"en",messages:{}') &&
+                !source.includes(".formatMessage"),
+            (intl) => {
+                const [exportName] = single(
+                    Object.entries(getChatgptModuleExports(intl.source)),
+                    "国际化状态接口",
+                );
+                bindings.intl = [intl.id, exportName];
+            },
+        );
 
         module(
             "响应式状态模块",
@@ -3754,7 +3773,7 @@
         expirations.innerText = availableCredits
             .map(
                 (credit, index) =>
-                    `第${index + 1}次到期：${formatCodexAbsoluteTime(credit.expires_at) || "..."}`,
+                    `第${index + 1}次到期：${formatAbsoluteTime(credit.expires_at) || "..."}`,
             )
             .join("\n");
         detailsLink.style.display =
@@ -3796,17 +3815,27 @@
         }
     }
 
-    function formatCodexAbsoluteTime(timestampMs) {
-        if (timestampMs == null) return "";
-        const date = new Date(timestampMs);
-        if (Number.isNaN(date.getTime())) return "";
-        const year = date.getFullYear();
-        const month = date.getMonth() + 1;
-        const day = date.getDate();
-        const hours = `${date.getHours()}`.padStart(2, "0");
-        const minutes = `${date.getMinutes()}`.padStart(2, "0");
-        const seconds = `${date.getSeconds()}`.padStart(2, "0");
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    function formatAbsoluteTime(timestamp) {
+        if (timestamp == null) return "";
+        const parts =
+            pageWindow.__checkerNextRuntimeModelBridge?.formatDateToParts(
+                timestamp,
+                {
+                    year: "numeric",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hourCycle: "h23",
+                    numberingSystem: "latn",
+                },
+            );
+        if (!parts) return "";
+        const values = Object.fromEntries(
+            parts.map(({ type, value }) => [type, value]),
+        );
+        return `${values.year}-${Number(values.month)}-${Number(values.day)} ${values.hour}:${values.minute}:${values.second}`;
     }
 
     function updateCodexCountdown() {
@@ -3835,7 +3864,7 @@
                 reset.innerText = "...";
             }
 
-            const tooltipText = formatCodexAbsoluteTime(window.resetAt);
+            const tooltipText = formatAbsoluteTime(window.resetAt);
             if (tooltipText) {
                 reset.title = tooltipText;
             } else {
@@ -3879,11 +3908,7 @@
             usageEl.innerText = `${remaining}次`;
         }
 
-        resetEl.innerText = resetAfter
-            ? new Date(resetAfter)
-                  .toLocaleString("zh-CN", { hour12: false })
-                  .replace(/\//g, "-")
-            : "...";
+        resetEl.innerText = formatAbsoluteTime(resetAfter) || "...";
     }
 
     function updateUserRegion(country, region) {
