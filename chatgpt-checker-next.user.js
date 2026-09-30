@@ -2316,7 +2316,7 @@
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div class="codex-section-title" style="margin-bottom: 8px;">
-                <strong>Codex</strong>
+                <strong>工作模式</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -2915,7 +2915,7 @@
         // 创建 Codex 提示框
         const codexTooltipBox = createTooltip(
             "codex-tooltip-box",
-            isCodexMode ? "首次使用后开始计时。" : "打开“使用情况”后加载。",
+            "首次使用后开始计时，通用额度用于 Codex、Work 等，ChatPass 额度用于授权其他应用使用。",
         );
 
         // 创建积分提示框
@@ -3429,7 +3429,10 @@
             appendWindow(rateLimit.secondary_window, name);
         }
 
-        appendRateLimit(data?.rate_limit, "代码");
+        appendRateLimit(data?.rate_limit, "通用");
+        for (const window of data?.chatpass?.windows ?? []) {
+            appendWindow(window, "ChatPass");
+        }
         if (Array.isArray(data?.additional_rate_limits)) {
             for (const additionalRateLimit of data.additional_rate_limits) {
                 const name =
