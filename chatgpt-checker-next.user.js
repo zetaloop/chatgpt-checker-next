@@ -2316,7 +2316,7 @@
         </div>
         <div id="codex-section" style="margin-top: 10px; display: none">
             <div class="codex-section-title" style="margin-bottom: 8px;">
-                <strong>工作模式</strong>
+                <strong>Codex</strong>
                 <span id="codex-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -3464,7 +3464,6 @@
         const section = document.getElementById("codex-section");
         if (section) {
             section.style.display = codexFetched ? "block" : "none";
-            section.style.marginTop = powFetched ? "10px" : "0";
         }
         if (!codexFetched || !isCodexMode || powFetched) return;
 
@@ -3691,7 +3690,6 @@
         }
 
         section.style.display = "block";
-        section.style.marginTop = powFetched ? "10px" : "0";
         if (isResetTimestampNear(resetAfter, Date.now() + resetPeriod)) {
             usageEl.innerHTML = `${remaining}次${NOT_STARTED_BADGE}`;
         } else {
@@ -3763,7 +3761,6 @@
         ) {
             valueEl.innerText = `${memoryUsageTokens}/${memoryMaxTokensValue}`;
             section.style.display = "block";
-            section.style.marginTop = powFetched ? "10px" : "0";
         } else {
             valueEl.innerText = "...";
             section.style.display = "none";
