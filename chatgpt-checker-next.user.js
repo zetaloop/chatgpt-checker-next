@@ -70,6 +70,7 @@
     let userRegionValue = null;
     let billingCurrency = null;
     let chatgptRuntimeModelState;
+    let chatgptRuntimeEnvironmentState;
     let chatgptPlanTypes;
     let chatgptCopyIcons;
     let chatgptModuleInjectionStarted = false;
@@ -201,6 +202,8 @@
             },
         );
         let appScope,
+            watchedEnvironmentScope,
+            stopWatchingEnvironment,
             watchedControl,
             watchedScope,
             watchedConversation,
@@ -361,10 +364,6 @@
                 if (isDot && !stopWatching)
                     stopWatching = watchThread(scope, active.conversationId);
                 const model = isDot ? thread?.model : active?.selectedModel;
-                const intl = appScope?.get(native.intl);
-                const timeZone = intl
-                    ?.formatDateToParts(Date.now(), { timeZoneName: "short" })
-                    .find((part) => part.type === "timeZoneName")?.value;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
@@ -381,8 +380,6 @@
                     model: model?.slug ?? null,
                     thinkingEffort: model?.thinkingEffort ?? null,
                     models: isDot ? thread?.models : undefined,
-                    timeZone: timeZone ?? null,
-                    locale: intl?.locale ?? null,
                     error: active?.error ?? (isDot ? thread?.error : undefined),
                 };
                 const serialized = JSON.stringify(state);
@@ -397,6 +394,42 @@
                     ),
                 );
             });
+        };
+        const watchEnvironment = () => {
+            const key = native.intl;
+            if (
+                !appScope ||
+                !key ||
+                watchedEnvironmentScope?.node === appScope.node
+            )
+                return;
+            const scope = appScope;
+            stopWatchingEnvironment?.();
+            try {
+                stopWatchingEnvironment = scope.watch((scope) => {
+                    try {
+                        const intl = scope.get(key);
+                        if (!intl) return;
+                        const timeZone = intl
+                            .formatDateToParts(Date.now(), {
+                                timeZoneName: "short",
+                            })
+                            .find(
+                                (part) => part.type === "timeZoneName",
+                            )?.value;
+                        chatgptRuntimeEnvironmentState = {
+                            timeZone: timeZone ?? null,
+                            locale: intl.locale ?? null,
+                        };
+                        updateChatgptLocaleInfo();
+                    } catch (error) {
+                        report(error);
+                    }
+                });
+                watchedEnvironmentScope = scope;
+            } catch (error) {
+                report(error);
+            }
         };
         const applyOrigin = (conversation) => {
             const origin = origins.get(conversation?.conversation_id);
@@ -476,11 +509,13 @@
         const bridge = {
             register(values) {
                 Object.assign(native, values);
+                if (values.intl) queueMicrotask(watchEnvironment);
             },
             formatDateToParts(value, options) {
-                return appScope
-                    ?.get(native.intl)
-                    ?.formatDateToParts(value, options);
+                const key = native.intl;
+                return key
+                    ? appScope?.get(key)?.formatDateToParts(value, options)
+                    : undefined;
             },
             scope(fn) {
                 return after(fn, (_, scope) => {
@@ -488,8 +523,10 @@
                         pageWindow.__checkerNextModulesInstalled = true;
                         scheduleState();
                     }
-                    if (scope.scope.__scopeBrand === "AppScope")
+                    if (scope.scope.__scopeBrand === "AppScope") {
                         appScope = scope;
+                        queueMicrotask(watchEnvironment);
+                    }
                     if (
                         scope.scope.__scopeBrand === "ComposerScope" &&
                         scope.value.kind === "new" &&
@@ -1201,11 +1238,11 @@
                 source.includes('locale:"en",messages:{}') &&
                 !source.includes(".formatMessage"),
             (intl) => {
-                const [exportName] = single(
+                const [, value] = single(
                     Object.entries(getChatgptModuleExports(intl.source)),
                     "国际化状态接口",
                 );
-                bindings.intl = [intl.id, exportName];
+                append(intl, `${api}.register({intl:${value}});`);
             },
         );
 
@@ -2185,7 +2222,6 @@
                     );
                 }
                 updateChatgptRuntimeModelControls();
-                updateChatgptLocaleInfo();
                 syncChatgptCopyButton();
             },
         );
@@ -2450,7 +2486,7 @@
             ">?</span><br>
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
             <span id="user-region-container" style="display: block">用户地区：<span id="user-region">${[userRegionValue, billingCurrency].filter(Boolean).join(" / ") || "..."}</span></span>
-            <span id="locale-info-container" style="display: block">时区语言：<span id="locale-info">${[chatgptRuntimeModelState?.timeZone, chatgptRuntimeModelState?.locale].filter(Boolean).join(" / ") || "..."}</span></span>
+            <span id="locale-info-container" style="display: block">时区语言：<span id="locale-info">${[chatgptRuntimeEnvironmentState?.timeZone, chatgptRuntimeEnvironmentState?.locale].filter(Boolean).join(" / ") || "..."}</span></span>
         </div>
         <div id="chatgpt-runtime-model-section" style="margin-top: 10px;">
             <div style="margin-bottom: 4px;">
@@ -3953,8 +3989,8 @@
         if (!container || !valueEl) return;
         valueEl.innerText =
             [
-                chatgptRuntimeModelState?.timeZone,
-                chatgptRuntimeModelState?.locale,
+                chatgptRuntimeEnvironmentState?.timeZone,
+                chatgptRuntimeEnvironmentState?.locale,
             ]
                 .filter(Boolean)
                 .join(" / ") || "...";
