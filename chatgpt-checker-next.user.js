@@ -11,6 +11,7 @@
 // @grant        unsafeWindow
 // @sandbox      raw
 // @run-at       document-start
+// @noframes
 // @downloadURL  https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js
 // @updateURL    https://github.com/zetaloop/chatgpt-checker-next/raw/refs/heads/main/chatgpt-checker-next.user.js
 // @license AGPLv3
@@ -1241,40 +1242,33 @@
             },
         );
 
-        module(
-            "页面路由模块",
-            (source) =>
-                source.includes(".value.pathname") &&
-                source.includes(".value.search") &&
-                source.includes("replace:!0"),
-            (router) => {
-                const matchesLocation = exported(
-                    router,
-                    "页面地址接口",
-                    (source) => source.includes(".pathname==="),
-                );
-                const locationSignal = single(
-                    [
-                        ...matchesLocation
-                            .toString()
-                            .matchAll(/\.get\(([\w$]+)\)/g),
-                    ],
-                    "页面地址信号",
-                )[1];
-                const locationExport = single(
-                    [
-                        ...router.source.matchAll(
-                            new RegExp(
-                                `(?:[,{])([\\w$]+):${RegExp.escape(locationSignal)}(?=[,}])`,
-                                "g",
-                            ),
+        const matchesLocation = (source) =>
+            /return [\w$]+\?\.pathname===[\w$]+\.value\.pathname&&[\w$]+\.search===/.test(
+                source,
+            );
+        module("页面路由模块", matchesLocation, (router) => {
+            const matchLocation = exported(
+                router,
+                "页面地址接口",
+                matchesLocation,
+            );
+            const locationSignal = single(
+                [...matchLocation.toString().matchAll(/\.get\(([\w$]+)\)/g)],
+                "页面地址信号",
+            )[1];
+            const locationExport = single(
+                [
+                    ...router.source.matchAll(
+                        new RegExp(
+                            `(?:[,{])([\\w$]+):${RegExp.escape(locationSignal)}(?=[,}])`,
+                            "g",
                         ),
-                    ],
-                    "页面地址导出",
-                )[1];
-                bindings.location = [router.id, locationExport];
-            },
-        );
+                    ),
+                ],
+                "页面地址导出",
+            )[1];
+            bindings.location = [router.id, locationExport];
+        });
 
         module(
             "会话状态模块",
