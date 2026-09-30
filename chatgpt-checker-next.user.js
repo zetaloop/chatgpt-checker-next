@@ -188,6 +188,7 @@
         const conversations = new Map();
         const origins = new Map();
         const customModels = new Map();
+        const controls = new Set();
         const native = new Proxy(
             {},
             {
@@ -200,15 +201,23 @@
             },
         );
         let appScope,
+            watchedControl,
             watchedScope,
+            watchedConversation,
+            watchedPage,
             stopWatching,
-            composerScope,
             homeScope,
-            picker,
-            modelState,
+            thread,
             homeOrigin,
             scheduled = false,
             lastState;
+        const activeControl = () =>
+            [...controls].findLast(
+                (control) =>
+                    control.active &&
+                    control.route.pathname === location.pathname &&
+                    (control.route.search ?? "") === location.search,
+            );
         const report = (error) =>
             console.error("[CheckerNext] 运行时模块出错:", error);
         const after = (fn, callback) => {
@@ -230,68 +239,146 @@
             return match ? decodeURIComponent(match[1]) : null;
         };
         const current = () => conversations.get(routeId());
-        const readModel = (scope) => {
-            const context = scope.value.chatGptSelectionContext;
-            if (!context) return;
-            return {
-                selectedModel: scope.get(native.selection, context)
-                    .selectedModel,
-                isWorkConversation: context.conversationOrigin === "tpp",
-            };
-        };
+        const watchThread = (scope, conversationId) =>
+            scope.watch((scope) => {
+                const connection = scope.get(
+                    native.threadConnection,
+                    conversationId,
+                );
+                const manager = connection?.manager;
+                if (!manager) {
+                    scheduleState();
+                    return;
+                }
+                const state = {
+                    manager,
+                    conversationId,
+                    model: null,
+                    models: [],
+                    error: null,
+                };
+                thread = state;
+                const update = (model, thinkingEffort) => {
+                    if (
+                        thread !== state ||
+                        (state.model?.slug === model &&
+                            state.model?.thinkingEffort === thinkingEffort)
+                    )
+                        return;
+                    state.model = { slug: model, thinkingEffort };
+                    state.error = null;
+                    scheduleState();
+                };
+                state.read = async () => {
+                    const previous = state.model;
+                    const { thread: value } = await manager.readThread(
+                        state.conversationId,
+                    );
+                    if (state.model === previous)
+                        update(value.model, value.reasoningEffort);
+                };
+                const stopConversation = manager.addConversationCallback(
+                    state.conversationId,
+                    (conversation) => {
+                        if (conversation?.latestModel)
+                            update(
+                                conversation.latestModel,
+                                conversation.latestReasoningEffort,
+                            );
+                    },
+                );
+                const stopNotifications = manager.addNotificationCallback(
+                    "thread/settings/updated",
+                    ({ params }) => {
+                        if (params.threadId === state.conversationId)
+                            update(
+                                params.threadSettings.model,
+                                params.threadSettings.effort,
+                            );
+                    },
+                );
+                Promise.all([
+                    state.read(),
+                    manager.sendRequest("model/list", {
+                        includeHidden: true,
+                        cursor: null,
+                        limit: 100,
+                    }),
+                ])
+                    .then(([, catalog]) => {
+                        if (thread !== state) return;
+                        state.models = catalog.data.map((model) => ({
+                            slug: model.model,
+                            title: model.displayName,
+                            thinkingEfforts:
+                                model.supportedReasoningEfforts.map(
+                                    (effort) => effort.reasoningEffort,
+                                ),
+                            defaultThinkingEffort: model.defaultReasoningEffort,
+                        }));
+                        scheduleState();
+                    })
+                    .catch((error) => {
+                        if (thread !== state) return;
+                        state.error = String(error);
+                        report(error);
+                        scheduleState();
+                    });
+                return () => {
+                    stopConversation();
+                    stopNotifications();
+                    if (thread === state) thread = undefined;
+                };
+            });
         const scheduleState = () => {
             if (scheduled) return;
             scheduled = true;
             queueMicrotask(() => {
                 scheduled = false;
-                const active =
-                    picker?.pathname === location.pathname ? picker : null;
-                const scope = active?.scope ?? appScope;
-                if (stopWatching && watchedScope.node !== scope?.node) {
-                    stopWatching();
+                const active = activeControl();
+                const scope = active?.scope;
+                const conversationId = active?.conversationId;
+                const page = location.pathname + location.search;
+                if (
+                    watchedControl !== active ||
+                    watchedScope?.node !== scope?.node ||
+                    watchedConversation !== conversationId ||
+                    watchedPage !== page
+                ) {
+                    stopWatching?.();
                     stopWatching = undefined;
-                    modelState = undefined;
-                }
-                if (scope && (active || current()) && !stopWatching) {
+                    thread = undefined;
+                    watchedControl = active;
                     watchedScope = scope;
-                    let pathname;
-                    stopWatching = scope.watch((scope) => {
-                        const nextPathname = scope.get(
-                            native.location,
-                        )?.pathname;
-                        if (
-                            nextPathname !== undefined &&
-                            nextPathname !== pathname &&
-                            nextPathname === location.pathname
-                        ) {
-                            pathname = nextPathname;
-                            const conversation = conversations.get(
-                                routeId(pathname),
-                            );
-                            for (const [key, value] of conversations) {
-                                if (value !== conversation)
-                                    conversations.delete(key);
-                            }
-                        }
-                        modelState = active ? readModel(scope) : undefined;
-                        scheduleState();
-                    });
+                    watchedConversation = conversationId;
+                    watchedPage = page;
+                    const conversation = current();
+                    for (const [key, value] of conversations) {
+                        if (value !== conversation) conversations.delete(key);
+                    }
                 }
-                const model = active && modelState?.selectedModel;
+                const isDot = active?.kind === "dot";
+                if (isDot && !stopWatching)
+                    stopWatching = watchThread(scope, active.conversationId);
+                const model = isDot ? thread?.model : active?.selectedModel;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
+                    search: location.search,
                     copyReady: current()?.copyReady ?? false,
-                    available: Boolean(model && active.onModelChange),
-                    origin:
-                        active && modelState?.isWorkConversation
-                            ? "work"
-                            : "chat",
+                    available: Boolean(
+                        model?.slug && (isDot || active?.onModelChange),
+                    ),
+                    origin: isDot
+                        ? "dot"
+                        : active?.isWorkConversation
+                          ? "work"
+                          : "chat",
                     model: model?.slug ?? null,
                     thinkingEffort: model?.thinkingEffort ?? null,
+                    models: isDot ? thread?.models : undefined,
+                    error: active?.error ?? (isDot ? thread?.error : undefined),
                 };
-                if (state.available)
-                    pageWindow.__checkerNextModulesInstalled = true;
                 const serialized = JSON.stringify(state);
                 if (serialized === lastState) return;
                 lastState = serialized;
@@ -386,38 +473,74 @@
             },
             scope(fn) {
                 return after(fn, (_, scope) => {
-                    if (
-                        scope.scope.__scopeBrand === "AppScope" &&
-                        (!appScope || appScope.node !== scope.node)
-                    ) {
-                        appScope = scope;
+                    if (!pageWindow.__checkerNextModulesInstalled) {
+                        pageWindow.__checkerNextModulesInstalled = true;
                         scheduleState();
                     }
-                    if (scope.scope.__scopeBrand === "ComposerScope") {
-                        if (scope.value.kind === "chatgpt")
-                            composerScope = scope;
+                    if (scope.scope.__scopeBrand === "AppScope")
+                        appScope = scope;
+                    if (
+                        scope.scope.__scopeBrand === "ComposerScope" &&
+                        scope.value.kind === "new" &&
+                        scope.value.entrypoint === "home"
+                    ) {
+                        const route = scope.getOwnValue(native.routeScope);
                         if (
-                            scope.value.kind === "new" &&
-                            scope.value.entrypoint === "home"
-                        ) {
-                            homeScope = { pathname: location.pathname, scope };
-                        }
+                            route.pathname === location.pathname &&
+                            (route.search ?? "") === location.search
+                        )
+                            homeScope = { pathname: route.pathname, scope };
                     }
                 });
             },
-            picker(fn) {
-                return after(fn, ([props]) => {
-                    picker = {
-                        pathname: location.pathname,
-                        scope: composerScope,
-                        onModelChange: props.onModelChange,
-                    };
-                    scheduleState();
-                });
+            picker(fn, kind = "chat") {
+                return function (props) {
+                    const scope = native.useScope(
+                        kind === "dot"
+                            ? native.routeScope
+                            : native.composerScope,
+                    );
+                    const route = scope.getOwnValue(native.routeScope);
+                    const control = native.useRef({}).current;
+                    native.useLayoutEffect(() => {
+                        if (
+                            control.route !== route ||
+                            control.conversationId !== props.conversationId
+                        )
+                            control.error = null;
+                        Object.assign(control, {
+                            scope,
+                            route,
+                            kind,
+                            active:
+                                kind !== "dot" ||
+                                (props.active && props.conversationId != null),
+                            conversationId: props.conversationId,
+                            selectedModel: props.selectedModel,
+                            isWorkConversation: props.isTppConversation,
+                            onModelChange: props.onModelChange,
+                        });
+                        controls.add(control);
+                        scheduleState();
+                        return () => {
+                            controls.delete(control);
+                            scheduleState();
+                        };
+                    }, [
+                        control,
+                        scope,
+                        route,
+                        props.selectedModel,
+                        props.isTppConversation,
+                        props.active,
+                        props.conversationId,
+                        props.onModelChange,
+                    ]);
+                    return native.createElement(fn, props);
+                };
             },
             turns(fn) {
                 return after(fn, ([props]) => {
-                    pageWindow.__checkerNextModulesInstalled = true;
                     const conversation = {
                         id: props.conversationId,
                         serverId: props.browserConversationId,
@@ -843,12 +966,46 @@
         );
         pageWindow.addEventListener(
             "checker-next-runtime-model-set",
-            (event) => {
+            async (event) => {
+                const active = activeControl();
+                const target = thread;
                 try {
                     const detail = event.detail;
-                    const active =
-                        picker?.pathname === location.pathname ? picker : null;
+                    if (active) active.error = null;
+                    scheduleState();
                     if (!active) throw new Error("当前页面的模型控件尚未载入");
+                    if (active.kind === "dot") {
+                        const state = thread;
+                        if (!state?.model)
+                            throw new Error("当前线程的模型设置尚未载入");
+                        const selected = state.requested ?? state.model;
+                        const model = detail.model ?? selected.slug;
+                        const thinkingEffort = Object.hasOwn(
+                            detail,
+                            "thinkingEffort",
+                        )
+                            ? detail.thinkingEffort
+                            : detail.model
+                              ? (state.models.find(
+                                    (item) => item.slug === model,
+                                )?.defaultThinkingEffort ?? null)
+                              : selected.thinkingEffort;
+                        const requested = { slug: model, thinkingEffort };
+                        state.requested = requested;
+                        try {
+                            const applied =
+                                await state.manager.updateThreadSettingsForNextTurn(
+                                    state.conversationId,
+                                    { model, effort: thinkingEffort },
+                                );
+                            if (!applied) throw new Error("线程模型设置未应用");
+                            await state.read();
+                        } finally {
+                            if (state.requested === requested)
+                                state.requested = undefined;
+                        }
+                        return;
+                    }
                     if (detail.origin === "chat" || detail.origin === "work") {
                         const conversation = current();
                         if (routeId() !== null) {
@@ -884,7 +1041,7 @@
                     }
                     if (Object.hasOwn(detail, "thinkingEffort")) {
                         model = {
-                            ...(model ?? readModel(active.scope).selectedModel),
+                            ...(model ?? active.selectedModel),
                             thinkingEffort: detail.thinkingEffort,
                         };
                     }
@@ -913,26 +1070,26 @@
                                 },
                             );
                         }
-                        active.onModelChange(model);
+                        await active.onModelChange(model);
                     }
+                    scheduleState();
                 } catch (error) {
                     report(error);
-                    pageWindow.dispatchEvent(
-                        new pageWindow.CustomEvent(
-                            "checker-next-runtime-model-state",
-                            {
-                                detail: {
-                                    ready: true,
-                                    available: false,
-                                    error: String(error),
-                                },
-                            },
-                        ),
-                    );
+                    if (
+                        active &&
+                        activeControl() === active &&
+                        (active.kind !== "dot" || thread === target)
+                    ) {
+                        active.error = String(error);
+                        scheduleState();
+                    }
                 }
             },
         );
-        pageWindow.addEventListener("popstate", scheduleState);
+        pageWindow.navigation.addEventListener(
+            "currententrychange",
+            scheduleState,
+        );
     }
 
     function compileChatgptModule(source) {
@@ -1042,9 +1199,18 @@
                         source.includes("useContext") &&
                         source.includes(".watch="),
                 );
+                bindings.useScope = [scopes.id, useScope.exportName];
+                const react = single(
+                    [
+                        ...useScope
+                            .toString()
+                            .matchAll(/\(0,([\w$]+)\.useContext\)/g),
+                    ],
+                    "React 模块",
+                )[1];
                 append(
                     scopes,
-                    `${useScope.name}=${api}.scope(${useScope.name});`,
+                    `${api}.register({useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement});${useScope.name}=${api}.scope(${useScope.name});`,
                 );
             },
         );
@@ -1066,36 +1232,6 @@
                     picker,
                     `${renderPicker.name}=${api}.picker(${renderPicker.name});`,
                 );
-            },
-        );
-
-        module(
-            "输入框模块",
-            (source) =>
-                source.includes("chatGptSelectionContext:") &&
-                source.includes("modelBeforeRateLimit") &&
-                source.includes("savedModelPending:"),
-            (composer) => {
-                const selection = single(
-                    [
-                        ...composer.source.matchAll(
-                            /\(0,[\w$]+\.[\w$]+\)\(([\w$]+)\.([\w$]+),[\w$]+\),\{savedModelPending:/g,
-                        ),
-                    ],
-                    "模型状态接口",
-                );
-                const selectionModule = single(
-                    [
-                        ...composer.source.matchAll(
-                            new RegExp(
-                                `(?:[\\s,;])${RegExp.escape(selection[1])}=[\\w$]+\\(["']([^"']+)["']\\)`,
-                                "g",
-                            ),
-                        ),
-                    ],
-                    "模型状态模块",
-                )[1];
-                bindings.selection = [selectionModule, selection[2]];
             },
         );
 
@@ -1242,33 +1378,68 @@
             },
         );
 
-        const matchesLocation = (source) =>
-            /return [\w$]+\?\.pathname===[\w$]+\.value\.pathname&&[\w$]+\.search===/.test(
-                source,
+        for (const [name, brand] of [
+            ["routeScope", "RouteScope"],
+            ["composerScope", "ComposerScope"],
+        ]) {
+            module(
+                brand,
+                (source) => source.includes(`)("${brand}",`),
+                (scope) => {
+                    const symbol = single(
+                        [
+                            ...scope.source.matchAll(
+                                new RegExp(
+                                    `([\\w$]+)=\\(0,[\\w$]+\\.[\\w$]+\\)\\("${brand}",`,
+                                    "g",
+                                ),
+                            ),
+                        ],
+                        brand,
+                    )[1];
+                    const [exportName] = single(
+                        Object.entries(
+                            getChatgptModuleExports(scope.source),
+                        ).filter(([, value]) => value === symbol),
+                        brand,
+                    );
+                    bindings[name] = [scope.id, exportName];
+                },
             );
-        module("页面路由模块", matchesLocation, (router) => {
-            const matchLocation = exported(
-                router,
-                "页面地址接口",
-                matchesLocation,
-            );
-            const locationSignal = single(
-                [...matchLocation.toString().matchAll(/\.get\(([\w$]+)\)/g)],
-                "页面地址信号",
-            )[1];
-            const locationExport = single(
-                [
-                    ...router.source.matchAll(
-                        new RegExp(
-                            `(?:[,{])([\\w$]+):${RegExp.escape(locationSignal)}(?=[,}])`,
-                            "g",
-                        ),
-                    ),
-                ],
-                "页面地址导出",
-            )[1];
-            bindings.location = [router.id, locationExport];
-        });
+        }
+
+        const threadConnection =
+            /([\w$]+)=\(0,[\w$]+\.[\w$]+\)\([^;]+;if\([^;]+return\{hostId:[\w$]+,manager:[\w$]+,status:"ready"\}/;
+        module(
+            "任务连接模块",
+            (source) => threadConnection.test(source),
+            (connection) => {
+                const symbol = connection.source.match(threadConnection)[1];
+                const [exportName] = single(
+                    Object.entries(
+                        getChatgptModuleExports(connection.source),
+                    ).filter(([, value]) => value === symbol),
+                    "任务连接接口",
+                );
+                bindings.threadConnection = [connection.id, exportName];
+            },
+        );
+
+        module(
+            "Dot 会话模块",
+            (source) => source.includes("AeonMessagingRoomView:"),
+            (dot) => {
+                const renderDot = exported(
+                    dot,
+                    "Dot 会话接口",
+                    "AeonMessagingRoomView",
+                );
+                append(
+                    dot,
+                    `${renderDot.name}=${api}.picker(${renderDot.name},"dot");`,
+                );
+            },
+        );
 
         module(
             "会话状态模块",
@@ -1819,7 +1990,10 @@
             option.textContent = text;
             return option;
         };
-        const models = chatgptRuntimeModelCatalogs[originSelect.value] || [];
+        const models =
+            originSelect.value === "dot"
+                ? (chatgptRuntimeModelState?.models ?? [])
+                : (chatgptRuntimeModelCatalogs[originSelect.value] ?? []);
         const createPlaceholder = (
             text = chatgptRuntimeModelState?.available ? "默认" : "读取中…",
         ) => {
@@ -1926,28 +2100,35 @@
                 : null;
         if (!originSelect || !modelSelect || !thinkingSelect) return;
 
-        const controlsDisabled = !chatgptModuleInjectionStarted;
-        originSelect.disabled = controlsDisabled;
+        const state = chatgptRuntimeModelState;
+        const page = pageWindow.location.pathname + pageWindow.location.search;
+        const pageChanged = modelSelect.dataset.page !== page;
+        modelSelect.dataset.page = page;
+        const isDot = state?.origin === "dot";
+        const controlsDisabled =
+            !chatgptModuleInjectionStarted || !state?.available;
+        originSelect.disabled = controlsDisabled || isDot;
+        originSelect.querySelector('[value="dot"]').hidden = !isDot;
         modelSelect.disabled = controlsDisabled;
         thinkingSelect.disabled = controlsDisabled;
+        if (state && (pageChanged || document.activeElement !== originSelect))
+            originSelect.value = state.origin;
+        const error = document.getElementById("chatgpt-runtime-error");
+        if (error) {
+            error.textContent = state?.error ?? "";
+            error.hidden = !state?.error;
+        }
 
-        const state = chatgptRuntimeModelState;
-        let modelValue;
-        let thinkingValue;
+        let modelValue = pageChanged ? "" : undefined;
+        let thinkingValue = pageChanged ? "" : undefined;
         if (state?.available) {
             if (
-                document.activeElement !== originSelect &&
-                (state.origin === "chat" || state.origin === "work")
-            ) {
-                originSelect.value = state.origin;
-            }
-            if (
-                document.activeElement !== modelSelect &&
+                (pageChanged || document.activeElement !== modelSelect) &&
                 typeof state.model === "string"
             ) {
                 modelValue = state.model;
             }
-            if (document.activeElement !== thinkingSelect) {
+            if (pageChanged || document.activeElement !== thinkingSelect) {
                 thinkingValue =
                     typeof state.thinkingEffort === "string"
                         ? state.thinkingEffort
@@ -2267,6 +2448,7 @@
                 <select id="chatgpt-runtime-origin">
                     <option value="chat">Chat</option>
                     <option value="work">Work</option>
+                    <option value="dot" hidden>Dot</option>
                 </select>
                 <label for="chatgpt-runtime-model">模型</label>
                 <select id="chatgpt-runtime-model">
@@ -2279,6 +2461,7 @@
                     <option value="${CHATGPT_RUNTIME_CUSTOM_VALUE}">自定义…</option>
                 </select>
             </div>
+            <div id="chatgpt-runtime-error" hidden style="margin-top: 4px; font-size: 11px; color: #ff6b6b; overflow-wrap: anywhere;"></div>
         </div>
         <div id="deep-research-section" style="margin-top: 10px; display: none">
             <div style="margin-top: 10px; margin-bottom: 2px;">
