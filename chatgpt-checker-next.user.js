@@ -68,7 +68,7 @@
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
     let chatgptSelectionPopoverStyle;
     let userRegionValue = null;
-    let priceRegionCode = null;
+    let billingCurrency = null;
     let chatgptRuntimeModelState;
     let chatgptPlanTypes;
     let chatgptCopyIcons;
@@ -361,6 +361,10 @@
                 if (isDot && !stopWatching)
                     stopWatching = watchThread(scope, active.conversationId);
                 const model = isDot ? thread?.model : active?.selectedModel;
+                const intl = appScope?.get(native.intl);
+                const timeZone = intl
+                    ?.formatDateToParts(Date.now(), { timeZoneName: "short" })
+                    .find((part) => part.type === "timeZoneName")?.value;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
@@ -377,6 +381,8 @@
                     model: model?.slug ?? null,
                     thinkingEffort: model?.thinkingEffort ?? null,
                     models: isDot ? thread?.models : undefined,
+                    timeZone: timeZone ?? null,
+                    locale: intl?.locale ?? null,
                     error: active?.error ?? (isDot ? thread?.error : undefined),
                 };
                 const serialized = JSON.stringify(state);
@@ -2179,6 +2185,7 @@
                     );
                 }
                 updateChatgptRuntimeModelControls();
+                updateChatgptLocaleInfo();
                 syncChatgptCopyButton();
             },
         );
@@ -2442,8 +2449,8 @@
                 margin-left: 3px;
             ">?</span><br>
             <span id="persona-container" style="display: block">用户类型：<span id="persona">...</span></span>
-            <span id="user-region-container" style="display: block">用户地区：<span id="user-region">${userRegionValue || "..."}</span></span>
-            <span id="price-region-container" style="display: block">价格地区：<span id="price-region">${priceRegionCode || "..."}</span></span>
+            <span id="user-region-container" style="display: block">用户地区：<span id="user-region">${[userRegionValue, billingCurrency].filter(Boolean).join(" / ") || "..."}</span></span>
+            <span id="locale-info-container" style="display: block">时区语言：<span id="locale-info">${[chatgptRuntimeModelState?.timeZone, chatgptRuntimeModelState?.locale].filter(Boolean).join(" / ") || "..."}</span></span>
         </div>
         <div id="chatgpt-runtime-model-section" style="margin-top: 10px;">
             <div style="margin-bottom: 4px;">
@@ -3911,6 +3918,16 @@
         resetEl.innerText = formatAbsoluteTime(resetAfter) || "...";
     }
 
+    function updateUserRegionDisplay() {
+        const container = document.getElementById("user-region-container");
+        const valueEl = document.getElementById("user-region");
+        if (!container || !valueEl) return;
+        valueEl.innerText =
+            [userRegionValue, billingCurrency].filter(Boolean).join(" / ") ||
+            "...";
+        container.style.display = "block";
+    }
+
     function updateUserRegion(country, region) {
         if (!isChatgptMode || typeof country !== "string" || !country.trim())
             return;
@@ -3920,28 +3937,27 @@
             parts.push(region.trim());
         }
         userRegionValue = parts.join(" / ");
-
-        const container = document.getElementById("user-region-container");
-        const valueEl = document.getElementById("user-region");
-        if (!container || !valueEl) return;
-        valueEl.innerText = userRegionValue;
-        container.style.display = "block";
+        updateUserRegionDisplay();
     }
 
-    function updatePriceRegion(countryCode) {
-        if (
-            !isChatgptMode ||
-            typeof countryCode !== "string" ||
-            !countryCode.trim()
-        )
+    function updateBillingCurrency(currency) {
+        if (!isChatgptMode || typeof currency !== "string" || !currency.trim())
             return;
+        billingCurrency = currency.trim().toUpperCase();
+        updateUserRegionDisplay();
+    }
 
-        priceRegionCode = countryCode.trim().toUpperCase();
-
-        const container = document.getElementById("price-region-container");
-        const valueEl = document.getElementById("price-region");
+    function updateChatgptLocaleInfo() {
+        const container = document.getElementById("locale-info-container");
+        const valueEl = document.getElementById("locale-info");
         if (!container || !valueEl) return;
-        valueEl.innerText = priceRegionCode;
+        valueEl.innerText =
+            [
+                chatgptRuntimeModelState?.timeZone,
+                chatgptRuntimeModelState?.locale,
+            ]
+                .filter(Boolean)
+                .join(" / ") || "...";
         container.style.display = "block";
     }
 
@@ -4062,9 +4078,7 @@
         }
 
         if (
-            requestUrl.includes(
-                "/backend-api/checkout_pricing_config/configs",
-            ) &&
+            /\/backend-api\/accounts\/check\/[^/?#]+/.test(requestUrl) &&
             finalMethod === "GET" &&
             response.ok
         ) {
@@ -4073,14 +4087,14 @@
             }
             try {
                 const data = await response.clone().json();
-                updatePriceRegion(
-                    typeof data?.country_code === "string"
-                        ? data.country_code
-                        : null,
-                );
+                const accountId = data?.account_ordering?.[0];
+                const account =
+                    (accountId && data?.accounts?.[accountId]) ||
+                    data?.accounts?.default;
+                updateBillingCurrency(account?.entitlement?.billing_currency);
                 return response;
             } catch (e) {
-                console.error("[CheckerNext] 处理价格地区响应出错:", e);
+                console.error("[CheckerNext] 处理计费币种响应出错:", e);
                 return response;
             }
         }
