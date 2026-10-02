@@ -605,13 +605,14 @@
                 });
             },
             conversation(fn) {
-                return function (scope, conversation) {
+                return function (scope, conversation, ...args) {
                     const origin = origins.get(conversation.conversationId);
                     return fn(
                         scope,
                         origin === undefined
                             ? conversation
                             : { ...conversation, conversationOrigin: origin },
+                        ...args,
                     );
                 };
             },
@@ -1515,20 +1516,27 @@
                     conversation,
                     "会话模式接口",
                     (source) =>
-                        /^function [\w$]+\([\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\([\w$]+\.get,[\w$]+\);/.test(
+                        /^function [\w$]+\([\w$]+,[\w$]+,[\w$]+\)\{/.test(
                             source,
                         ) && /conversationOrigin:[\w$]+\?\?null/.test(source),
                 );
-                const store = single(
-                    [
-                        ...setOrigin
-                            .toString()
-                            .matchAll(/&&([\w$]+)\([\w$]+,\{\.\.\./g),
-                    ],
-                    "会话存储接口",
-                )[1];
-                append(conversation, `${store}=${api}.conversation(${store});`);
                 bindings.setOrigin = [conversation.id, setOrigin.exportName];
+            },
+        );
+
+        const conversationStore =
+            /\.set\([\w$.]+,([\w$]+)\.conversationId,\1\.conversationOrigin\)/;
+        module(
+            "会话存储模块",
+            (source) => conversationStore.test(source),
+            (conversation) => {
+                const store = exported(conversation, "会话存储接口", (source) =>
+                    conversationStore.test(source),
+                );
+                append(
+                    conversation,
+                    `${store.name}=${api}.conversation(${store.name});`,
+                );
             },
         );
 
