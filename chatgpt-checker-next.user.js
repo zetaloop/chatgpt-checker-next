@@ -604,6 +604,14 @@
                     scheduleState();
                 });
             },
+            toolbar(fn, jsx, Actions) {
+                return function (props) {
+                    return jsx(fn, {
+                        ...props,
+                        children: jsx(Actions, { children: props.children }),
+                    });
+                };
+            },
             conversation(fn) {
                 return function (scope, conversation, ...args) {
                     const origin = origins.get(conversation.conversationId);
@@ -1310,6 +1318,31 @@
                 append(
                     turns,
                     `${renderTurns.name}=${api}.turns(${renderTurns.name});`,
+                );
+            },
+        );
+
+        module(
+            "会话工具栏模块",
+            (source) =>
+                source.includes('actionId:"chatgpt-conversation-actions"'),
+            (toolbar) => {
+                const render = exported(toolbar, "会话操作栏", (source) =>
+                    source.includes('actionId:"chatgpt-conversation-actions"'),
+                );
+                const [, jsx, shell] = single(
+                    [
+                        ...render
+                            .toString()
+                            .matchAll(
+                                /\(0,([\w$]+)\.jsx\)\(([\w$]+\.[\w$]+)\.HeaderAction,/g,
+                            ),
+                    ],
+                    "原生工具栏接口",
+                );
+                append(
+                    toolbar,
+                    `${render.name}=${api}.toolbar(${render.name},${jsx}.jsx,${shell}.HeaderToolbar.Actions);`,
                 );
             },
         );
@@ -2269,7 +2302,11 @@
                   ? icons.error
                   : icons.idle;
         const targets = button.lastElementChild?.querySelectorAll("svg") ?? [];
-        for (const target of targets) target.replaceWith(icon.cloneNode(true));
+        for (const target of targets) {
+            target.setAttribute("viewBox", icon.viewBox);
+            target.setAttribute("fill", "currentColor");
+            target.innerHTML = icon.body;
+        }
         const label =
             state === "loading"
                 ? "正在复制"
@@ -2336,18 +2373,7 @@
         ) {
             return;
         }
-        const icons = Object.fromEntries(
-            ["idle", "success", "error"].map((state) => {
-                const source = chatgptCopyIcons[state];
-                const icon = nativeIcons[0].cloneNode(false);
-                icon.setAttribute("width", source.width);
-                icon.setAttribute("height", source.height);
-                icon.setAttribute("viewBox", source.viewBox);
-                icon.setAttribute("fill", "currentColor");
-                icon.innerHTML = source.body;
-                return [state, icon];
-            }),
-        );
+        const icons = chatgptCopyIcons;
 
         button.id = "checker-next-copy-conversation-button";
         button.type = "button";
