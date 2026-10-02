@@ -1676,16 +1676,12 @@
                 const copyText = single(
                     [
                         ...messages.source.matchAll(
-                            /([\w$]+)\?\.completed===!0\?(function\(([\w$]+)\)\{if\(null==\3\)return"";[\s\S]*?return [^;{}]+\.join\(""\)\})\(\1\)/g,
+                            /([\w$]+)\?\.completed===!0\?([\w$]+)\(\1\):""/g,
                         ),
                     ],
                     "原生消息复制接口",
-                );
-                replace(messages, copyText[2], "checkerNextMessageText");
-                append(
-                    messages,
-                    `const checkerNextMessageText=${copyText[2]};${api}.register({messageText:checkerNextMessageText});`,
-                );
+                )[2];
+                append(messages, `${api}.register({messageText:${copyText}});`);
                 const approval = single(
                     [
                         ...messages.source.matchAll(
