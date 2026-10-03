@@ -709,7 +709,7 @@
                             item: { ...item, sentAtMs: time },
                         });
                     const title = [
-                        time === null ? null : new Date(time).toLocaleString(),
+                        time === null ? null : formatAbsoluteTime(time),
                         model ? `响应模型：${model}` : null,
                         requested && requested !== model
                             ? `请求模型：${requested}`
@@ -770,6 +770,22 @@
                     );
                 };
             },
+            timeFormat(fn) {
+                return function (props) {
+                    const { intl } = props;
+                    return fn({
+                        ...props,
+                        intl: {
+                            ...intl,
+                            formatDate: (value, options) =>
+                                intl.formatDate(value, {
+                                    ...options,
+                                    timeZone: intl.timeZone,
+                                }),
+                        },
+                    });
+                };
+            },
             time(fn, jsx) {
                 return function (props) {
                     const result = fn(props);
@@ -780,7 +796,7 @@
                                   ...result.props,
                                   title:
                                       props.title ??
-                                      new Date(props.sentAtMs).toLocaleString(),
+                                      formatAbsoluteTime(props.sentAtMs),
                               },
                               result.key,
                           )
@@ -1787,6 +1803,28 @@
                 append(
                     messages,
                     `${renderMessage}=${api}.message(${renderMessage},${react});${renderActions}=${api}.message(${renderActions},${react},true);`,
+                );
+            },
+        );
+
+        module(
+            "消息时间格式模块",
+            (source) =>
+                source.includes("sentAtMs:") &&
+                source.includes("weekdayFormat:") &&
+                source.includes(".formatDate("),
+            (time) => {
+                const format = exported(
+                    time,
+                    "消息时间格式接口",
+                    (source) =>
+                        source.includes("sentAtMs:") &&
+                        source.includes("weekdayFormat:") &&
+                        source.includes(".formatDate("),
+                );
+                append(
+                    time,
+                    `${format.name}=${api}.timeFormat(${format.name});`,
                 );
             },
         );
