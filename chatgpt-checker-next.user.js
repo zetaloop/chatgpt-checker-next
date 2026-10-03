@@ -641,10 +641,16 @@
                 };
             },
             message(fn, React, assistant = false) {
+                const MessageId = assistant ? React.createContext(null) : null;
                 function MessageInfo(props) {
                     const scope = appScope;
                     const { conversationId } = props;
-                    const item = assistant ? props.assistantItem : props.item;
+                    const item = props.item;
+                    const id = assistant
+                        ? React.useContext(MessageId)
+                        : (item.latestMessageId ??
+                          item.serverMessageId ??
+                          item.messageId);
                     const subscribe = React.useCallback(
                         (listener) => {
                             const stop = scope.watch((scope) => {
@@ -667,10 +673,6 @@
                     );
                     const snapshot = () => {
                         if (!chatgptMessageInfoEnabled) return null;
-                        const id =
-                            item.latestMessageId ??
-                            item.serverMessageId ??
-                            item.messageId;
                         const message = scope.get(
                             native.mapping,
                             conversationId,
@@ -702,7 +704,9 @@
                         data === null ? [] : JSON.parse(data);
                     const time = created == null ? null : created * 1000;
                     if (time === null && !model)
-                        return React.createElement(fn, props);
+                        return assistant
+                            ? null
+                            : React.createElement(fn, props);
                     if (!assistant)
                         return React.createElement(fn, {
                             ...props,
@@ -718,7 +722,7 @@
                     ]
                         .filter(Boolean)
                         .join("\n");
-                    const info = React.createElement(
+                    return React.createElement(
                         "span",
                         {
                             className:
@@ -748,22 +752,35 @@
                                   title,
                               }),
                     );
-                    return React.createElement(fn, {
-                        ...props,
-                        sourcesAction: React.createElement(
-                            React.Fragment,
-                            null,
-                            props.sourcesAction,
-                            info,
-                        ),
-                    });
                 }
                 return function (props) {
-                    const item = assistant ? props.assistantItem : props.item;
+                    if (assistant) {
+                        const result = fn({
+                            ...props,
+                            sourcesAction: React.createElement(
+                                React.Fragment,
+                                null,
+                                props.sourcesAction,
+                                appScope
+                                    ? React.createElement(MessageInfo, {
+                                          conversationId: props.conversationId,
+                                      })
+                                    : null,
+                            ),
+                        });
+                        return React.createElement(
+                            MessageId.Provider,
+                            {
+                                value:
+                                    result?.props.messageId ??
+                                    props.assistantItem?.latestMessageId ??
+                                    props.assistantItem?.messageId,
+                            },
+                            result,
+                        );
+                    }
                     return React.createElement(
-                        appScope &&
-                            item &&
-                            (assistant || item.type === "user-message")
+                        appScope && props.item?.type === "user-message"
                             ? MessageInfo
                             : fn,
                         props,
