@@ -2051,7 +2051,7 @@
                 const approval = single(
                     [
                         ...messages.source.matchAll(
-                            /let [\w$]+=([\w$]+);return [\w$]+\.request\?\.body\.codex_mcp_elicitation\?\.kind==="openaiForm"/g,
+                            /let [\w$]+=([\w$]+);[\w$]+\.request\?\.body\.codex_mcp_elicitation\?\.kind==="openaiForm"/g,
                         ),
                     ],
                     "授权组件",
