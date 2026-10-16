@@ -762,14 +762,17 @@
                         id: props.conversationId,
                         serverId: props.browserConversationId,
                         copyReady: props.renderedTurns.length > 0,
-                        turns: props.isReadOnly
-                            ? props.renderedTurns
-                            : undefined,
-                        readOnly: props.isReadOnly,
+                        turns:
+                            props.isReadOnly || props.isTemporaryChat
+                                ? props.renderedTurns
+                                : undefined,
                     };
                     conversations.set(conversation.id, conversation);
                     if (conversation.serverId)
                         conversations.set(conversation.serverId, conversation);
+                    const temporaryId = props.isTemporaryChat && routeId();
+                    if (temporaryId)
+                        conversations.set(temporaryId, conversation);
                     scheduleState();
                 });
             },
@@ -1111,7 +1114,7 @@
                 const conversation = current();
                 const scope = appScope;
                 if (!conversation) throw new Error("当前会话尚未载入");
-                if (!scope && (includeDetails || !conversation.readOnly))
+                if (!scope && (includeDetails || !conversation.turns))
                     throw new Error("当前会话状态尚未载入");
                 if (includeDetails) {
                     const messages = native.messages({
@@ -1138,9 +1141,10 @@
                     }
                     return turns;
                 }
-                return conversation.readOnly
-                    ? conversation.turns
-                    : scope.get(native.turns, conversation.id);
+                return (
+                    conversation.turns ??
+                    scope.get(native.turns, conversation.id)
+                );
             },
             getMessageText(item) {
                 if (item.source) {
@@ -2845,7 +2849,7 @@
 
         const nativeButton = [
             ...document.querySelectorAll(
-                'header[data-app-shell-titlebar] button[aria-haspopup="menu"]',
+                'header[data-app-shell-titlebar] button[aria-haspopup="menu"], header[data-app-shell-titlebar] button:has(use[href$="#bookmark-light-16"])',
             ),
         ].findLast((button) => !button.closest('[aria-hidden="true"]'));
         const sprite = document
@@ -2882,7 +2886,12 @@
             },
             sprite,
         );
-        nativeButton.before(button);
+        if (nativeButton.querySelector('use[href$="#bookmark-light-16"]')) {
+            button.classList.add("pointer-events-auto");
+            nativeButton.closest(".pointer-events-auto.flex").before(button);
+        } else {
+            nativeButton.before(button);
+        }
     }
 
     // 全局状态：记录弹窗是否正在显示
