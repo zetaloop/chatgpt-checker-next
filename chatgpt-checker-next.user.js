@@ -797,6 +797,10 @@
             dotActions(fn) {
                 function CopyMessage({ message }) {
                     const button = native.useRef(null);
+                    const messageRef = native.useRef(message);
+                    native.useLayoutEffect(() => {
+                        messageRef.current = message;
+                    }, [message]);
                     const sprite = document
                         .querySelector('svg use[href*="/cdn/assets/icons-"]')
                         ?.getAttribute("href")
@@ -806,11 +810,7 @@
                         return bindChatgptCopyButton(
                             button.current,
                             () => {
-                                const text = getDotConversation(
-                                    message.roomId,
-                                ).messages.find(
-                                    (item) => item.id === message.id,
-                                )?.text;
+                                const text = messageRef.current.text;
                                 if (!text)
                                     throw new Error("消息中没有可复制的正文");
                                 return text;
@@ -1688,7 +1688,9 @@
             (source) =>
                 source.includes(
                     "historyAnchor:void 0,newerLoading:!1,messages:[]",
-                ) && source.includes("services:{renderMessageFooter:"),
+                ) &&
+                source.includes("services:{") &&
+                source.includes("renderMessageFooter:"),
             (messages) => {
                 const create = single(
                     [
