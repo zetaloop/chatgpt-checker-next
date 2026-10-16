@@ -268,7 +268,11 @@
         const current = () => conversations.get(routeId());
         const watchThread = (scope, conversationId) =>
             scope.watch((scope) => {
-                const manager = native.threadManager?.(scope, conversationId);
+                const hostId = native.threadHostId?.(scope, conversationId);
+                const manager =
+                    hostId == null
+                        ? null
+                        : scope.get(native.threadManagerForHost, hostId);
                 if (!manager) {
                     scheduleState();
                     return;
@@ -2021,14 +2025,35 @@
             "任务管理模块",
             (source) => threadManager.test(source),
             (manager) => {
-                const symbol = manager.source.match(threadManager)[1];
-                const [exportName] = single(
-                    Object.entries(
-                        getChatgptModuleExports(manager.source),
-                    ).filter(([, value]) => value === symbol),
-                    "任务管理接口",
+                const selector = single(
+                    [
+                        ...manager.source
+                            .match(threadManager)[0]
+                            .matchAll(/\.get\(([\w$]+),[\w$]+\)/g),
+                    ],
+                    "任务管理状态选择器",
+                )[1];
+                const host = single(
+                    [
+                        ...manager.source.matchAll(
+                            /function ([\w$]+)\(e,t\)\{return [\w$]+\(e,t\)\?\.getHostId\(\)\?\?e\.get\([\w$]+,t\)\}/g,
+                        ),
+                    ],
+                    "任务管理宿主接口",
+                )[1];
+                const exports = Object.entries(
+                    getChatgptModuleExports(manager.source),
                 );
-                bindings.threadManager = [manager.id, exportName];
+                for (const [name, symbol] of [
+                    ["threadHostId", host],
+                    ["threadManagerForHost", selector],
+                ]) {
+                    const [exportName] = single(
+                        exports.filter(([, value]) => value === symbol),
+                        `${name} 原生导出`,
+                    );
+                    bindings[name] = [manager.id, exportName];
+                }
             },
         );
 
