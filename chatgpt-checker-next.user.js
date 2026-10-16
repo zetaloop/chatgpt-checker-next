@@ -276,8 +276,16 @@
                     const { thread: value } = await manager.readThread(
                         state.conversationId,
                     );
-                    if (state.model === previous)
-                        update(value.model, value.reasoningEffort);
+                    if (state.model === previous) {
+                        const conversation = manager.getConversation(
+                            state.conversationId,
+                        );
+                        update(
+                            conversation?.latestModel ?? value.model,
+                            conversation?.latestReasoningEffort ??
+                                value.reasoningEffort,
+                        );
+                    }
                 };
                 const stopConversation = manager.addConversationCallback(
                     state.conversationId,
@@ -312,6 +320,7 @@
                         state.models = catalog.data.map((model) => ({
                             slug: model.model,
                             title: model.displayName,
+                            isDefault: model.isDefault,
                             thinkingEfforts:
                                 model.supportedReasoningEfforts.map(
                                     (effort) => effort.reasoningEffort,
@@ -362,14 +371,23 @@
                 const isDot = active?.kind === "dot";
                 if (isDot && !stopWatching)
                     stopWatching = watchThread(scope, active.conversationId);
-                const model = isDot ? thread?.model : active?.selectedModel;
+                const model = isDot
+                    ? {
+                          slug:
+                              thread?.model?.slug ??
+                              thread?.models.find((item) => item.isDefault)
+                                  ?.slug,
+                          thinkingEffort: thread?.model?.thinkingEffort,
+                      }
+                    : active?.selectedModel;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
                     search: location.search,
                     copyReady: current()?.copyReady ?? false,
                     available: Boolean(
-                        model?.slug && (isDot || active?.onModelChange),
+                        model?.slug &&
+                            (isDot ? thread?.model : active?.onModelChange),
                     ),
                     origin: isDot
                         ? "dot"
@@ -1255,7 +1273,11 @@
                         if (!state?.model)
                             throw new Error("当前线程的模型设置尚未载入");
                         const selected = state.requested ?? state.model;
-                        const model = detail.model ?? selected.slug;
+                        const model =
+                            detail.model ??
+                            selected.slug ??
+                            state.models.find((item) => item.isDefault)?.slug;
+                        if (!model) throw new Error("默认模型尚未载入");
                         const thinkingEffort = Object.hasOwn(
                             detail,
                             "thinkingEffort",
