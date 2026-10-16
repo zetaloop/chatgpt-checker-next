@@ -70,6 +70,7 @@
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
     let chatgptSelectionPopoverStyle;
+    let chatgptDotCopyStyle;
     let userRegionValue = null;
     let billingCurrency = null;
     let chatgptRuntimeModelState;
@@ -89,6 +90,11 @@
             media: chatgptSelectionPopoverDisabled ? "all" : "not all",
             textContent:
                 '[role="presentation"].pointer-events-auto.w-fit.max-w-full.overflow-hidden:is(.pointer-events-none.w-max.fixed > *, .flex-wrap) { display: none !important; }',
+        });
+        chatgptDotCopyStyle = GM_addElement("style", {
+            media: chatgptCopyButtonEnabled ? "not all" : "all",
+            textContent:
+                ".checker-next-dot-copy-message { display: none !important; }",
         });
     }
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
@@ -190,6 +196,7 @@
         const { location } = pageWindow;
         const conversations = new Map();
         const dotControllers = new Map();
+        let dotMessageContext;
         const origins = new Map();
         const customModels = new Map();
         const controls = new Set();
@@ -762,6 +769,83 @@
                 return after(fn, (_, controller) => {
                     dotControllers.set(controller.roomId, controller);
                 });
+            },
+            dotMessage(fn) {
+                return function (props) {
+                    dotMessageContext ??= native.createContext(null);
+                    return native.createElement(
+                        dotMessageContext.Provider,
+                        { value: props.message },
+                        native.createElement(fn, props),
+                    );
+                };
+            },
+            dotActions(fn) {
+                function CopyMessage({ message }) {
+                    const button = native.useRef(null);
+                    const sprite = document
+                        .querySelector('svg use[href*="/cdn/assets/icons-"]')
+                        ?.getAttribute("href")
+                        ?.split("#")[0];
+                    native.useLayoutEffect(() => {
+                        if (!button.current || !sprite) return;
+                        return bindChatgptCopyButton(
+                            button.current,
+                            () => {
+                                const text = getDotConversation(
+                                    message.roomId,
+                                ).messages.find(
+                                    (item) => item.id === message.id,
+                                )?.text;
+                                if (!text)
+                                    throw new Error("消息中没有可复制的正文");
+                                return text;
+                            },
+                            sprite,
+                            "复制消息",
+                        );
+                    }, [message.id, message.roomId, sprite]);
+                    return native.createElement(
+                        "button",
+                        {
+                            ref: button,
+                            type: "button",
+                            "aria-label": "复制消息",
+                            title: "复制消息",
+                            className:
+                                "button ghost icon-button message-action-button checker-next-dot-copy-message",
+                        },
+                        native.createElement(
+                            "svg",
+                            {
+                                "aria-hidden": true,
+                                width: 16,
+                                height: 16,
+                                viewBox: "0 0 16 16",
+                            },
+                            native.createElement("use", {
+                                href: `${sprite}#square-on-square-light-16`,
+                                fill: "currentColor",
+                            }),
+                        ),
+                    );
+                }
+                return function (props) {
+                    const message = native.useContext(dotMessageContext);
+                    const actions = fn(props);
+                    if (!message) return actions;
+                    const copy = native.createElement(CopyMessage, {
+                        key: "checker-next-copy",
+                        message,
+                    });
+                    return native.cloneElement(
+                        actions,
+                        {},
+                        ...(message.self
+                            ? [copy, ...actions.props.children]
+                            : [...actions.props.children, copy]),
+                    );
+                };
             },
             dotConversation(roomId) {
                 const controller = dotControllers.get(roomId);
@@ -1523,7 +1607,7 @@
                 )[1];
                 append(
                     scopes,
-                    `${api}.register({useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement});${useScope.name}=${api}.scope(${useScope.name});`,
+                    `${api}.register({useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement});${useScope.name}=${api}.scope(${useScope.name});`,
                 );
             },
         );
@@ -1580,6 +1664,35 @@
                     "Dots 消息控制器",
                 )[1];
                 append(messages, `${create}=${api}.dotController(${create});`);
+            },
+        );
+
+        module(
+            "Dots 消息组件模块",
+            (source) =>
+                source.includes("message-inline-actions--orbit") &&
+                source.includes("className:`message-row ${"),
+            (messages) => {
+                const renderMessage = single(
+                    [
+                        ...messages.source.matchAll(
+                            /function ([\w$]+)\(e\)\{(?:(?!function [\w$]+\()[\s\S])*?className:`message-row \$\{/g,
+                        ),
+                    ],
+                    "Dots 消息行",
+                )[1];
+                const actions = single(
+                    [
+                        ...messages.source.matchAll(
+                            /function ([\w$]+)\(e\)\{(?:(?!function [\w$]+\()[\s\S])*?`message-inline-actions\$\{/g,
+                        ),
+                    ],
+                    "Dots 消息操作栏",
+                )[1];
+                append(
+                    messages,
+                    `${renderMessage}=${api}.dotMessage(${renderMessage});${actions}=${api}.dotActions(${actions});`,
+                );
             },
         );
 
@@ -2712,7 +2825,8 @@
     ) {
         setChatgptCopyButtonState(button, "idle", sprite, label);
         let copying = false;
-        button.addEventListener("click", async (event) => {
+        let resetTimer;
+        const onClick = async (event) => {
             event.stopPropagation();
             if (copying) return;
             copying = true;
@@ -2726,66 +2840,31 @@
             } finally {
                 copying = false;
             }
-            setTimeout(
+            resetTimer = setTimeout(
                 () => setChatgptCopyButtonState(button, "idle", sprite, label),
                 1000,
             );
-        });
+        };
+        button.addEventListener("click", onClick);
+        return () => {
+            button.removeEventListener("click", onClick);
+            clearTimeout(resetTimer);
+        };
     }
 
-    function syncDotCopyButtons() {
+    function syncDotCopyButton() {
         const existing = document.getElementById(
             "checker-next-copy-conversation-button",
         );
         if (!chatgptCopyButtonEnabled || !chatgptModuleInjectionStarted) {
             existing?.remove();
-            for (const button of document.querySelectorAll(
-                ".checker-next-dot-copy-message",
-            ))
-                button.remove();
             return;
         }
 
-        const articles = document.querySelectorAll(
-            "article.message-row[data-message-id]",
-        );
-        for (const article of articles) {
-            const reply = article.querySelector(
-                '.message-inline-actions button[data-action="reply"]',
-            );
-            if (
-                !reply ||
-                article.querySelector(".checker-next-dot-copy-message")
-            )
-                continue;
-            const sprite = reply
-                .querySelector("svg use")
-                ?.getAttribute("href")
-                ?.split("#")[0];
-            if (!sprite) continue;
-            const button = reply.cloneNode(true);
-            button.removeAttribute("data-action");
-            button.disabled = false;
-            button.classList.add("checker-next-dot-copy-message");
-            bindChatgptCopyButton(
-                button,
-                () => {
-                    const roomId = article.dataset.messageId.split("~")[0];
-                    const text = getDotConversation(roomId).messages.find(
-                        (message) => message.id === article.dataset.messageId,
-                    )?.text;
-                    if (!text) throw new Error("消息中没有可复制的正文");
-                    return text;
-                },
-                sprite,
-                "复制消息",
-            );
-            if (article.classList.contains("self")) reply.before(button);
-            else reply.after(button);
-        }
-
         const pathname = pageWindow.location.pathname;
-        const roomId = articles[0]?.dataset.messageId?.split("~")[0];
+        const roomId = document
+            .querySelector("article.message-row[data-message-id]")
+            ?.dataset.messageId?.split("~")[0];
         if (
             existing?.dataset.pathname === pathname &&
             existing.dataset.roomId === roomId
@@ -2827,7 +2906,7 @@
     function syncChatgptCopyButton() {
         const pathname = pageWindow.location.pathname;
         if (/^\/dots\/[^/]+\/?$/.test(pathname)) {
-            syncDotCopyButtons();
+            syncDotCopyButton();
             return;
         }
         let existing = document.getElementById(
@@ -3913,6 +3992,9 @@
             updateChatgptCopyButtonToggle();
             toggle.addEventListener("change", () => {
                 chatgptCopyButtonEnabled = toggle.checked;
+                chatgptDotCopyStyle.media = chatgptCopyButtonEnabled
+                    ? "not all"
+                    : "all";
                 localStorage.setItem(
                     CHATGPT_COPY_BUTTON_ENABLED_KEY,
                     String(chatgptCopyButtonEnabled),
