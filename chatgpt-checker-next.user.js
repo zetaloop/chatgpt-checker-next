@@ -41,6 +41,8 @@
     const CHATGPT_MESSAGE_INFO_EVENT = "checker-next-message-info";
     const CHATGPT_APPROVAL_KEY = "checker-next-chatgpt-approval";
     const CHATGPT_APPROVAL_EVENT = "checker-next-approval";
+    const CHATGPT_AUTO_COLLAPSE_KEY = "checker-next-chatgpt-auto-collapse";
+    const CHATGPT_AUTO_COLLAPSE_EVENT = "checker-next-auto-collapse";
     const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
         "checker-next-chatgpt-selection-popover-disabled";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
@@ -66,6 +68,9 @@
         localStorage.getItem(CHATGPT_MESSAGE_INFO_KEY) !== "false";
     let chatgptApprovalEnabled =
         isChatgptMode && localStorage.getItem(CHATGPT_APPROVAL_KEY) !== "false";
+    let chatgptAutoCollapseEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_AUTO_COLLAPSE_KEY) !== "false";
     let chatgptSelectionPopoverDisabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
@@ -233,6 +238,15 @@
             );
         const report = (error) =>
             console.error("[CheckerNext] 运行时模块出错:", error);
+        const subscribeAutoCollapse = (listener) => {
+            pageWindow.addEventListener(CHATGPT_AUTO_COLLAPSE_EVENT, listener);
+            return () =>
+                pageWindow.removeEventListener(
+                    CHATGPT_AUTO_COLLAPSE_EVENT,
+                    listener,
+                );
+        };
+        const getAutoCollapse = () => chatgptAutoCollapseEnabled;
         const after = (fn, callback) => {
             function wrapped(...args) {
                 const result = fn.apply(this, args);
@@ -844,6 +858,27 @@
                         ...(message.self
                             ? [copy, ...actions.props.children]
                             : [...actions.props.children, copy]),
+                    );
+                };
+            },
+            analysis(fn) {
+                return function (props) {
+                    const enabled = native.useSyncExternalStore(
+                        subscribeAutoCollapse,
+                        getAutoCollapse,
+                        getAutoCollapse,
+                    );
+                    return native.createElement(
+                        fn,
+                        enabled
+                            ? {
+                                  ...props,
+                                  allowCollapseBeforeFinal: true,
+                                  preventAutoCollapse: false,
+                                  forceExpanded: false,
+                                  disableCollapse: false,
+                              }
+                            : props,
                     );
                 };
             },
@@ -1607,7 +1642,7 @@
                 )[1];
                 append(
                     scopes,
-                    `${api}.register({useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement});${useScope.name}=${api}.scope(${useScope.name});`,
+                    `${api}.register({useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
                 );
             },
         );
@@ -1692,6 +1727,27 @@
                 append(
                     messages,
                     `${renderMessage}=${api}.dotMessage(${renderMessage});${actions}=${api}.dotActions(${actions});`,
+                );
+            },
+        );
+
+        module(
+            "分析内容模块",
+            (source) =>
+                source.includes("allowCollapseBeforeFinal:") &&
+                source.includes("preventAutoCollapse:") &&
+                source.includes("agentActivityProps:"),
+            (analysis) => {
+                const activity = exported(
+                    analysis,
+                    "分析内容组件",
+                    (source) =>
+                        source.includes("allowCollapseBeforeFinal:") &&
+                        source.includes("persistedCollapsed:"),
+                );
+                append(
+                    analysis,
+                    `${activity.name}=${api}.analysis(${activity.name});`,
                 );
             },
         );
@@ -2406,6 +2462,7 @@
         if (chatgptCopyButtonEnabled) items.push("复制全文");
         if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
         if (chatgptApprovalEnabled) items.push("自动批准工具请求");
+        if (chatgptAutoCollapseEnabled) items.push("自动收起分析内容");
         if (chatgptFakePlanEnabled)
             items.push(`假装会员：${chatgptFakePlanValue}`);
         return items;
@@ -3481,6 +3538,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-auto-collapse-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>自动收起分析内容
+                <span id="chatgpt-auto-collapse-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-auto-collapse-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-auto-collapse-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-auto-collapse-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-selection-popover-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>禁用划词悬浮窗
                 <span id="chatgpt-selection-popover-tooltip" style="
@@ -3865,6 +3963,11 @@
             "自动为每次工具请求选择允许。",
         );
 
+        const chatgptAutoCollapseTooltipBox = createTooltip(
+            "chatgpt-auto-collapse-tooltip-box",
+            "默认收起分析执行内容。",
+        );
+
         const chatgptSelectionPopoverTooltipBox = createTooltip(
             "chatgpt-selection-popover-tooltip-box",
             "隐藏划词和编辑时的悬浮菜单。",
@@ -3938,6 +4041,10 @@
             bindTooltipEvents(
                 "chatgpt-approval-tooltip",
                 chatgptApprovalTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-auto-collapse-tooltip",
+                chatgptAutoCollapseTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-selection-popover-tooltip",
@@ -4179,6 +4286,18 @@
                     chatgptApprovalEnabled = value;
                     pageWindow.dispatchEvent(
                         new pageWindow.Event(CHATGPT_APPROVAL_EVENT),
+                    );
+                    updateChatgptInjectionStatus();
+                },
+            );
+            bindToggle(
+                "chatgpt-auto-collapse",
+                chatgptAutoCollapseEnabled,
+                CHATGPT_AUTO_COLLAPSE_KEY,
+                (value) => {
+                    chatgptAutoCollapseEnabled = value;
+                    pageWindow.dispatchEvent(
+                        new pageWindow.Event(CHATGPT_AUTO_COLLAPSE_EVENT),
                     );
                     updateChatgptInjectionStatus();
                 },
