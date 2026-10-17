@@ -1338,6 +1338,7 @@
             "checker-next-runtime-model-set",
             async (event) => {
                 const active = activeControl();
+                const conversationId = active?.conversationId;
                 try {
                     const detail = event.detail;
                     if (active) active.error = null;
@@ -1392,7 +1393,13 @@
                         });
                         model = {
                             slug: detail.model,
-                            thinkingEffort: option?.thinkingEffort ?? null,
+                            thinkingEffort:
+                                active.catalog
+                                    ?.defaultThinkingEffortByModelSlug?.[
+                                    detail.model
+                                ] ??
+                                option?.thinkingEffort ??
+                                null,
                             versionId: native.modelVersion(
                                 active.catalog,
                                 detail.model,
@@ -1443,7 +1450,11 @@
                     scheduleState();
                 } catch (error) {
                     report(error);
-                    if (active && activeControl() === active) {
+                    if (
+                        active &&
+                        activeControl() === active &&
+                        active.conversationId === conversationId
+                    ) {
                         active.error = String(error);
                         scheduleState();
                     }
@@ -2630,9 +2641,14 @@
         modelSelect.value = modelValue;
 
         const selectedModel = models.find((model) => model.slug === modelValue);
-        const efforts = [...new Set(selectedModel?.thinkingEfforts || [])].map(
-            String,
-        );
+        const efforts = [
+            ...new Set(
+                selectedModel?.thinkingEfforts ??
+                    (state?.origin === "dot" && !modelValue
+                        ? models.flatMap((model) => model.thinkingEfforts)
+                        : []),
+            ),
+        ].map(String);
         const thinkingOptions = chatgptRuntimeModelState?.available
             ? [createOption("", "未指定")]
             : [createPlaceholder()];
@@ -2729,7 +2745,7 @@
 
         let modelValue = pageChanged ? "" : undefined;
         let thinkingValue = pageChanged ? "" : undefined;
-        if (state?.available) {
+        if (state) {
             if (pageChanged || document.activeElement !== modelSelect)
                 modelValue = state.model ?? "";
             if (pageChanged || document.activeElement !== thinkingSelect) {
@@ -4174,7 +4190,6 @@
                 apply({ origin: originSelect.value });
             });
             bindCustomOption(modelSelect, "输入模型 slug", (model) => {
-                thinkingSelect.value = "";
                 updateChatgptRuntimeModelOptions();
                 if (model) apply({ model });
             });
