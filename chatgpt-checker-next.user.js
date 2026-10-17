@@ -84,10 +84,6 @@
     let chatgptModuleInjectionStarted = false;
     let chatgptInjectionFailure;
     const chatgptReportedFailures = new Set();
-    const chatgptRuntimeModelCatalogs = {
-        chat: [],
-        work: [],
-    };
 
     if (isChatgptMode) {
         if (chatgptModuleInjectionEnabled) installChatgptModuleInjection();
@@ -219,13 +215,8 @@
         let appScope,
             watchedEnvironmentScope,
             stopWatchingEnvironment,
-            watchedControl,
-            watchedScope,
-            watchedConversation,
             watchedPage,
-            stopWatching,
             homeScope,
-            thread,
             homeOrigin,
             scheduled = false,
             lastState;
@@ -266,127 +257,32 @@
             return match ? decodeURIComponent(match[1]) : null;
         };
         const current = () => conversations.get(routeId());
-        const watchThread = (scope, conversationId) =>
-            scope.watch((scope) => {
-                const hostId = native.threadHostId?.(scope, conversationId);
-                const manager =
-                    hostId == null
-                        ? null
-                        : scope.get(native.threadManagerForHost, hostId);
-                if (!manager) {
-                    scheduleState();
-                    return;
-                }
-                const state = {
-                    manager,
-                    conversationId,
-                    model: null,
-                    models: [],
-                    error: null,
-                };
-                thread = state;
-                const update = (model, thinkingEffort) => {
-                    if (
-                        thread !== state ||
-                        (state.model?.slug === model &&
-                            state.model?.thinkingEffort === thinkingEffort)
-                    )
-                        return;
-                    state.model = { slug: model, thinkingEffort };
-                    state.error = null;
-                    scheduleState();
-                };
-                state.read = async () => {
-                    const previous = state.model;
-                    const { thread: value } = await manager.readThread(
-                        state.conversationId,
-                    );
-                    if (state.model === previous) {
-                        const conversation = manager.getConversation(
-                            state.conversationId,
-                        );
-                        update(
-                            conversation?.latestModel ?? value.model,
-                            conversation?.latestReasoningEffort ??
-                                value.reasoningEffort,
-                        );
-                    }
-                };
-                const stopConversation = manager.addConversationCallback(
-                    state.conversationId,
-                    (conversation) => {
-                        if (conversation?.latestModel)
-                            update(
-                                conversation.latestModel,
-                                conversation.latestReasoningEffort,
-                            );
-                    },
-                );
-                const stopNotifications = manager.addNotificationCallback(
-                    "thread/settings/updated",
-                    ({ params }) => {
-                        if (params.threadId === state.conversationId)
-                            update(
-                                params.threadSettings.model,
-                                params.threadSettings.effort,
-                            );
-                    },
-                );
-                Promise.all([
-                    state.read(),
-                    manager.sendRequest("model/list", {
-                        includeHidden: true,
-                        cursor: null,
-                        limit: 100,
-                    }),
-                ])
-                    .then(([, catalog]) => {
-                        if (thread !== state) return;
-                        state.models = catalog.data.map((model) => ({
-                            slug: model.model,
-                            title: model.displayName,
-                            isDefault: model.isDefault,
-                            thinkingEfforts:
-                                model.supportedReasoningEfforts.map(
-                                    (effort) => effort.reasoningEffort,
-                                ),
-                            defaultThinkingEffort: model.defaultReasoningEffort,
-                        }));
-                        scheduleState();
-                    })
-                    .catch((error) => {
-                        if (thread !== state) return;
-                        state.error = String(error);
-                        report(error);
-                        scheduleState();
-                    });
+        const useControl = (scope, value) => {
+            const control = native.useRef({}).current;
+            const route = scope.getOwnValue(native.routeScope);
+            native.useLayoutEffect(() => {
+                if (
+                    control.route !== route ||
+                    control.conversationId !== value.conversationId
+                )
+                    control.error = null;
+                Object.assign(control, value, { scope, route });
+                controls.add(control);
+                scheduleState();
                 return () => {
-                    stopConversation();
-                    stopNotifications();
-                    if (thread === state) thread = undefined;
+                    controls.delete(control);
+                    scheduleState();
                 };
-            });
+            }, [control, scope, route, value]);
+        };
         const scheduleState = () => {
             if (scheduled) return;
             scheduled = true;
             queueMicrotask(() => {
                 scheduled = false;
                 const active = activeControl();
-                const scope = active?.scope;
-                const conversationId = active?.conversationId;
                 const page = location.pathname + location.search;
-                if (
-                    watchedControl !== active ||
-                    watchedScope?.node !== scope?.node ||
-                    watchedConversation !== conversationId ||
-                    watchedPage !== page
-                ) {
-                    stopWatching?.();
-                    stopWatching = undefined;
-                    thread = undefined;
-                    watchedControl = active;
-                    watchedScope = scope;
-                    watchedConversation = conversationId;
+                if (watchedPage !== page) {
                     watchedPage = page;
                     const conversation = current();
                     for (const [key, value] of conversations) {
@@ -394,35 +290,27 @@
                     }
                 }
                 const isDot = active?.kind === "dot";
-                if (isDot && !stopWatching)
-                    stopWatching = watchThread(scope, active.conversationId);
-                const model = isDot
-                    ? {
-                          slug:
-                              thread?.model?.slug ??
-                              thread?.models.find((item) => item.isDefault)
-                                  ?.slug,
-                          thinkingEffort: thread?.model?.thinkingEffort,
-                      }
-                    : active?.selectedModel;
+                const model = active?.selectedModel;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
                     search: location.search,
                     copyReady: current()?.copyReady ?? false,
                     available: Boolean(
-                        model?.slug &&
-                            (isDot ? thread?.model : active?.onModelChange),
+                        active &&
+                            !active.loading &&
+                            (isDot || (model?.slug && active.onModelChange)),
                     ),
+                    loading: active?.loading ?? true,
                     origin: isDot
                         ? "dot"
                         : active?.isWorkConversation
                           ? "work"
                           : "chat",
-                    model: model?.slug ?? null,
+                    model: model?.slug?.trim() || null,
                     thinkingEffort: model?.thinkingEffort ?? null,
-                    models: isDot ? thread?.models : undefined,
-                    error: active?.error ?? (isDot ? thread?.error : undefined),
+                    models: active?.models ?? [],
+                    error: active?.error ?? active?.sourceError ?? null,
                 };
                 const serialized = JSON.stringify(state);
                 if (serialized === lastState) return;
@@ -479,17 +367,17 @@
                 ? conversation
                 : { ...conversation, conversation_origin: origin };
         };
+        const modelOptions = (data) => [
+            ...(data?.options ?? []),
+            ...(data?.internalOptions ?? []),
+            ...(data?.versionOptions?.flatMap((version) => version.options) ??
+                []),
+        ];
         const extendModels = (data) => {
             if (!data || customModels.size === 0) return data;
             let modelConfigBySlug = data.modelConfigBySlug;
             let internalOptions = data.internalOptions;
-            const options = [
-                ...(data.options ?? []),
-                ...(internalOptions ?? []),
-                ...(data.versionOptions?.flatMap(
-                    (version) => version.options,
-                ) ?? []),
-            ];
+            const options = modelOptions(data);
             for (const [slug, efforts] of customModels) {
                 const model = modelConfigBySlug?.[slug] ?? { title: slug };
                 const additions = [...efforts].filter(
@@ -737,49 +625,114 @@
                     }
                 });
             },
-            picker(fn, kind = "chat") {
+            picker(fn) {
                 return function (props) {
-                    const scope = native.useScope(
-                        kind === "dot"
-                            ? native.routeScope
-                            : native.composerScope,
+                    const scope = native.useScope(native.composerScope);
+                    const models = native.useMemo(() => {
+                        const models = new Map();
+                        for (const [slug, model] of Object.entries(
+                            props.models?.modelConfigBySlug ?? {},
+                        )) {
+                            models.set(slug, {
+                                slug,
+                                title: model.title ?? slug,
+                                thinkingEfforts: (
+                                    model.thinkingEfforts ?? []
+                                ).map((effort) => effort.thinking_effort),
+                            });
+                        }
+                        for (const option of modelOptions(props.models)) {
+                            let model = models.get(option.slug);
+                            if (!model) {
+                                model = {
+                                    slug: option.slug,
+                                    title:
+                                        option.modelTitle ??
+                                        option.title ??
+                                        option.slug,
+                                    thinkingEfforts: [],
+                                };
+                                models.set(option.slug, model);
+                            }
+                            if (
+                                option.thinkingEffort != null &&
+                                !model.thinkingEfforts.includes(
+                                    option.thinkingEffort,
+                                )
+                            )
+                                model.thinkingEfforts.push(
+                                    option.thinkingEffort,
+                                );
+                        }
+                        return [...models.values()];
+                    }, [props.models]);
+                    useControl(scope, {
+                        kind: "chat",
+                        active: true,
+                        conversationId: props.conversationId,
+                        selectedModel: props.selectedModel,
+                        isWorkConversation: props.isTppConversation,
+                        catalog: props.models,
+                        models,
+                        loading: Boolean(props.isLoading),
+                        sourceError: props.isError ? "模型目录读取失败" : null,
+                        onModelChange: props.onModelChange,
+                        onThinkingEffortChange: props.onThinkingEffortChange,
+                    });
+                    return native.createElement(fn, props);
+                };
+            },
+            dotPicker(fn) {
+                return function (props) {
+                    const scope = native.useScope(native.routeScope);
+                    const conversationId = props.conversationId ?? null;
+                    const active = props.active && conversationId !== null;
+                    const hostId = native.useValue(
+                        native.threadHost,
+                        conversationId,
                     );
-                    const route = scope.getOwnValue(native.routeScope);
-                    const control = native.useRef({}).current;
-                    native.useLayoutEffect(() => {
-                        if (
-                            control.route !== route ||
-                            control.conversationId !== props.conversationId
-                        )
-                            control.error = null;
-                        Object.assign(control, {
-                            scope,
-                            route,
-                            kind,
-                            active:
-                                kind !== "dot" ||
-                                (props.active && props.conversationId != null),
-                            conversationId: props.conversationId,
-                            selectedModel: props.selectedModel,
-                            isWorkConversation: props.isTppConversation,
-                            onModelChange: props.onModelChange,
-                        });
-                        controls.add(control);
-                        scheduleState();
-                        return () => {
-                            controls.delete(control);
-                            scheduleState();
-                        };
-                    }, [
-                        control,
-                        scope,
-                        route,
-                        props.selectedModel,
-                        props.isTppConversation,
-                        props.active,
-                        props.conversationId,
-                        props.onModelChange,
-                    ]);
+                    const key = native.useMemo(
+                        () =>
+                            active
+                                ? { hostId, threadId: conversationId }
+                                : null,
+                        [active, hostId, conversationId],
+                    );
+                    const settings = native.useValue(
+                        native.threadSettings,
+                        key,
+                    );
+                    const catalog = native.useThreadModels({
+                        hostId,
+                        enabled: active,
+                    });
+                    const models = native.useMemo(
+                        () =>
+                            (catalog.data?.models ?? []).map((model) => ({
+                                slug: model.model,
+                                title: model.displayName,
+                                thinkingEfforts:
+                                    model.supportedReasoningEfforts.map(
+                                        (effort) => effort.reasoningEffort,
+                                    ),
+                            })),
+                        [catalog.data],
+                    );
+                    useControl(scope, {
+                        kind: "dot",
+                        active,
+                        conversationId,
+                        hostId,
+                        selectedModel: {
+                            slug: settings?.model,
+                            thinkingEffort: settings?.reasoningEffort,
+                        },
+                        models,
+                        loading: catalog.isPending,
+                        sourceError: catalog.error
+                            ? String(catalog.error)
+                            : null,
+                    });
                     return native.createElement(fn, props);
                 };
             },
@@ -1385,46 +1338,25 @@
             "checker-next-runtime-model-set",
             async (event) => {
                 const active = activeControl();
-                const target = thread;
                 try {
                     const detail = event.detail;
                     if (active) active.error = null;
                     scheduleState();
                     if (!active) throw new Error("当前页面的模型控件尚未载入");
                     if (active.kind === "dot") {
-                        const state = thread;
-                        if (!state?.model)
-                            throw new Error("当前线程的模型设置尚未载入");
-                        const selected = state.requested ?? state.model;
-                        const model =
-                            detail.model ??
-                            selected.slug ??
-                            state.models.find((item) => item.isDefault)?.slug;
-                        if (!model) throw new Error("默认模型尚未载入");
-                        const thinkingEffort = Object.hasOwn(
-                            detail,
-                            "thinkingEffort",
-                        )
-                            ? detail.thinkingEffort
-                            : detail.model
-                              ? (state.models.find(
-                                    (item) => item.slug === model,
-                                )?.defaultThinkingEffort ?? null)
-                              : selected.thinkingEffort;
-                        const requested = { slug: model, thinkingEffort };
-                        state.requested = requested;
-                        try {
-                            const applied =
-                                await state.manager.updateThreadSettingsForNextTurn(
-                                    state.conversationId,
-                                    { model, effort: thinkingEffort },
-                                );
-                            if (!applied) throw new Error("线程模型设置未应用");
-                            await state.read();
-                        } finally {
-                            if (state.requested === requested)
-                                state.requested = undefined;
-                        }
+                        const settings = {};
+                        if (typeof detail.model === "string" && detail.model)
+                            settings.model = detail.model;
+                        if (Object.hasOwn(detail, "thinkingEffort"))
+                            settings.effort = detail.thinkingEffort;
+                        if (Object.keys(settings).length === 0) return;
+                        const applied = await native
+                            .threadClient(active.scope, active.hostId)
+                            .updateThreadSettingsForNextTurn(
+                                active.conversationId,
+                                settings,
+                            );
+                        if (!applied) throw new Error("线程模型设置未应用");
                         return;
                     }
                     if (detail.origin === "chat" || detail.origin === "work") {
@@ -1454,10 +1386,17 @@
                     }
                     let model;
                     if (typeof detail.model === "string" && detail.model) {
-                        model = {
+                        const option = native.resolveModel(active.catalog, {
                             slug: detail.model,
                             thinkingEffort: null,
-                            versionId: null,
+                        });
+                        model = {
+                            slug: detail.model,
+                            thinkingEffort: option?.thinkingEffort ?? null,
+                            versionId: native.modelVersion(
+                                active.catalog,
+                                detail.model,
+                            ),
                         };
                     }
                     if (Object.hasOwn(detail, "thinkingEffort")) {
@@ -1491,16 +1430,20 @@
                                 },
                             );
                         }
-                        await active.onModelChange(model);
+                        if (
+                            !detail.model &&
+                            Object.hasOwn(detail, "thinkingEffort") &&
+                            active.onThinkingEffortChange
+                        )
+                            await active.onThinkingEffortChange(
+                                detail.thinkingEffort,
+                            );
+                        else await active.onModelChange(model);
                     }
                     scheduleState();
                 } catch (error) {
                     report(error);
-                    if (
-                        active &&
-                        activeControl() === active &&
-                        (active.kind !== "dot" || thread === target)
-                    ) {
+                    if (active && activeControl() === active) {
                         active.error = String(error);
                         scheduleState();
                     }
@@ -1636,6 +1579,15 @@
                         source.includes(".watch="),
                 );
                 bindings.useScope = [scopes.id, useScope.exportName];
+                const useValue = exported(
+                    scopes,
+                    "状态订阅接口",
+                    (source) =>
+                        source.includes("cacheKey") &&
+                        source.includes(".enabled") &&
+                        source.includes("useLayoutEffect"),
+                );
+                bindings.useValue = [scopes.id, useValue.exportName];
                 const react = single(
                     [
                         ...useScope
@@ -1646,7 +1598,7 @@
                 )[1];
                 append(
                     scopes,
-                    `${api}.register({useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
+                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
                 );
             },
         );
@@ -2019,41 +1971,71 @@
             );
         }
 
-        const threadManager =
-            /function ([\w$]+)\(e,t\)\{if\(null==t\)return null;[^{}]*\.getConversation\(t\)\)\?\?null\}/;
+        const threadSettings =
+            /[\w$]+=\(0,[\w$]+\.[\w$]+\)\("modelSettings"\),([\w$]+)=/;
         module(
-            "任务管理模块",
-            (source) => threadManager.test(source),
-            (manager) => {
-                const selector = single(
-                    [
-                        ...manager.source
-                            .match(threadManager)[0]
-                            .matchAll(/\.get\(([\w$]+),[\w$]+\)/g),
-                    ],
-                    "任务管理状态选择器",
-                )[1];
+            "任务模型状态模块",
+            (source) => threadSettings.test(source),
+            (state) => {
+                const settings = state.source.match(threadSettings)[1];
                 const host = single(
                     [
-                        ...manager.source.matchAll(
-                            /function ([\w$]+)\(e,t\)\{return [\w$]+\(e,t\)\?\.getHostId\(\)\?\?e\.get\([\w$]+,t\)\}/g,
+                        ...state.source.matchAll(
+                            /function [\w$]+\(e,t\)\{return [\w$]+\(e,t\)\?\.getHostId\(\)\?\?e\.get\(([\w$]+),t\)\}/g,
                         ),
                     ],
-                    "任务管理宿主接口",
+                    "任务宿主状态",
                 )[1];
                 const exports = Object.entries(
-                    getChatgptModuleExports(manager.source),
+                    getChatgptModuleExports(state.source),
                 );
                 for (const [name, symbol] of [
-                    ["threadHostId", host],
-                    ["threadManagerForHost", selector],
+                    ["threadHost", host],
+                    ["threadSettings", settings],
                 ]) {
                     const [exportName] = single(
                         exports.filter(([, value]) => value === symbol),
                         `${name} 原生导出`,
                     );
-                    bindings[name] = [manager.id, exportName];
+                    bindings[name] = [state.id, exportName];
                 }
+            },
+        );
+
+        module(
+            "任务客户端模块",
+            (source) =>
+                source.includes(".forHost(") &&
+                source.includes(".rpc.dup()") &&
+                source.includes(".onRpcBroken("),
+            (client) => {
+                const access = exported(
+                    client,
+                    "任务客户端接口",
+                    (source) =>
+                        source.includes(".forHost(") &&
+                        source.includes(".rpc.dup()"),
+                );
+                bindings.threadClient = [client.id, access.exportName];
+            },
+        );
+
+        module(
+            "任务模型目录模块",
+            (source) =>
+                source.includes('"models","list"') &&
+                source.includes("modelCatalogPath:") &&
+                source.includes("additionalAvailableModels:"),
+            (models) => {
+                const useModels = exported(
+                    models,
+                    "任务模型目录接口",
+                    (source) =>
+                        source.includes("model_catalog_json") &&
+                        source.includes("additionalAvailableModels") &&
+                        source.includes("model_provider"),
+                );
+                bindings.useThreadModels = [models.id, useModels.exportName];
             },
         );
 
@@ -2068,7 +2050,7 @@
                 );
                 append(
                     dot,
-                    `${renderDot.name}=${api}.picker(${renderDot.name},"dot");`,
+                    `${renderDot.name}=${api}.dotPicker(${renderDot.name});`,
                 );
             },
         );
@@ -2202,6 +2184,23 @@
                     models,
                     `${parseModels.name}=${api}.models(${parseModels.name});`,
                 );
+                const resolveModel = exported(
+                    models,
+                    "模型选项解析接口",
+                    (source) =>
+                        /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(source) &&
+                        source.includes("defaultThinkingEffortByModelSlug") &&
+                        source.includes("internalOptions"),
+                );
+                const modelVersion = exported(
+                    models,
+                    "模型版本解析接口",
+                    (source) =>
+                        source.includes("versionOptions?.find") &&
+                        source.includes(".slugs.includes("),
+                );
+                bindings.resolveModel = [models.id, resolveModel.exportName];
+                bindings.modelVersion = [models.id, modelVersion.exportName];
             },
         );
 
@@ -2560,44 +2559,6 @@
         isChatgptMode &&
         localStorage.getItem(CHATGPT_FAKE_PLAN_ENABLED_KEY) === "true";
 
-    function updateChatgptRuntimeModelCatalog(origin, data) {
-        if (!isChatgptMode || (origin !== "chat" && origin !== "work")) return;
-        if (!Array.isArray(data?.models)) {
-            reportChatgptFailure(`ChatGPT ${origin} 模型列表格式无效。`);
-        }
-        chatgptRuntimeModelCatalogs[origin] = Array.isArray(data?.models)
-            ? data.models.flatMap((model) => {
-                  if (typeof model?.slug !== "string" || !model.slug.trim()) {
-                      return [];
-                  }
-                  return [
-                      {
-                          slug: model.slug.trim(),
-                          title:
-                              typeof model.title === "string" &&
-                              model.title.trim()
-                                  ? model.title.trim()
-                                  : model.slug.trim(),
-                          thinkingEfforts: Array.isArray(model.thinking_efforts)
-                              ? model.thinking_efforts
-                                    .map((effort) =>
-                                        typeof effort === "string"
-                                            ? effort
-                                            : effort?.thinking_effort,
-                                    )
-                                    .filter(
-                                        (effort) =>
-                                            typeof effort === "string" &&
-                                            effort.trim(),
-                                    )
-                              : [],
-                      },
-                  ];
-              })
-            : [];
-        updateChatgptRuntimeModelOptions();
-    }
-
     function updateChatgptRuntimeModelOptions(
         selectedModelValue = undefined,
         selectedThinkingValue = undefined,
@@ -2635,12 +2596,14 @@
             option.textContent = text;
             return option;
         };
-        const models =
-            originSelect.value === "dot"
-                ? (chatgptRuntimeModelState?.models ?? [])
-                : (chatgptRuntimeModelCatalogs[originSelect.value] ?? []);
+        const state = chatgptRuntimeModelState;
+        const models = originSelect.value === state?.origin ? state.models : [];
         const createPlaceholder = (
-            text = chatgptRuntimeModelState?.available ? "默认" : "读取中…",
+            text = !state || state.loading
+                ? "读取中…"
+                : state.origin === "dot"
+                  ? "Dot 默认"
+                  : "默认",
         ) => {
             const option = createOption("", text);
             option.disabled = true;
@@ -2767,12 +2730,8 @@
         let modelValue = pageChanged ? "" : undefined;
         let thinkingValue = pageChanged ? "" : undefined;
         if (state?.available) {
-            if (
-                (pageChanged || document.activeElement !== modelSelect) &&
-                typeof state.model === "string"
-            ) {
-                modelValue = state.model;
-            }
+            if (pageChanged || document.activeElement !== modelSelect)
+                modelValue = state.model ?? "";
             if (pageChanged || document.activeElement !== thinkingSelect) {
                 thinkingValue =
                     typeof state.thinkingEffort === "string"
@@ -4175,6 +4134,10 @@
                 select.addEventListener("focus", () => {
                     previousValue = select.value;
                 });
+                select.addEventListener(
+                    "blur",
+                    updateChatgptRuntimeModelControls,
+                );
                 select.addEventListener("change", () => {
                     if (select.value === CHATGPT_RUNTIME_CUSTOM_VALUE) {
                         const value = pageWindow
@@ -4977,42 +4940,6 @@
                 return response;
             } catch (e) {
                 console.error("[CheckerNext] 处理记忆用量响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            /\/backend-api\/tpp\/models\/?(?:[?#]|$)/.test(requestUrl) &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isChatgptMode) return response;
-            try {
-                updateChatgptRuntimeModelCatalog(
-                    "work",
-                    await response.clone().json(),
-                );
-                return response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Work 模型响应出错:", e);
-                return response;
-            }
-        }
-
-        if (
-            /\/backend-api\/models\/?(?:[?#]|$)/.test(requestUrl) &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
-            if (!isChatgptMode) return response;
-            try {
-                updateChatgptRuntimeModelCatalog(
-                    "chat",
-                    await response.clone().json(),
-                );
-                return response;
-            } catch (e) {
-                console.error("[CheckerNext] 处理 Chat 模型响应出错:", e);
                 return response;
             }
         }
