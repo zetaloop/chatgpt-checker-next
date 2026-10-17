@@ -2073,21 +2073,16 @@
             },
         );
 
+        const conversationOrigin =
+            /function [\w$]+\([\w$]+,[\w$]+,([\w$]+)\)\{[^{}]*\{[^{}]*conversationOrigin:\1\?\?null\}/;
         module(
             "会话状态模块",
-            (source) =>
-                source.includes("conversationOrigin:") &&
-                source.includes("asyncStatus:") &&
-                source.includes("currentNode:") &&
-                source.includes("serverConversationId:"),
+            (source) => conversationOrigin.test(source),
             (conversation) => {
                 const setOrigin = exported(
                     conversation,
                     "会话模式接口",
-                    (source) =>
-                        /^function [\w$]+\([\w$]+,[\w$]+,[\w$]+\)\{/.test(
-                            source,
-                        ) && /conversationOrigin:[\w$]+\?\?null/.test(source),
+                    (source) => conversationOrigin.test(source),
                 );
                 bindings.setOrigin = [conversation.id, setOrigin.exportName];
             },
@@ -2159,7 +2154,7 @@
                     "首页模式解析接口",
                     (source) =>
                         source.includes("persistedMode:") &&
-                        source.includes('return"extension"'),
+                        source.includes("workOnlyModeEnabled:"),
                 );
                 const parameter = single(
                     [
