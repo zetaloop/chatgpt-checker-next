@@ -702,9 +702,15 @@
                         native.threadSettings,
                         key,
                     );
+                    const model = settings?.model?.trim() || null;
+                    const additionalModels = native.useMemo(
+                        () => new Set(model ? [model] : []),
+                        [model],
+                    );
                     const catalog = native.useThreadModels({
                         hostId,
                         enabled: active,
+                        additionalAvailableModels: additionalModels,
                     });
                     const models = native.useMemo(
                         () =>
@@ -724,7 +730,7 @@
                         conversationId,
                         hostId,
                         selectedModel: {
-                            slug: settings?.model,
+                            slug: model,
                             thinkingEffort: settings?.reasoningEffort,
                         },
                         models,
