@@ -590,6 +590,36 @@
                 contentReferences: references,
             });
         };
+        const sidebarHref = (props) => {
+            if (props["data-checker-next-href"])
+                return props["data-checker-next-href"];
+            if (props.animatedIcon === "sidebar-new-chat") return "/";
+            if (props.animatedIcon === "sidebar-projects") return "/projects";
+            const destination = props["data-sidebar-destination"];
+            if (!destination) return;
+            const prefix = "builtin:orbit:";
+            if (destination.startsWith(prefix))
+                return native.dotHref(destination.slice(prefix.length));
+            return Object.values(native.sidebarRoutes).find(
+                (route) => route.destinationId === destination,
+            )?.path;
+        };
+        const sidebarClick = (onClick) => (event) => {
+            if (
+                event.defaultPrevented ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+            )
+                return;
+            try {
+                onClick(event);
+            } finally {
+                event.preventDefault();
+            }
+        };
         const bridge = {
             register(values) {
                 Object.assign(native, values);
@@ -601,6 +631,68 @@
                     ? appScope?.get(key)?.formatDateToParts(value, options)
                     : undefined;
             },
+            sidebarNav(fn) {
+                return function (props) {
+                    const to = sidebarHref(props);
+                    return native.createElement(
+                        fn,
+                        to && !props.to && !props.disabled
+                            ? {
+                                  ...props,
+                                  to,
+                                  onClick: props.onClick
+                                      ? sidebarClick(props.onClick)
+                                      : undefined,
+                              }
+                            : props,
+                    );
+                };
+            },
+            sidebarButton(fn) {
+                return function (props) {
+                    const button = fn(props);
+                    const href = sidebarHref(props);
+                    if (!href || button.props.disabled) return button;
+                    const { type, disabled, onClick, ...attributes } =
+                        button.props;
+                    return native.createElement("a", {
+                        ...attributes,
+                        href,
+                        onClick: onClick ? sidebarClick(onClick) : undefined,
+                    });
+                };
+            },
+            sidebarRow(fn) {
+                return function (props) {
+                    const href = sidebarHref(props);
+                    if (!href || props.hasNavigationLink || props.isDisabled)
+                        return native.createElement(fn, props);
+                    const [content, ...actions] = props.children;
+                    return native.createElement(
+                        fn,
+                        { ...props, hasNavigationLink: true },
+                        native.createElement(
+                            "a",
+                            {
+                                href,
+                                draggable: false,
+                                "data-interactive-row-link": true,
+                                "aria-label": props["aria-label"],
+                                "aria-labelledby": props["aria-labelledby"],
+                                "aria-current": props.isActive
+                                    ? "page"
+                                    : undefined,
+                                className:
+                                    "flex min-w-0 flex-1 before:pointer-events-auto before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] focus-visible:before:outline focus-visible:before:outline-2 focus-visible:before:outline-offset-[-2px] focus-visible:before:outline-ring",
+                            },
+                            content,
+                        ),
+                        ...actions,
+                    );
+                };
+            },
+            projectHref: (id) => native.projectHref(id),
+            libraryHref: (scope) => native.libraryHref(scope),
             scope(fn) {
                 return after(fn, (_, scope) => {
                     if (!pageWindow.__checkerNextModulesInstalled) {
@@ -1617,6 +1709,183 @@
                 append(
                     scopes,
                     `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
+                );
+            },
+        );
+
+        module(
+            "侧栏导航组件模块",
+            (source) =>
+                source.includes("sidebar.navItem.unread") &&
+                source.includes("excludeFromNavigation:"),
+            (navigation) => {
+                const item = exported(navigation, "侧栏导航项", (source) =>
+                    source.includes("sidebar.navItem.unread"),
+                );
+                append(
+                    navigation,
+                    `${item.name}=${api}.sidebarNav(${item.name});`,
+                );
+            },
+        );
+
+        module(
+            "侧栏行组件模块",
+            (source) =>
+                source.includes("hasNavigationLink:") &&
+                source.includes("data-sidebar-cycle-item"),
+            (row) => {
+                const render = exported(row, "侧栏行", (source) =>
+                    source.includes("hasNavigationLink:"),
+                );
+                append(
+                    row,
+                    `${render.name}=${api}.sidebarRow(${render.name});`,
+                );
+            },
+        );
+
+        const sidebarButton = /let ([\w$]+)=[\w$]+=>\{let\{type:/;
+        module(
+            "侧栏按钮链接模块",
+            (source) =>
+                sidebarButton.test(source) && source.includes('"data-uniform"'),
+            (button) => {
+                const name = button.source.match(sidebarButton)[1];
+                append(button, `${name}=${api}.sidebarButton(${name});`);
+            },
+        );
+
+        module(
+            "侧栏路由模块",
+            (source) =>
+                source.includes("destinationId:") &&
+                source.includes('rail:"fixed"') &&
+                source.includes("routeKind"),
+            (routes) => {
+                const [exportName] = single(
+                    Object.entries(
+                        getChatgptModuleExports(routes.source),
+                    ).filter(
+                        ([, name]) =>
+                            !routes.source.includes(`function ${name}(`),
+                    ),
+                    "侧栏路由表",
+                );
+                bindings.sidebarRoutes = [routes.id, exportName];
+            },
+        );
+
+        for (const [name, label, predicate, resolve] of [
+            [
+                "dotHref",
+                "Dot 导航地址",
+                (source) =>
+                    source.includes('"/dots"') && source.includes("orbitId"),
+                (source) =>
+                    source.includes("encodeURIComponent") &&
+                    !source.includes("/thread/"),
+            ],
+            [
+                "projectHref",
+                "项目导航地址",
+                (source) => source.includes('"/g/:projectId/project"'),
+                (source) => source.includes("}/project`"),
+            ],
+            [
+                "libraryHref",
+                "资料库导航地址",
+                (source) => source.includes("library-display-preferences:"),
+                (source) =>
+                    source.includes('"/library"') &&
+                    source.includes(".lastTab"),
+            ],
+        ]) {
+            module(label, predicate, (routes) => {
+                const href = exported(routes, label, resolve);
+                bindings[name] = [routes.id, href.exportName];
+            });
+        }
+
+        for (const [label, marker] of [
+            ["侧栏导航入口模块", 'animatedIcon:"sidebar-new-chat"'],
+            ["侧栏图标入口模块", "data-slate-sidebar-peek-area"],
+        ]) {
+            module(
+                label,
+                (source) =>
+                    source.includes(marker) &&
+                    source.includes("data-sidebar-destination"),
+                (navigation) => {
+                    navigation.source = navigation.source.replaceAll(
+                        /"data-sidebar-destination":([\w$]+)\.id/g,
+                        '"data-checker-next-href":$1.href,$&',
+                    );
+                },
+            );
+        }
+
+        module(
+            "新建聊天导航按钮模块",
+            (source) =>
+                source.includes("newChatMessage:") &&
+                source.includes("disabled:") &&
+                source.includes("staticIcon:"),
+            (button) => {
+                const [, start] = single(
+                    [...button.source.matchAll(/onStartChat:([\w$]+)/g)],
+                    "新建聊天操作",
+                );
+                replace(
+                    button,
+                    `onClick:${start}`,
+                    `"data-checker-next-href":"/",onClick:${start}`,
+                );
+            },
+        );
+
+        const projectRow = /projectId:([\w$]+),actions:[\w$]+/g;
+        module(
+            "项目侧栏链接模块",
+            (source) =>
+                source.includes("onOpenProject:") &&
+                source.includes("excludePinnedConversations:") &&
+                /projectId:[\w$]+,actions:[\w$]+/.test(source),
+            (project) => {
+                const row = single(
+                    [...project.source.matchAll(projectRow)],
+                    "项目侧栏行",
+                );
+                replace(
+                    project,
+                    row[0],
+                    `"data-checker-next-href":${api}.projectHref(${row[1]}),${row[0]}`,
+                );
+            },
+        );
+
+        module(
+            "侧栏功能入口模块",
+            (source) =>
+                source.includes('animatedIcon:"sidebar-images"') &&
+                source.includes('animatedIcon:"sidebar-library"'),
+            (features) => {
+                features.source = features.source.replaceAll(
+                    /onSelect:(?:\(\)|[\w$]+)=>\{(?:[\w$]+\(\),)?[\w$]+\(("[^"\\]+"|[\w$]+\.[\w$]+)(?=[,)])/g,
+                    "href:$1,$&",
+                );
+                features.source = features.source.replaceAll(
+                    /onSelect:([\w$]+)=>\{\(0,[\w$]+\.[\w$]+\)\(([\w$]+),[\w$]+,\1\)\},onRestore:\(\)=>\(0,[\w$]+\.[\w$]+\)\(\2,"(library|sites)"\),isCurrentDestination:[\w$]+\.startsWith\(("[^"]+")\)/g,
+                    (match, argument, scope, destination, path) =>
+                        `href:${destination === "library" ? `${api}.libraryHref(${scope})` : path},${match}`,
+                );
+                features.source = features.source.replaceAll(
+                    /onSelect:[\w$]+=>\{let [\w$]+=\(\)=>\{\(0,[\w$]+\.[\w$]+\)\([\w$]+,[\w$]+,([\w$]+),[\w$]+\.CodexPluginDirectoryEntrypoint\./g,
+                    'href:$1?"/plugins":"/skills",$&',
+                );
+                features.source = features.source.replaceAll(
+                    /onSelect:([\w$]+)=>\{[\w$]+\?[\w$]+\(([\w$]+\.[\w$]+),\{state:\1\}\):[\w$]+\.set\(/g,
+                    "href:$2,$&",
                 );
             },
         );
