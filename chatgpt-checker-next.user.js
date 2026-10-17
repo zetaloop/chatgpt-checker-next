@@ -4883,11 +4883,10 @@
                 requestUrl.includes(
                     "/backend-anon/sentinel/chat-requirements/prepare",
                 )) &&
-            finalMethod === "POST" &&
-            response.ok
+            finalMethod === "POST"
         ) {
             if (!isChatgptMode) {
-                return response;
+                return;
             }
             try {
                 const data = await response.clone().json();
@@ -4899,23 +4898,19 @@
                 updatePersona(data.persona);
                 updateDifficultyIndicator(difficulty);
 
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理挑战响应出错:", e);
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = "...";
                 updateDifficultyIndicator("...");
-                return response;
+                return;
             }
         }
 
-        if (
-            requestUrl.endsWith("/backend-api/me") &&
-            finalMethod === "GET" &&
-            response.ok
-        ) {
+        if (requestUrl.endsWith("/backend-api/me") && finalMethod === "GET") {
             if (!isChatgptMode) {
-                return response;
+                return;
             }
             try {
                 const data = await response.clone().json();
@@ -4923,20 +4918,19 @@
                     typeof data?.country === "string" ? data.country : null,
                     typeof data?.region === "string" ? data.region : null,
                 );
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理用户地区响应出错:", e);
-                return response;
+                return;
             }
         }
 
         if (
             /\/backend-api\/accounts\/check\/[^/?#]+/.test(requestUrl) &&
-            finalMethod === "GET" &&
-            response.ok
+            finalMethod === "GET"
         ) {
             if (!isChatgptMode) {
-                return response;
+                return;
             }
             try {
                 const data = await response.clone().json();
@@ -4945,20 +4939,19 @@
                     (accountId && data?.accounts?.[accountId]) ||
                     data?.accounts?.default;
                 updateBillingCurrency(account?.entitlement?.billing_currency);
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理计费币种响应出错:", e);
-                return response;
+                return;
             }
         }
 
         if (
             requestUrl.includes("/backend-api/memories") &&
-            finalMethod === "GET" &&
-            response.ok
+            finalMethod === "GET"
         ) {
             if (!isChatgptMode) {
-                return response;
+                return;
             }
             try {
                 const data = await response.clone().json();
@@ -4970,17 +4963,16 @@
                         ? data.memory_max_tokens
                         : null,
                 );
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理记忆用量响应出错:", e);
-                return response;
+                return;
             }
         }
 
         if (
             requestUrl.includes("/backend-api/conversation/init") &&
-            finalMethod === "POST" &&
-            response.ok
+            finalMethod === "POST"
         ) {
             try {
                 const data = await response.clone().json();
@@ -4997,43 +4989,41 @@
                         }
                     }
                 }
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理功能用量响应出错:", e);
-                return response;
+                return;
             }
         }
 
         if (
-            /\/backend-api\/wham\/usage\/?(?:[?#]|$)/.test(requestUrl) &&
-            finalMethod === "GET" &&
-            response.ok
+            /\/backend-api\/wham\/usage\/?$/.test(requestUrl) &&
+            finalMethod === "GET"
         ) {
             try {
                 const data = await response.clone().json();
                 updateCodexInfo(getCodexUsageWindows(data));
                 updateCodexCredits(data?.credits);
                 updateCodexResetCredits(data?.rate_limit_reset_credits);
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 响应出错:", e);
-                return response;
+                return;
             }
         }
 
         if (
-            /\/backend-api\/wham\/rate-limit-reset-credits\/?(?:[?#]|$)/.test(
+            /\/backend-api\/wham\/rate-limit-reset-credits\/?$/.test(
                 requestUrl,
             ) &&
-            finalMethod === "GET" &&
-            response.ok
+            finalMethod === "GET"
         ) {
             try {
                 updateCodexResetCredits(await response.clone().json());
-                return response;
+                return;
             } catch (e) {
                 console.error("[CheckerNext] 处理 Codex 重置机会响应出错:", e);
-                return response;
+                return;
             }
         }
     }
