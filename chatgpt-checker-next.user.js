@@ -1197,9 +1197,10 @@
             refreshAccounts() {
                 return appScope?.queryClient.invalidateQueries(
                     {
-                        queryKey: ["accounts"],
-                        predicate: ({ queryKey }) =>
-                            ["check", "full"].includes(queryKey[1]),
+                        predicate: ({ queryKey: [category, key] }) =>
+                            (category === "accounts" && key === "check") ||
+                            (category === "usage-settings" &&
+                                key === "accounts-check"),
                     },
                     { throwOnError: true },
                 );
@@ -2427,21 +2428,22 @@
         module(
             "完整账号模块",
             (source) =>
-                source.includes('queryKey:["accounts","full",') &&
-                source.includes('"/accounts/check/{version}"'),
+                source.includes(
+                    "Account check is missing membership metadata",
+                ) && source.includes('"/accounts/check/{version}"'),
             (fullAccounts) => {
-                const accountQuery = single(
+                const result = single(
                     [
                         ...fullAccounts.source.matchAll(
-                            /queryFn:(async [\w$]+=>\{[\s\S]*?\})(?=,staleTime:)/g,
+                            /return ([\w$]+)\?\.\(([\w$]+)\),\2\b/g,
                         ),
                     ],
-                    "完整账号查询接口",
+                    "完整账号查询结果",
                 );
                 replace(
                     fullAccounts,
-                    accountQuery[1],
-                    `async (...args)=>{const result=await (${accountQuery[1]})(...args),plan=${fakePlan};return plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result}`,
+                    result[0],
+                    `return ${result[1]}?.(${result[2]}),((result,plan)=>plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result)(${result[2]},${fakePlan})`,
                 );
             },
         );
@@ -4848,15 +4850,25 @@
 
     // 拦截 fetch 请求
     const originalFetch = pageWindow.fetch.bind(pageWindow);
-    pageWindow.fetch = async function (resource, options = {}) {
-        const requestUrl =
-            typeof resource === "string" ? resource : resource?.url || "";
-        const requestMethod =
-            typeof resource === "object" && resource.method
-                ? resource.method
-                : options?.method || "GET";
-        const finalMethod = requestMethod.toUpperCase();
+    pageWindow.fetch = async function (resource, options) {
         const response = await originalFetch(resource, options);
+        observeResponse(resource, options, response).catch((error) => {
+            console.error("[CheckerNext] 读取响应信息出错:", error);
+        });
+        return response;
+    };
+
+    async function observeResponse(resource, options, response) {
+        if (!response.ok) return;
+        const requestUrl = new URL(
+            resource?.url ?? resource,
+            pageWindow.location.href,
+        ).pathname;
+        const finalMethod = (
+            options?.method ??
+            resource?.method ??
+            "GET"
+        ).toUpperCase();
 
         if (
             (requestUrl.includes(
@@ -4883,7 +4895,7 @@
 
                 return response;
             } catch (e) {
-                console.error("[CheckerNext] 处理响应或重新创建响应时出错:", e);
+                console.error("[CheckerNext] 处理挑战响应出错:", e);
                 const difficultyElement = document.getElementById("difficulty");
                 if (difficultyElement) difficultyElement.innerText = "...";
                 updateDifficultyIndicator("...");
@@ -5018,7 +5030,5 @@
                 return response;
             }
         }
-
-        return response;
-    };
+    }
 })();
