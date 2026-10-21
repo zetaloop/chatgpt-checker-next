@@ -37,6 +37,7 @@
         "checker-next-chatgpt-copy-button-enabled";
     const CHATGPT_COPY_DETAILS_KEY = "checker-next-chatgpt-copy-details";
     const CHATGPT_COPY_RAW_KEY = "checker-next-chatgpt-copy-raw";
+    const CHATGPT_COPY_EVENT = "checker-next-copy";
     const CHATGPT_MESSAGE_INFO_KEY = "checker-next-chatgpt-message-info";
     const CHATGPT_MESSAGE_INFO_EVENT = "checker-next-message-info";
     const CHATGPT_APPROVAL_KEY = "checker-next-chatgpt-approval";
@@ -75,13 +76,14 @@
         isChatgptMode &&
         localStorage.getItem(CHATGPT_SELECTION_POPOVER_DISABLED_KEY) === "true";
     let chatgptSelectionPopoverStyle;
-    let chatgptDotCopyStyle;
     let userRegionValue = null;
     let billingCurrency = null;
     let chatgptRuntimeModelState;
     let chatgptRuntimeEnvironmentState;
     let chatgptPlanTypes;
     let chatgptModuleInjectionStarted = false;
+    let chatgptModuleEntries = [];
+    let chatgptRuntimeReady = false;
     let chatgptInjectionFailure;
     const chatgptReportedFailures = new Set();
 
@@ -92,11 +94,6 @@
             textContent:
                 '[role="presentation"].pointer-events-auto.w-fit.max-w-full.overflow-hidden:is(.pointer-events-none.w-max.fixed > *, .flex-wrap) { display: none !important; }',
         });
-        chatgptDotCopyStyle = GM_addElement("style", {
-            media: chatgptCopyButtonEnabled ? "not all" : "all",
-            textContent:
-                ".checker-next-dot-copy-message { display: none !important; }",
-        });
     }
     const NOT_STARTED_BADGE = '<span style="color:#9ca3af"> (未开始)</span>';
 
@@ -105,23 +102,21 @@
         const prototype = pageWindow.Function.prototype;
         const original = prototype.call;
         let runtime;
-        const fail = (error) => {
-            chatgptInjectionFailure = String(error);
-            reportChatgptFailure(`模块注入失败：${error}`);
-            updateChatgptInjectionStatus();
-        };
         const install = (require) => {
             const { patches, bindings } = createChatgptModulePatches();
             const entries = patches.concat(createChatgptModuleData());
+            chatgptModuleEntries = entries;
             installChatgptRuntimeBridge(require, bindings);
             const processed = new WeakMap();
             const patch = (id, factory) => {
                 if (processed.has(factory)) return processed.get(factory);
                 const source = factory.toString();
                 const target = { id, source };
+                let matched = false;
                 try {
                     for (const entry of entries) {
                         if (!entry.predicate(source)) continue;
+                        matched = true;
                         if (entry.id !== undefined && entry.id !== id)
                             throw new Error(`${entry.label}匹配到多个模块`);
                         if (entry.read) {
@@ -130,7 +125,7 @@
                                     try {
                                         entry.read(require(id));
                                     } catch (error) {
-                                        reportChatgptFailure(
+                                        reportChatgptInjectionFailure(
                                             `读取${entry.label}失败：${error}`,
                                         );
                                     }
@@ -146,9 +141,10 @@
                             ? factory
                             : compileChatgptModule(target.source);
                     processed.set(factory, result);
+                    if (matched) queueMicrotask(updateChatgptInjectionStatus);
                     return result;
                 } catch (error) {
-                    fail(error);
+                    reportChatgptInjectionFailure(error);
                     processed.set(factory, factory);
                     return factory;
                 }
@@ -179,7 +175,7 @@
                     try {
                         install(require);
                     } catch (error) {
-                        fail(error);
+                        reportChatgptInjectionFailure(error);
                     }
                     return Reflect.apply(
                         require.m[module.id],
@@ -215,7 +211,6 @@
         let appScope,
             watchedEnvironmentScope,
             stopWatchingEnvironment,
-            watchedPage,
             homeScope,
             homeOrigin,
             scheduled = false,
@@ -227,8 +222,13 @@
                     control.route.pathname === location.pathname &&
                     (control.route.search ?? "") === location.search,
             );
-        const report = (error) =>
-            console.error("[CheckerNext] 运行时模块出错:", error);
+        const report = reportChatgptInjectionFailure;
+        const subscribeCopy = (listener) => {
+            pageWindow.addEventListener(CHATGPT_COPY_EVENT, listener);
+            return () =>
+                pageWindow.removeEventListener(CHATGPT_COPY_EVENT, listener);
+        };
+        const getCopyEnabled = () => chatgptCopyButtonEnabled;
         const subscribeAutoCollapse = (listener) => {
             pageWindow.addEventListener(CHATGPT_AUTO_COLLAPSE_EVENT, listener);
             return () =>
@@ -250,13 +250,6 @@
             }
             return wrapped;
         };
-        const routeId = (pathname = location.pathname) => {
-            const match = pathname.match(
-                /^\/(?:c|share|g\/[^/]+\/(?:shared\/)?c)\/([^/]+)$/,
-            );
-            return match ? decodeURIComponent(match[1]) : null;
-        };
-        const current = () => conversations.get(routeId());
         const useControl = (scope, value) => {
             const control = native.useRef({}).current;
             const route = scope.getOwnValue(native.routeScope);
@@ -281,21 +274,12 @@
             queueMicrotask(() => {
                 scheduled = false;
                 const active = activeControl();
-                const page = location.pathname + location.search;
-                if (watchedPage !== page) {
-                    watchedPage = page;
-                    const conversation = current();
-                    for (const [key, value] of conversations) {
-                        if (value !== conversation) conversations.delete(key);
-                    }
-                }
                 const isDot = active?.kind === "dot";
                 const model = active?.selectedModel;
                 const state = {
                     ready: true,
                     pathname: location.pathname,
                     search: location.search,
-                    copyReady: current()?.copyReady ?? false,
                     available: Boolean(
                         active &&
                             !active.loading &&
@@ -620,9 +604,150 @@
                 event.preventDefault();
             }
         };
+        function CopyButton({ getText, message = false, disabled = false }) {
+            const [state, setState] = native.useState("idle");
+            const copying = native.useRef(false);
+            const timer = native.useRef();
+            native.useLayoutEffect(() => () => clearTimeout(timer.current), []);
+            const icon =
+                state === "success"
+                    ? "copied"
+                    : state === "error"
+                      ? "copyError"
+                      : "copy";
+            const label =
+                state === "loading"
+                    ? "正在复制"
+                    : state === "success"
+                      ? "已复制"
+                      : state === "error"
+                        ? "复制失败"
+                        : message
+                          ? "复制消息"
+                          : "复制全文";
+            return native.createElement(
+                message ? "button" : native.button,
+                {
+                    ...(message
+                        ? {
+                              type: "button",
+                              className:
+                                  "button ghost icon-button message-action-button",
+                          }
+                        : { color: "toolbar", size: "toolbar", uniform: true }),
+                    disabled,
+                    "aria-label": label,
+                    title: label,
+                    onClick: async (event) => {
+                        event.stopPropagation();
+                        if (copying.current) return;
+                        copying.current = true;
+                        clearTimeout(timer.current);
+                        setState("loading");
+                        try {
+                            await pageWindow.navigator.clipboard.writeText(
+                                getText(),
+                            );
+                            setState("success");
+                        } catch (error) {
+                            report(error);
+                            setState("error");
+                        } finally {
+                            copying.current = false;
+                        }
+                        timer.current = setTimeout(
+                            () => setState("idle"),
+                            1000,
+                        );
+                    },
+                },
+                native.createElement(native.icon, {
+                    icon: {
+                        assets: {
+                            16: native[`${icon}16`],
+                            20: native[`${icon}20`],
+                        },
+                    },
+                    size: message ? "secondary" : "leading",
+                    "aria-hidden": true,
+                }),
+            );
+        }
+        function CopyHeader({
+            dot = false,
+            allowsThreadContentOverlap,
+            ...props
+        }) {
+            const enabled = native.useSyncExternalStore(
+                subscribeCopy,
+                getCopyEnabled,
+                getCopyEnabled,
+            );
+            if (!enabled) return null;
+            return native.createElement(
+                native.ErrorBoundary,
+                null,
+                native.createElement(
+                    native.shell.HeaderAction,
+                    {
+                        actionId: "checker-next-copy-conversation",
+                        align: "end",
+                        order: 1,
+                        unifiedSlotPosition: dot ? "thread" : undefined,
+                        allowsThreadContentOverlap,
+                    },
+                    native.createElement(
+                        native.shell.HeaderToolbar.Actions,
+                        null,
+                        native.createElement(CopyButton, props),
+                    ),
+                ),
+            );
+        }
+        function DotCopy({ controller, header = false }) {
+            const timeline = native.useMemo(
+                () =>
+                    controller.services.conversations.timeline(
+                        controller.roomId,
+                    ),
+                [controller],
+            );
+            const state = native.useSyncExternalStore(
+                timeline.subscribe,
+                timeline.getSnapshot,
+                timeline.getSnapshot,
+            );
+            const enabled = native.useSyncExternalStore(
+                subscribeCopy,
+                getCopyEnabled,
+                getCopyEnabled,
+            );
+            if (!enabled) return null;
+            return native.createElement(header ? CopyHeader : CopyButton, {
+                dot: header,
+                disabled: state.messages.length === 0,
+                getText: () => formatDotConversation(controller),
+            });
+        }
         const bridge = {
             register(values) {
                 Object.assign(native, values);
+                if (values.Component) {
+                    native.ErrorBoundary = class extends values.Component {
+                        state = { failed: false };
+                        static getDerivedStateFromError() {
+                            return { failed: true };
+                        }
+                        componentDidCatch(error) {
+                            report(error);
+                        }
+                        render() {
+                            return this.state.failed
+                                ? null
+                                : this.props.children;
+                        }
+                    };
+                }
                 if (values.intl) queueMicrotask(watchEnvironment);
             },
             formatDateToParts(value, options) {
@@ -695,12 +820,12 @@
             libraryHref: (scope) => native.libraryHref(scope),
             scope(fn) {
                 return after(fn, (_, scope) => {
-                    if (!pageWindow.__checkerNextModulesInstalled) {
-                        pageWindow.__checkerNextModulesInstalled = true;
-                        scheduleState();
-                    }
                     if (scope.scope.__scopeBrand === "AppScope") {
                         appScope = scope;
+                        if (!chatgptRuntimeReady) {
+                            chatgptRuntimeReady = true;
+                            queueMicrotask(updateChatgptInjectionStatus);
+                        }
                         queueMicrotask(watchEnvironment);
                     }
                     if (
@@ -837,7 +962,70 @@
             dotController(fn) {
                 return after(fn, (_, controller) => {
                     dotControllers.set(controller.roomId, controller);
+                    controller.dispose = after(controller.dispose, () => {
+                        if (
+                            dotControllers.get(controller.roomId) === controller
+                        )
+                            dotControllers.delete(controller.roomId);
+                    });
+                    queueMicrotask(() =>
+                        pageWindow.dispatchEvent(
+                            new pageWindow.Event(CHATGPT_COPY_EVENT),
+                        ),
+                    );
                 });
+            },
+            dotHeader(fn, Menu) {
+                return function (props) {
+                    const getController = () =>
+                        dotControllers.get(props.roomId);
+                    const controller = native.useSyncExternalStore(
+                        subscribeCopy,
+                        getController,
+                        getController,
+                    );
+                    const result = fn(props);
+                    if (!controller) return result;
+                    const copy = native.createElement(
+                        native.ErrorBoundary,
+                        { key: "checker-next-copy" },
+                        native.createElement(DotCopy, { controller }),
+                    );
+                    let inserted = false;
+                    const children = result.props.children.map((child) => {
+                        if (
+                            child?.props?.actionId !== "orbit-messaging-actions"
+                        )
+                            return child;
+                        const group = child.props.children;
+                        const actions = group.props.children.flatMap(
+                            (action) => {
+                                if (action?.type !== Menu) return [action];
+                                inserted = true;
+                                return [action, copy];
+                            },
+                        );
+                        return native.cloneElement(
+                            child,
+                            {},
+                            native.cloneElement(group, {}, ...actions),
+                        );
+                    });
+                    return native.createElement(
+                        native.Fragment,
+                        null,
+                        native.cloneElement(result, {}, ...children),
+                        !inserted &&
+                            native.createElement(
+                                native.ErrorBoundary,
+                                null,
+                                native.createElement(DotCopy, {
+                                    controller,
+                                    header: true,
+                                }),
+                            ),
+                    );
+                };
             },
             dotMessage(fn) {
                 return function (props) {
@@ -850,63 +1038,27 @@
                 };
             },
             dotActions(fn) {
-                function CopyMessage({ message }) {
-                    const button = native.useRef(null);
-                    const messageRef = native.useRef(message);
-                    native.useLayoutEffect(() => {
-                        messageRef.current = message;
-                    }, [message]);
-                    const sprite = document
-                        .querySelector('svg use[href*="/cdn/assets/icons-"]')
-                        ?.getAttribute("href")
-                        ?.split("#")[0];
-                    native.useLayoutEffect(() => {
-                        if (!button.current || !sprite) return;
-                        return bindChatgptCopyButton(
-                            button.current,
-                            () => {
-                                const text = messageRef.current.text;
-                                if (!text)
-                                    throw new Error("消息中没有可复制的正文");
-                                return text;
-                            },
-                            sprite,
-                            "复制消息",
-                        );
-                    }, [message.id, message.roomId, sprite]);
-                    return native.createElement(
-                        "button",
-                        {
-                            ref: button,
-                            type: "button",
-                            "aria-label": "复制消息",
-                            title: "复制消息",
-                            className:
-                                "button ghost icon-button message-action-button checker-next-dot-copy-message",
-                        },
-                        native.createElement(
-                            "svg",
-                            {
-                                "aria-hidden": true,
-                                width: 16,
-                                height: 16,
-                                viewBox: "0 0 16 16",
-                            },
-                            native.createElement("use", {
-                                href: `${sprite}#square-on-square-light-16`,
-                                fill: "currentColor",
-                            }),
-                        ),
-                    );
-                }
                 return function (props) {
                     const message = native.useContext(dotMessageContext);
+                    const enabled = native.useSyncExternalStore(
+                        subscribeCopy,
+                        getCopyEnabled,
+                        getCopyEnabled,
+                    );
                     const actions = fn(props);
-                    if (!message) return actions;
-                    const copy = native.createElement(CopyMessage, {
-                        key: "checker-next-copy",
-                        message,
-                    });
+                    if (!message || !enabled) return actions;
+                    const copy = native.createElement(
+                        native.ErrorBoundary,
+                        { key: "checker-next-copy" },
+                        native.createElement(CopyButton, {
+                            message: true,
+                            getText: () => {
+                                if (!message.text)
+                                    throw new Error("消息中没有可复制的正文");
+                                return message.text;
+                            },
+                        }),
+                    );
                     return native.cloneElement(
                         actions,
                         {},
@@ -937,22 +1089,11 @@
                     );
                 };
             },
-            dotConversation(roomId) {
-                const controller = dotControllers.get(roomId);
-                return (
-                    controller && {
-                        messages:
-                            controller.services.conversations.get(roomId)
-                                .messages,
-                        room: controller.state.getSnapshot().room,
-                    }
-                );
-            },
             turns(fn) {
                 return after(fn, ([props]) => {
                     const conversation = {
                         id: props.conversationId,
-                        serverId: props.browserConversationId,
+                        isWorkConversation: props.isWorkConversation,
                         copyReady: props.renderedTurns.length > 0,
                         turns:
                             props.isReadOnly || props.isTemporaryChat
@@ -960,20 +1101,41 @@
                                 : undefined,
                     };
                     conversations.set(conversation.id, conversation);
-                    if (conversation.serverId)
-                        conversations.set(conversation.serverId, conversation);
-                    const temporaryId = props.isTemporaryChat && routeId();
-                    if (temporaryId)
-                        conversations.set(temporaryId, conversation);
-                    scheduleState();
                 });
             },
-            toolbar(fn, jsx, Actions) {
+            chatView(fn) {
                 return function (props) {
-                    return jsx(fn, {
-                        ...props,
-                        children: jsx(Actions, { children: props.children }),
-                    });
+                    const result = fn(props);
+                    const id = props.conversationId;
+                    const conversation = conversations.get(id);
+                    native.useLayoutEffect(() => {
+                        if (conversation) conversations.set(id, conversation);
+                        return () => {
+                            if (conversations.get(id) === conversation)
+                                conversations.delete(id);
+                        };
+                    }, [id, conversation]);
+                    return native.createElement(
+                        native.Fragment,
+                        null,
+                        result,
+                        !props.isInlinePreview &&
+                            !props.workspace &&
+                            getChatgptPage() === "chat" &&
+                            native.createElement(CopyHeader, {
+                                allowsThreadContentOverlap:
+                                    !conversation?.isWorkConversation,
+                                disabled: !conversation?.copyReady,
+                                getText: () =>
+                                    formatChatgptConversation(
+                                        bridge.getTurns(
+                                            id,
+                                            chatgptCopyDetailsEnabled,
+                                        ),
+                                        id,
+                                    ),
+                            }),
+                    );
                 };
             },
             conversation(fn) {
@@ -1303,8 +1465,8 @@
                     { throwOnError: true },
                 );
             },
-            getTurns(includeDetails = false) {
-                const conversation = current();
+            getTurns(conversationId, includeDetails = false) {
+                const conversation = conversations.get(conversationId);
                 const scope = appScope;
                 if (!conversation) throw new Error("当前会话尚未载入");
                 if (!scope && (includeDetails || !conversation.turns))
@@ -1339,7 +1501,7 @@
                     scope.get(native.turns, conversation.id)
                 );
             },
-            getMessageText(item) {
+            getMessageText(item, conversationId) {
                 if (item.source) {
                     const message = item.source;
                     const { content, metadata = {} } = message;
@@ -1405,7 +1567,7 @@
                 ) {
                     const mapping = appScope?.get(
                         native.mapping,
-                        current()?.id,
+                        conversationId,
                     );
                     return (item.sourceMessageIds ?? [item.messageId])
                         .map((id) => {
@@ -1460,20 +1622,23 @@
                         return;
                     }
                     if (detail.origin === "chat" || detail.origin === "work") {
-                        const conversation = current();
-                        if (routeId() !== null) {
+                        const conversation = conversations.get(conversationId);
+                        if (getChatgptPage() === "chat") {
                             if (!conversation || !appScope)
                                 throw new Error("当前会话状态尚未载入");
                             const origin =
                                 detail.origin === "work" ? "tpp" : null;
                             origins.set(conversation.id, origin);
-                            if (conversation.serverId)
-                                origins.set(conversation.serverId, origin);
+                            const serverId = appScope.get(
+                                native.serverId,
+                                conversation.id,
+                            );
+                            if (serverId) origins.set(serverId, origin);
                             native.setOrigin(appScope, conversation.id, origin);
                             appScope.queryClient.setQueryData(
                                 [
                                     "chatgpt-conversation",
-                                    conversation.serverId ?? conversation.id,
+                                    serverId ?? conversation.id,
                                 ],
                                 applyOrigin,
                             );
@@ -1607,8 +1772,8 @@
     function createChatgptModulePatches() {
         const patches = [];
         const bindings = {};
-        const module = (label, predicate, apply) =>
-            patches.push({ label, predicate, apply });
+        const module = (label, predicate, apply, page) =>
+            patches.push({ label, predicate, apply, page });
         const single = (items, label) => {
             if (items.length !== 1)
                 throw new Error(`${label}匹配到 ${items.length} 个结果`);
@@ -1708,10 +1873,62 @@
                 )[1];
                 append(
                     scopes,
-                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
+                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useState:${react}.useState,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,Fragment:${react}.Fragment,Component:${react}.Component,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
                 );
             },
         );
+
+        module(
+            "按钮组件模块",
+            (source) =>
+                source.includes("uniformAtMobile:") &&
+                source.includes("sizingLabels:"),
+            (button) => {
+                const render = exported(button, "按钮组件", (source) =>
+                    /^function [\w$]+\([\w$]+\)\{let [^{}]*;return /.test(
+                        source,
+                    ),
+                );
+                bindings.button = [button.id, render.exportName];
+            },
+        );
+
+        module(
+            "图标组件模块",
+            (source) =>
+                source.includes("icon16:") && source.includes(".CompactSource"),
+            (icon) => {
+                const render = exported(icon, "图标组件", (source) =>
+                    source.includes('"assets"in'),
+                );
+                bindings.icon = [icon.id, render.exportName];
+            },
+        );
+
+        for (const [name, asset] of [
+            ["copy16", "square-on-square-light-16"],
+            ["copy20", "square-on-square-light-20"],
+            ["copied16", "checkmark-lg-light-16"],
+            ["copied20", "checkmark-lg-light-20"],
+            ["copyError16", "circle-exclamation-mark-light-16"],
+            ["copyError20", "circle-exclamationmark-light-20"],
+        ]) {
+            module(
+                asset,
+                (source) => source.includes(`={kind:"sprite",name:"${asset}"`),
+                (icon) => {
+                    const [, exportName] = single(
+                        [
+                            ...icon.source.matchAll(
+                                /[\w$]+\.([\w$]+)=\{kind:"sprite",name:/g,
+                            ),
+                        ],
+                        "图标资源",
+                    );
+                    bindings[name] = [icon.id, exportName];
+                },
+            );
+        }
 
         module(
             "侧栏导航组件模块",
@@ -1924,6 +2141,52 @@
                     `${renderTurns.name}=${api}.turns(${renderTurns.name});`,
                 );
             },
+            "chat",
+        );
+
+        module(
+            "会话页面模块",
+            (source) =>
+                source.includes("ChatGptConversationPage:") &&
+                source.includes("ChatGptSharedConversationPage:"),
+            (page) => {
+                const view = exported(
+                    page,
+                    "会话页面",
+                    (source) =>
+                        source.includes("previewLifecycle:") &&
+                        source.includes("viewActivation:"),
+                );
+                const source = view.toString();
+                const serverId = single(
+                    [
+                        ...new Set(
+                            [
+                                ...source.matchAll(
+                                    /serverConversationId:([\w$]+)/g,
+                                ),
+                            ].map((match) => match[1]),
+                        ),
+                    ],
+                    "会话服务端 ID",
+                );
+                const [, selector] = single(
+                    [
+                        ...source.matchAll(
+                            new RegExp(
+                                `${RegExp.escape(serverId)}=\\(0,[\\w$]+\\.[\\w$]+\\)\\(([\\w$]+\\.[\\w$]+),[\\w$]+\\)`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "会话 ID 状态",
+                );
+                append(
+                    page,
+                    `${api}.register({serverId:${selector}});${view.name}=${api}.chatView(${view.name});`,
+                );
+            },
+            "chat",
         );
 
         module(
@@ -1945,6 +2208,7 @@
                 )[1];
                 append(messages, `${create}=${api}.dotController(${create});`);
             },
+            "dot",
         );
 
         module(
@@ -1974,6 +2238,35 @@
                     `${renderMessage}=${api}.dotMessage(${renderMessage});${actions}=${api}.dotActions(${actions});`,
                 );
             },
+            "dot",
+        );
+
+        module(
+            "Dot 顶栏模块",
+            (source) => source.includes('actionId:"orbit-messaging-actions"'),
+            (header) => {
+                const render = single(
+                    [
+                        ...header.source.matchAll(
+                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?actionId:"orbit-messaging-actions"/g,
+                        ),
+                    ],
+                    "Dot 顶栏",
+                )[1];
+                const menu = single(
+                    [
+                        ...header.source.matchAll(
+                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?triggerButtonColor:"toolbar",triggerButtonSize:/g,
+                        ),
+                    ],
+                    "Dot 更多操作",
+                )[1];
+                append(
+                    header,
+                    `${render}=${api}.dotHeader(${render},${menu});`,
+                );
+            },
+            "dot",
         );
 
         module(
@@ -1995,30 +2288,21 @@
                     `${activity.name}=${api}.analysis(${activity.name});`,
                 );
             },
+            "chat",
         );
 
         module(
-            "会话工具栏模块",
+            "页面布局模块",
             (source) =>
-                source.includes('actionId:"chatgpt-conversation-actions"'),
-            (toolbar) => {
-                const render = exported(toolbar, "会话操作栏", (source) =>
-                    source.includes('actionId:"chatgpt-conversation-actions"'),
+                source.includes("PaneHeaderRow:") &&
+                source.includes("HeaderContextMenuItem:") &&
+                source.includes("UnifiedTabStrip:"),
+            (shell) => {
+                const [exportName] = single(
+                    Object.entries(getChatgptModuleExports(shell.source)),
+                    "页面布局接口",
                 );
-                const [, jsx, shell] = single(
-                    [
-                        ...render
-                            .toString()
-                            .matchAll(
-                                /\(0,([\w$]+)\.jsx\)\(([\w$]+\.[\w$]+)\.HeaderAction,/g,
-                            ),
-                    ],
-                    "原生工具栏接口",
-                );
-                append(
-                    toolbar,
-                    `${render.name}=${api}.toolbar(${render.name},${jsx}.jsx,${shell}.HeaderToolbar.Actions);`,
-                );
+                bindings.shell = [shell.id, exportName];
             },
         );
 
@@ -2192,6 +2476,7 @@
                 );
                 bindings.codeContent = [code.id, content.exportName];
             },
+            "chat",
         );
 
         module(
@@ -2343,6 +2628,7 @@
                     `${renderDot.name}=${api}.dotPicker(${renderDot.name});`,
                 );
             },
+            "dot",
         );
 
         const conversationOrigin =
@@ -2551,6 +2837,7 @@
                     `${render}=${api}.approval(${render},${react});`,
                 );
             },
+            "chat",
         );
 
         module(
@@ -2650,6 +2937,7 @@
                     `${renderMessage}=${api}.message(${renderMessage},${react});${renderActions}=${api}.message(${renderActions},${react},true);`,
                 );
             },
+            "chat",
         );
 
         module(
@@ -2672,6 +2960,7 @@
                     `${format.name}=${api}.timeFormat(${format.name});`,
                 );
             },
+            "chat",
         );
 
         module(
@@ -2698,6 +2987,7 @@
                 );
                 bindings.messageTime = [time.id, render.exportName];
             },
+            "chat",
         );
 
         module(
@@ -2791,12 +3081,21 @@
         ];
     }
 
-    function getChatgptModuleItems() {
-        const items = ["运行时模型切换"];
-        if (chatgptCopyButtonEnabled) items.push("复制全文");
-        if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
-        if (chatgptApprovalEnabled) items.push("自动批准工具请求");
-        if (chatgptAutoCollapseEnabled) items.push("自动收起分析内容");
+    function getChatgptPage() {
+        const pathname = pageWindow.location.pathname;
+        if (pathname.startsWith("/dots/")) return "dot";
+        if (/^\/(?:c|share|g\/[^/]+\/(?:shared\/)?c)\//.test(pathname))
+            return "chat";
+    }
+
+    function getChatgptModuleItems(page) {
+        const items = ["运行时模型切换", "侧栏中键打开"];
+        if (page && chatgptCopyButtonEnabled) items.push("复制全文");
+        if (page === "chat") {
+            if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
+            if (chatgptApprovalEnabled) items.push("自动批准工具请求");
+            if (chatgptAutoCollapseEnabled) items.push("自动收起分析内容");
+        }
         if (chatgptFakePlanEnabled)
             items.push(`假装会员：${chatgptFakePlanValue}`);
         return items;
@@ -2818,7 +3117,7 @@
             await pageWindow.__checkerNextRuntimeModelBridge?.refreshAccounts();
             updateChatgptInjectionStatus();
         } catch (error) {
-            console.error("[CheckerNext] 更新会员设置失败:", error);
+            reportChatgptInjectionFailure(`更新会员设置失败：${error}`);
         }
     }
 
@@ -2966,6 +3265,12 @@
         console.error(`[CheckerNext] ${message}`);
     }
 
+    function reportChatgptInjectionFailure(error) {
+        chatgptInjectionFailure = String(error);
+        reportChatgptFailure(`模块注入失败：${error}`);
+        updateChatgptInjectionStatus();
+    }
+
     function updateChatgptInjectionStatus() {
         if (!isChatgptMode) return;
         const status = document.getElementById("chatgpt-injection-status");
@@ -2974,12 +3279,18 @@
         );
         if (!status) return;
 
-        const items = getChatgptModuleItems()
+        const page = getChatgptPage();
+        const items = getChatgptModuleItems(page)
             .map((item) => `• ${item}`)
             .join("\n");
         let label = "加载中";
         let color = "#bbbbbb";
         let description = "正在加载 ChatGPT 页面模块。";
+        const pending = chatgptModuleEntries.filter(
+            (entry) =>
+                entry.id === undefined &&
+                (entry.page === undefined || entry.page === page),
+        );
         if (chatgptModuleInjectionEnabled !== chatgptModuleInjectionStarted) {
             label = "刷新生效";
             color = "#ffd700";
@@ -2993,10 +3304,12 @@
             label = "注入失败";
             color = "#ff6b6b";
             description = chatgptInjectionFailure;
-        } else if (pageWindow.__checkerNextModulesInstalled) {
+        } else if (chatgptRuntimeReady && pending.length === 0) {
             label = "注入成功";
             color = "#98fb98";
             description = `当前页面已注入：\n${items}`;
+        } else if (pending.length) {
+            description = `正在加载：\n${pending.map((entry) => `• ${entry.label}`).join("\n")}`;
         }
         status.innerText = label;
         status.style.color = color;
@@ -3067,17 +3380,18 @@
             CHATGPT_RUNTIME_MODEL_STATE_EVENT,
             (event) => {
                 if (!event.detail || typeof event.detail !== "object") {
-                    reportChatgptFailure("ChatGPT 运行时模型返回了无效状态。");
+                    reportChatgptInjectionFailure(
+                        "ChatGPT 运行时模型返回了无效状态。",
+                    );
                     return;
                 }
                 chatgptRuntimeModelState = event.detail;
                 if (event.detail.error) {
-                    reportChatgptFailure(
+                    reportChatgptInjectionFailure(
                         `ChatGPT 运行时模型出错：${event.detail.error}`,
                     );
                 }
                 updateChatgptRuntimeModelControls();
-                syncChatgptCopyButton();
             },
         );
         pageWindow.addEventListener("load", updateChatgptInjectionStatus, {
@@ -3085,7 +3399,7 @@
         });
     }
 
-    function formatChatgptConversation(turns) {
+    function formatChatgptConversation(turns, conversationId) {
         const sections = [];
         let role;
         let text = "";
@@ -3098,6 +3412,7 @@
                 const messageText =
                     pageWindow.__checkerNextRuntimeModelBridge.getMessageText(
                         item,
+                        conversationId,
                     );
                 if (!messageText) continue;
                 const messageRole =
@@ -3112,15 +3427,11 @@
         return sections.join("\n\n========\n\n");
     }
 
-    function getDotConversation(roomId) {
-        const conversation =
-            pageWindow.__checkerNextRuntimeModelBridge?.dotConversation(roomId);
-        if (!conversation) throw new Error("Dots 消息状态尚未载入");
-        return conversation;
-    }
-
-    function formatDotConversation(roomId) {
-        const { messages, room } = getDotConversation(roomId);
+    function formatDotConversation(controller) {
+        const { messages } = controller.services.conversations.get(
+            controller.roomId,
+        );
+        const { room } = controller.state.getSnapshot();
         const sections = messages
             .filter((message) => !message.deletedAt && message.text)
             .map((message) => {
@@ -3135,220 +3446,6 @@
             });
         if (!sections.length) throw new Error("会话中没有可复制的正文");
         return sections.join("\n\n========\n\n");
-    }
-
-    function setChatgptCopyButtonState(
-        button,
-        state,
-        sprite,
-        idleLabel = "复制全文",
-    ) {
-        const name =
-            state === "success"
-                ? "checkmark-lg-light"
-                : state === "error"
-                  ? "circle-exclamation-mark-light"
-                  : "square-on-square-light";
-        const targets = button.querySelectorAll("svg");
-        for (const target of targets) {
-            const size = target.viewBox.baseVal.width === 20 ? 20 : 16;
-            const use = document.createElementNS(
-                "http://www.w3.org/2000/svg",
-                "use",
-            );
-            use.setAttribute("href", `${sprite}#${name}-${size}`);
-            use.setAttribute("fill", "currentColor");
-            target.setAttribute("viewBox", `0 0 ${size} ${size}`);
-            target.replaceChildren(use);
-        }
-        const label =
-            state === "loading"
-                ? "正在复制"
-                : state === "success"
-                  ? "已复制"
-                  : state === "error"
-                    ? "复制失败"
-                    : idleLabel;
-        button.setAttribute("aria-label", label);
-        button.title = label;
-    }
-
-    function bindChatgptCopyButton(
-        button,
-        getText,
-        sprite,
-        label = "复制全文",
-    ) {
-        setChatgptCopyButtonState(button, "idle", sprite, label);
-        let copying = false;
-        let resetTimer;
-        const onClick = async (event) => {
-            event.stopPropagation();
-            if (copying) return;
-            copying = true;
-            setChatgptCopyButtonState(button, "loading", sprite, label);
-            try {
-                await pageWindow.navigator.clipboard.writeText(await getText());
-                setChatgptCopyButtonState(button, "success", sprite, label);
-            } catch (error) {
-                console.error("[CheckerNext] 复制失败:", error);
-                setChatgptCopyButtonState(button, "error", sprite, label);
-            } finally {
-                copying = false;
-            }
-            resetTimer = setTimeout(
-                () => setChatgptCopyButtonState(button, "idle", sprite, label),
-                1000,
-            );
-        };
-        button.addEventListener("click", onClick);
-        return () => {
-            button.removeEventListener("click", onClick);
-            clearTimeout(resetTimer);
-        };
-    }
-
-    function syncDotCopyButton() {
-        const existing = document.getElementById(
-            "checker-next-copy-conversation-button",
-        );
-        if (!chatgptCopyButtonEnabled || !chatgptModuleInjectionStarted) {
-            existing?.remove();
-            return;
-        }
-
-        const pathname = pageWindow.location.pathname;
-        const roomId = document
-            .querySelector("article.message-row[data-message-id]")
-            ?.dataset.messageId?.split("~")[0];
-        if (
-            existing?.dataset.pathname === pathname &&
-            existing.dataset.roomId === roomId
-        )
-            return;
-        existing?.remove();
-        if (!roomId) return;
-        const more = [
-            ...document.querySelectorAll(
-                'header[data-app-shell-titlebar] [data-app-shell-main-titlebar] button[aria-haspopup="menu"]',
-            ),
-        ].find((button) =>
-            button.querySelector('use[href$="#ellipsis-horizontal-light-16"]'),
-        );
-        const sprite = more
-            ?.querySelector("svg use")
-            ?.getAttribute("href")
-            ?.split("#")[0];
-        if (!more || !sprite) return;
-        const button = more.cloneNode(true);
-        for (const name of [
-            "id",
-            "aria-haspopup",
-            "aria-expanded",
-            "data-state",
-        ])
-            button.removeAttribute(name);
-        button.id = "checker-next-copy-conversation-button";
-        button.dataset.pathname = pathname;
-        button.dataset.roomId = roomId;
-        bindChatgptCopyButton(
-            button,
-            () => formatDotConversation(roomId),
-            sprite,
-        );
-        more.after(button);
-    }
-
-    function syncChatgptCopyButton() {
-        const pathname = pageWindow.location.pathname;
-        if (/^\/dots\/[^/]+\/?$/.test(pathname)) {
-            syncDotCopyButton();
-            return;
-        }
-        let existing = document.getElementById(
-            "checker-next-copy-conversation-button",
-        );
-        if (existing && existing.dataset.pathname !== pathname) {
-            existing.remove();
-            existing = null;
-        }
-        const isConversationPath =
-            /^\/(?:c|share|g\/[^/]+\/(?:shared\/)?c)\/[^/]+$/.test(pathname);
-        if (!chatgptCopyButtonEnabled || !isConversationPath) {
-            existing?.remove();
-            if (chatgptCopyButtonEnabled && pathname.includes("/c/")) {
-                reportChatgptFailure(
-                    `未识别 ChatGPT 会话路径，复制按钮无法插入：${pathname}`,
-                );
-            }
-            return;
-        }
-        const runtimeReady =
-            chatgptModuleInjectionStarted &&
-            chatgptRuntimeModelState?.pathname === pathname;
-        if (!runtimeReady) {
-            existing?.remove();
-            return;
-        }
-        const ready = chatgptRuntimeModelState.copyReady;
-        if (
-            existing instanceof HTMLButtonElement &&
-            existing.dataset.pathname === pathname &&
-            existing.disabled === !ready
-        ) {
-            return;
-        }
-        if (existing instanceof HTMLButtonElement) {
-            existing.dataset.pathname = pathname;
-            existing.disabled = !ready;
-            return;
-        }
-
-        const nativeButton = [
-            ...document.querySelectorAll(
-                'header[data-app-shell-titlebar] button[aria-haspopup="menu"], header[data-app-shell-titlebar] button:has(use[href$="#bookmark-light-16"])',
-            ),
-        ].findLast((button) => !button.closest('[aria-hidden="true"]'));
-        const sprite = document
-            .querySelector('svg use[href*="/cdn/assets/icons-"]')
-            ?.getAttribute("href")
-            ?.split("#")[0];
-        if (!nativeButton || !sprite) return;
-
-        const button = nativeButton.cloneNode(true);
-        const nativeIcons = [
-            ...(button.lastElementChild?.querySelectorAll("svg") ?? []),
-        ];
-        if (
-            !(button instanceof HTMLButtonElement) ||
-            nativeIcons.length === 0
-        ) {
-            return;
-        }
-        button.id = "checker-next-copy-conversation-button";
-        button.type = "button";
-        button.dataset.pathname = pathname;
-        button.disabled = !ready;
-        bindChatgptCopyButton(
-            button,
-            () => {
-                const currentTurns =
-                    pageWindow.__checkerNextRuntimeModelBridge.getTurns(
-                        chatgptCopyDetailsEnabled,
-                    );
-                if (!Array.isArray(currentTurns)) {
-                    throw new Error("当前会话尚未载入");
-                }
-                return formatChatgptConversation(currentTurns);
-            },
-            sprite,
-        );
-        if (nativeButton.querySelector('use[href$="#bookmark-light-16"]')) {
-            button.classList.add("pointer-events-auto");
-            nativeButton.closest(".pointer-events-auto.flex").before(button);
-        } else {
-            nativeButton.before(button);
-        }
     }
 
     // 全局状态：记录弹窗是否正在显示
@@ -4386,7 +4483,6 @@
                 sliderDot,
                 chatgptModuleInjectionStarted && chatgptCopyButtonEnabled,
             );
-            syncChatgptCopyButton();
         }
 
         function bindChatgptCopyButtonToggle() {
@@ -4398,9 +4494,9 @@
             updateChatgptCopyButtonToggle();
             toggle.addEventListener("change", () => {
                 chatgptCopyButtonEnabled = toggle.checked;
-                chatgptDotCopyStyle.media = chatgptCopyButtonEnabled
-                    ? "not all"
-                    : "all";
+                pageWindow.dispatchEvent(
+                    new pageWindow.Event(CHATGPT_COPY_EVENT),
+                );
                 localStorage.setItem(
                     CHATGPT_COPY_BUTTON_ENABLED_KEY,
                     String(chatgptCopyButtonEnabled),
@@ -4629,7 +4725,6 @@
         if (!document.getElementById("checker-next-displayBox")) {
             createElements();
         }
-        if (isChatgptMode) syncChatgptCopyButton();
     });
 
     function startObserverWhenReady() {
