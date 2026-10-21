@@ -2197,7 +2197,7 @@
         module(
             "Markdown 序列化模块",
             (source) =>
-                source.includes('"data-prompt-link-href"') &&
+                source.includes('type:"link",url:') &&
                 source.includes("resourceLink:!0"),
             (markdown) => {
                 const link = exported(markdown, "Markdown 链接", (source) =>
@@ -2259,7 +2259,7 @@
         }
 
         const threadSettings =
-            /[\w$]+=\(0,[\w$]+\.[\w$]+\)\("modelSettings"\),([\w$]+)=/;
+            /([\w$]+)=\(0,[\w$]+\.[\w$]+\)\("modelSettings"\)/;
         module(
             "任务模型状态模块",
             (source) => threadSettings.test(source),
@@ -2268,7 +2268,10 @@
                 const host = single(
                     [
                         ...state.source.matchAll(
-                            /function [\w$]+\(e,t\)\{return [\w$]+\(e,t\)\?\.getHostId\(\)\?\?e\.get\(([\w$]+),t\)\}/g,
+                            new RegExp(
+                                `${RegExp.escape(settings)},\\{hostId:[\\w$]+\\?\\.managerHostId\\?\\?[\\w$]+\\(([\\w$]+),[\\w$]+\\),threadId:[\\w$]+\\}`,
+                                "g",
+                            ),
                         ),
                     ],
                     "任务宿主状态",
@@ -2517,6 +2520,40 @@
         );
 
         module(
+            "授权组件模块",
+            (source) =>
+                source.includes(".codex_mcp_elicitation?.kind") &&
+                source.includes("approveDisabled:") &&
+                source.includes("connectionRequired"),
+            (approval) => {
+                const render = single(
+                    [
+                        ...approval.source.matchAll(
+                            /=([\w$]+);return [\w$]+\.request\?\.body\.codex_mcp_elicitation\?\.kind==="openaiForm"/g,
+                        ),
+                    ],
+                    "授权组件",
+                )[1];
+                const react = single(
+                    [
+                        ...new Set(
+                            [
+                                ...approval.source.matchAll(
+                                    /\(0,([\w$]+)\.useState\)/g,
+                                ),
+                            ].map((match) => match[1]),
+                        ),
+                    ],
+                    "React 接口",
+                );
+                append(
+                    approval,
+                    `${render}=${api}.approval(${render},${react});`,
+                );
+            },
+        );
+
+        module(
             "消息操作模块",
             (source) =>
                 source.includes("copyPlainTextFromSource") &&
@@ -2551,14 +2588,6 @@
                     messages,
                     `${api}.register({messageText:${copyText},parseMarkdown:content=>${parse}(content,{extensions:[${extensions}()],mdastExtensions:[${mdastExtensions}()]}),resolveReference:${resolve}});`,
                 );
-                const approval = single(
-                    [
-                        ...messages.source.matchAll(
-                            /let [\w$]+=([\w$]+);[\w$]+\.request\?\.body\.codex_mcp_elicitation\?\.kind==="openaiForm"/g,
-                        ),
-                    ],
-                    "授权组件",
-                )[1];
                 const react = single(
                     [
                         ...new Set(
@@ -2570,10 +2599,6 @@
                         ),
                     ],
                     "React 接口",
-                );
-                append(
-                    messages,
-                    `${approval}=${api}.approval(${approval},${react});`,
                 );
                 const renderMessage = single(
                     [
