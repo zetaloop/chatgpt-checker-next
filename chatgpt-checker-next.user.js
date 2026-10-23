@@ -2671,6 +2671,9 @@
                 const query = exported(queries, "会话查询接口", (source) =>
                     source.includes('queryKey:["chatgpt-conversation",'),
                 );
+                if (!/^[A-Za-z_$][\w$]*$/.test(query.name)) {
+                    throw new Error("会话查询接口 名称非法");
+                }
                 append(queries, `${query.name}=${api}.query(${query.name});`);
             },
         );
