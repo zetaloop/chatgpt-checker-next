@@ -2150,12 +2150,8 @@
                 source.includes("ChatGptConversationPage:") &&
                 source.includes("ChatGptSharedConversationPage:"),
             (page) => {
-                const view = exported(
-                    page,
-                    "会话页面",
-                    (source) =>
-                        source.includes("previewLifecycle:") &&
-                        source.includes("viewActivation:"),
+                const view = exported(page, "会话页面", (source) =>
+                    /\{[^{}]*\bisInlinePreview:[^{}]*\}=[\w$]+/.test(source),
                 );
                 const source = view.toString();
                 const serverId = single(
