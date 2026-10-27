@@ -28,6 +28,7 @@
         : MODE_CHATGPT;
     const isChatgptMode = currentPageMode === MODE_CHATGPT;
     const isCodexMode = currentPageMode === MODE_CODEX;
+    const CHATGPT_POW_RADIX_KEY = "checker-next-chatgpt-pow-radix";
     const CHATGPT_FAKE_PLAN_KEY = "checker-next-chatgpt-fake-plan";
     const CHATGPT_FAKE_PLAN_ENABLED_KEY =
         "checker-next-chatgpt-fake-plan-enabled";
@@ -53,6 +54,9 @@
     const CHATGPT_RUNTIME_MODEL_SET_EVENT = "checker-next-runtime-model-set";
     const CHATGPT_RUNTIME_CUSTOM_VALUE = "__checker_next_custom__";
 
+    let powDifficulty = "...";
+    let powRadix =
+        localStorage.getItem(CHATGPT_POW_RADIX_KEY) === "16" ? 16 : 10;
     let chatgptModuleInjectionEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_MODULE_INJECTION_ENABLED_KEY) !== "false";
@@ -3536,7 +3540,7 @@
             <div style="margin-bottom: 2px;">
                 <strong>ChatGPT</strong>
             </div>
-            PoW难度：<span id="difficulty">...</span><span id="difficulty-level" style="margin-left: 3px"></span>
+            PoW难度：<button type="button" id="difficulty" aria-describedby="tooltip" style="border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer;">${formatDifficulty(powDifficulty)}</button><span id="difficulty-level" style="margin-left: 3px"></span>
             <span id="difficulty-tooltip" style="
                 cursor: pointer;
                 color: #fff;
@@ -4301,7 +4305,7 @@
 
         const tooltip = createTooltip(
             "tooltip",
-            "这个数值越大，相当于 ChatGPT 认为你的 IP 风险越低。",
+            "这个数值越大，相当于 ChatGPT 认为你的 IP 风险越低。点击数值切换十六进制与十进制。",
         );
 
         // 创建 Codex 提示框
@@ -4637,6 +4641,12 @@
         }
 
         if (isChatgptMode) {
+            const difficultyElement = document.getElementById("difficulty");
+            difficultyElement.addEventListener("click", () => {
+                powRadix = powRadix === 10 ? 16 : 10;
+                localStorage.setItem(CHATGPT_POW_RADIX_KEY, String(powRadix));
+                difficultyElement.textContent = formatDifficulty(powDifficulty);
+            });
             bindToggle(
                 "chatgpt-module-injection",
                 chatgptModuleInjectionEnabled,
@@ -4738,8 +4748,18 @@
     let powFetched = false;
     let codexFetched = false;
 
+    function formatDifficulty(difficulty) {
+        return difficulty === "..." || powRadix === 16
+            ? difficulty
+            : Number.parseInt(difficulty, 16).toString();
+    }
+
     // 更新difficulty指示器
     function updateDifficultyIndicator(difficulty) {
+        powDifficulty = difficulty;
+        const difficultyElement = document.getElementById("difficulty");
+        if (difficultyElement)
+            difficultyElement.textContent = formatDifficulty(difficulty);
         const difficultyLevel = document.getElementById("difficulty-level");
 
         if (difficulty === "...") {
@@ -5276,16 +5296,12 @@
                 const difficulty = data.proofofwork
                     ? data.proofofwork.difficulty
                     : "...";
-                const difficultyElement = document.getElementById("difficulty");
-                if (difficultyElement) difficultyElement.innerText = difficulty;
                 updatePersona(data.persona);
                 updateDifficultyIndicator(difficulty);
 
                 return;
             } catch (e) {
                 console.error("[CheckerNext] 处理挑战响应出错:", e);
-                const difficultyElement = document.getElementById("difficulty");
-                if (difficultyElement) difficultyElement.innerText = "...";
                 updateDifficultyIndicator("...");
                 return;
             }
