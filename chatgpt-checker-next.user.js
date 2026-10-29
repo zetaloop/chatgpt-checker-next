@@ -687,7 +687,12 @@
                 getCopyEnabled,
                 getCopyEnabled,
             );
-            if (!enabled) return null;
+            if (
+                !enabled ||
+                !native.shell?.HeaderAction ||
+                !native.shell?.HeaderToolbar?.Actions
+            )
+                return null;
             return native.createElement(
                 native.ErrorBoundary,
                 null,
@@ -1291,7 +1296,7 @@
                                 React.Fragment,
                                 null,
                                 props.sourcesAction,
-                                appScope
+                                appScope && native.mapping
                                     ? React.createElement(MessageInfo, {
                                           conversationId: props.conversationId,
                                       })
@@ -1310,7 +1315,9 @@
                         );
                     }
                     return React.createElement(
-                        appScope && props.item?.type === "user-message"
+                        appScope &&
+                            native.mapping &&
+                            props.item?.type === "user-message"
                             ? MessageInfo
                             : fn,
                         props,
