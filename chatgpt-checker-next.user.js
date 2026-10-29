@@ -2055,10 +2055,7 @@
 
         module(
             "新建聊天导航按钮模块",
-            (source) =>
-                source.includes("newChatMessage:") &&
-                source.includes("disabled:") &&
-                source.includes("staticIcon:"),
+            (source) => /\{[^{}]*\bnewChatMessage:[^{}]*\}=[\w$]+/.test(source),
             (button) => {
                 const [, start] = single(
                     [...button.source.matchAll(/onStartChat:([\w$]+)/g)],
