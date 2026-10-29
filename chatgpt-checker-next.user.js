@@ -687,7 +687,12 @@
                 getCopyEnabled,
                 getCopyEnabled,
             );
-            if (!enabled) return null;
+            if (
+                !enabled ||
+                !native.shell?.HeaderAction ||
+                !native.shell?.HeaderToolbar?.Actions
+            )
+                return null;
             return native.createElement(
                 native.ErrorBoundary,
                 null,
@@ -1291,7 +1296,7 @@
                                 React.Fragment,
                                 null,
                                 props.sourcesAction,
-                                appScope
+                                appScope && native.mapping
                                     ? React.createElement(MessageInfo, {
                                           conversationId: props.conversationId,
                                       })
@@ -1310,7 +1315,9 @@
                         );
                     }
                     return React.createElement(
-                        appScope && props.item?.type === "user-message"
+                        appScope &&
+                            native.mapping &&
+                            props.item?.type === "user-message"
                             ? MessageInfo
                             : fn,
                         props,
@@ -2297,7 +2304,7 @@
         module(
             "页面布局模块",
             (source) =>
-                source.includes("PaneHeaderRow:") &&
+                source.includes("HeaderAction:") &&
                 source.includes("HeaderContextMenuItem:") &&
                 source.includes("UnifiedTabStrip:"),
             (shell) => {
@@ -2314,11 +2321,15 @@
             (source) =>
                 source.includes("context_truncation_continuation:") &&
                 source.includes("getRenderTelemetry:") &&
-                source.includes("isStreaming:") &&
-                !source.includes("function "),
+                source.includes("isStreaming:(0,"),
             (content) => {
                 const [contentExport] = single(
-                    Object.entries(getChatgptModuleExports(content.source)),
+                    Object.entries(
+                        getChatgptModuleExports(content.source),
+                    ).filter(
+                        ([, name]) =>
+                            !content.source.includes(`function ${name}(`),
+                    ),
                     "会话内容选择器",
                 );
                 bindings.turns = [content.id, contentExport];
