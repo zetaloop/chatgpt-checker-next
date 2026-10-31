@@ -2257,15 +2257,10 @@
                 source.includes("services:{") &&
                 source.includes("renderMessageFooter:"),
             (messages) => {
-                const create = single(
-                    [
-                        ...messages.source.matchAll(
-                            /historyAnchor:void 0,newerLoading:!1,messages:\[\][\s\S]*?function ([\w$]+)\(/g,
-                        ),
-                    ],
-                    "Dots 消息控制器",
-                )[1];
-                append(messages, `${create}=${api}.dotController(${create});`);
+                const create = exported(messages, "Dots 消息控制器", (source) =>
+                    /\{[^{}]*\bcapturePageContext:[^{}]*\}=[\w$]+/.test(source),
+                );
+                wrap(messages, create, `${api}.dotController`);
             },
             "dot",
         );
@@ -2314,12 +2309,26 @@
                 )[1];
                 const menu = single(
                     [
-                        ...header.source.matchAll(
-                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?triggerButtonColor:"toolbar",triggerButtonSize:/g,
+                        ...new Set(
+                            [
+                                ...header.source.matchAll(
+                                    /\(0,[\w$]+\.(?:jsx|jsxs)\)\(([\w$]+),\{([^{}]*)/g,
+                                ),
+                            ]
+                                .filter((match) =>
+                                    [
+                                        "conversationId:",
+                                        "roomId:",
+                                        "shareableDot:",
+                                    ].every((property) =>
+                                        match[2].includes(property),
+                                    ),
+                                )
+                                .map((match) => match[1]),
                         ),
                     ],
                     "Dot 更多操作",
-                )[1];
+                );
                 append(
                     header,
                     `${render}=${api}.dotHeader(${render},${menu});`,
