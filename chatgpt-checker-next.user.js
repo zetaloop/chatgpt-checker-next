@@ -136,6 +136,9 @@
                                 });
                             }
                         } else {
+                            if (target.source === source)
+                                target.source =
+                                    normalizeChatgptModuleExports(source);
                             entry.apply(target);
                         }
                         entry.id = id;
@@ -1758,6 +1761,133 @@
         }
     }
 
+    function getChatgptExpressionEnd(source, start) {
+        // 只跳过导出值中的字面量和嵌套括号，不执行模块代码。
+        const brackets = [];
+        let expression = true;
+        let control = false;
+        const literal =
+            /^(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\/)/;
+        const regex = /^\/(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[a-z]*/;
+        for (let index = start; index < source.length; ) {
+            const char = source[index];
+            if (brackets.at(-1) === "`") {
+                if (char === "\\") index += 2;
+                else if (char === "`") {
+                    brackets.pop();
+                    expression = false;
+                    index++;
+                } else if (source.startsWith("${", index)) {
+                    brackets.push("}");
+                    expression = true;
+                    index += 2;
+                } else index++;
+                continue;
+            }
+            if (/\s/.test(char)) {
+                index++;
+                continue;
+            }
+            const token =
+                source.slice(index).match(literal) ??
+                (char === "/" && expression
+                    ? source.slice(index).match(regex)
+                    : null);
+            if (token) {
+                index += token[0].length;
+                if (!/^\/[/\*]/.test(token[0])) expression = false;
+                continue;
+            }
+            if (/[\w$]/.test(char)) {
+                const word = source.slice(index).match(/^[\w$]+/)[0];
+                index += word.length;
+                control = /^(if|while|for|with|switch|catch)$/.test(word);
+                expression =
+                    /^(return|throw|case|yield|await|typeof|void|delete|new|in|instanceof|of|else|do)$/.test(
+                        word,
+                    );
+                continue;
+            }
+            if (char === "`") brackets.push("`");
+            else if ("([{".includes(char))
+                brackets.push(
+                    char === "(" && control
+                        ? ")control"
+                        : { "(": ")", "[": "]", "{": "}" }[char],
+                );
+            else if (")]}".includes(char)) {
+                if (!brackets.length) return index;
+                expression = brackets.pop() === ")control";
+                index++;
+                continue;
+            } else if ((char === "," || char === ";") && !brackets.length)
+                return index;
+            else if (
+                source.startsWith("++", index) ||
+                source.startsWith("--", index)
+            ) {
+                index += 2;
+                continue;
+            }
+            control = false;
+            expression = true;
+            index++;
+        }
+        return source.length;
+    }
+
+    function normalizeChatgptModuleExports(source) {
+        const parameters = source.match(/^[^(]+\([^,]+,([^,]+),([^)]*)\)\{/);
+        if (!parameters) return source;
+        const [, exports, require] = parameters;
+        const pattern = new RegExp(
+            `${RegExp.escape(require)}\\.d\\(${RegExp.escape(exports)},\\{([^{}]*)\\},\\{`,
+            "g",
+        );
+        const functions = [];
+        const replacements = [];
+        for (const match of source.matchAll(pattern)) {
+            const getters = match[1] ? [match[1]] : [];
+            const direct = [];
+            let cursor = match.index + match[0].length;
+            while (source[cursor] !== "}") {
+                const field = source.slice(cursor).match(/^([\w$]+):/);
+                if (!field) throw new Error("模块导出字段未匹配");
+                const start = cursor + field[0].length;
+                cursor = getChatgptExpressionEnd(source, start);
+                const value = source.slice(start, cursor);
+                let name = value;
+                if (/^(?:async )?function\s*\*?\(/.test(value)) {
+                    name = `__checkerNextExport${functions.length}`;
+                    if (source.includes(name))
+                        throw new Error("模块导出函数重名");
+                    functions.push(
+                        value.replace(
+                            /^(async )?function(\s*\*)?/,
+                            `$1function$2 ${name}`,
+                        ),
+                    );
+                }
+                if (/^[\w$]+$/.test(name))
+                    getters.push(`${field[1]}:()=>${name}`);
+                else direct.push(`${field[1]}:${value}`);
+                if (source[cursor] !== ",") break;
+                cursor++;
+            }
+            replacements.push([
+                match.index,
+                cursor + 1,
+                `${require}.d(${exports},{${getters.join(",")}},{${direct.join(",")}}`,
+            ]);
+        }
+        // getter 保留可包装的函数引用；其他表达式仍在原处只求值一次。
+        for (const [start, end, value] of replacements.reverse())
+            source = source.slice(0, start) + value + source.slice(end);
+        return functions.length
+            ? `${source.slice(0, -1)};${functions.join(";")}}`
+            : source;
+    }
+
     function getChatgptModuleExports(source, gettersOnly = false) {
         const [, exports, require] = source.match(
             /^[^(]+\([^,]+,([^,]+),([^)]*)\)\{/,
@@ -1797,11 +1927,15 @@
                         (match) => match[1],
                     ),
                 );
+                // 内层同名函数可能对应尚未初始化的顶层变量，读取时跳过该值。
                 const members = Object.entries(
                     getChatgptModuleExports(target.source, true),
                 )
                     .filter(([, name]) => declarations.has(name))
-                    .map(([key, name]) => `${JSON.stringify(key)}:${name}`)
+                    .map(
+                        ([key, name]) =>
+                            `...(()=>{try{return {${JSON.stringify(key)}:${name}}}catch{return {}}})()`,
+                    )
                     .join(",");
                 // 函数声明在入口前完成提升，提前返回即可读取其源码。
                 target.functions = compileChatgptModule(
