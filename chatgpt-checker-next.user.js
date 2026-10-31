@@ -1920,8 +1920,7 @@
             "响应式状态模块",
             (source) =>
                 source.includes("getOwnValue") &&
-                source.includes("createSubscriberStore") &&
-                source.includes("Missing parent scope"),
+                source.includes("createSubscriberStore"),
             (scopes) => {
                 const useScope = exported(
                     scopes,
@@ -2155,8 +2154,9 @@
         module(
             "侧栏功能入口模块",
             (source) =>
-                source.includes('animatedIcon:"sidebar-images"') &&
-                source.includes('animatedIcon:"sidebar-library"'),
+                /onSelect:(?:\(\)|[\w$]+)=>/.test(source) &&
+                /onRestore:\(\)=>/.test(source) &&
+                source.includes("isCurrentDestination:"),
             (features) => {
                 features.source = features.source.replaceAll(
                     /onSelect:(?:\(\)|[\w$]+)=>\{(?:[\w$]+\(\),)?[\w$]+\(("[^"\\]+"|[\w$]+\.[\w$]+)(?=[,)])/g,
@@ -2178,22 +2178,23 @@
             },
         );
 
-        module(
-            "模型控件模块",
-            (source) =>
-                source.includes("xHighExperimentResetContextKey") &&
-                source.includes("onThinkingEffortChange"),
-            (picker) => {
-                const renderPicker = exported(
-                    picker,
-                    "模型控件",
-                    (source) =>
-                        source.includes("xHighExperimentResetContextKey") &&
-                        source.includes("onThinkingEffortChange"),
-                );
-                wrap(picker, renderPicker, `${api}.picker`);
-            },
-        );
+        const modelPicker = (source) =>
+            [
+                ...source.matchAll(
+                    /\{([^{}]*\bonThinkingEffortChange:[^{}]*)\}=[\w$]+/g,
+                ),
+            ].some(([, props]) =>
+                [
+                    "models:",
+                    "selectedModel:",
+                    "onModelChange:",
+                    "isTppConversation:",
+                ].every((property) => props.includes(property)),
+            );
+        module("模型控件模块", modelPicker, (picker) => {
+            const renderPicker = exported(picker, "模型控件", modelPicker);
+            wrap(picker, renderPicker, `${api}.picker`);
+        });
 
         module(
             "会话渲染模块",
@@ -2248,17 +2249,13 @@
             "chat",
         );
 
+        const dotController = /\{[^{}]*\bsubscribeToUpdates:[^{}]*\}=[\w$]+/;
         module(
             "Dots 消息状态模块",
-            (source) =>
-                source.includes(
-                    "historyAnchor:void 0,newerLoading:!1,messages:[]",
-                ) &&
-                source.includes("services:{") &&
-                source.includes("renderMessageFooter:"),
+            (source) => dotController.test(source),
             (messages) => {
                 const create = exported(messages, "Dots 消息控制器", (source) =>
-                    /\{[^{}]*\bcapturePageContext:[^{}]*\}=[\w$]+/.test(source),
+                    dotController.test(source),
                 );
                 wrap(messages, create, `${api}.dotController`);
             },
@@ -2274,7 +2271,7 @@
                 const renderMessage = single(
                     [
                         ...messages.source.matchAll(
-                            /function ([\w$]+)\(e\)\{(?:(?!function [\w$]+\()[\s\S])*?className:`message-row \$\{/g,
+                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?className:`message-row \$\{/g,
                         ),
                     ],
                     "Dots 消息行",
@@ -2282,7 +2279,7 @@
                 const actions = single(
                     [
                         ...messages.source.matchAll(
-                            /function ([\w$]+)\(e\)\{(?:(?!function [\w$]+\()[\s\S])*?`message-inline-actions\$\{/g,
+                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?`message-inline-actions\$\{/g,
                         ),
                     ],
                     "Dots 消息操作栏",
@@ -2363,8 +2360,7 @@
             "页面布局模块",
             (source) =>
                 source.includes("HeaderAction:") &&
-                source.includes("HeaderContextMenuItem:") &&
-                source.includes("UnifiedTabStrip:"),
+                source.includes("HeaderToolbar:"),
             (shell) => {
                 const [exportName] = single(
                     Object.entries(getChatgptModuleExports(shell.source)),
@@ -2910,7 +2906,6 @@
             "消息操作模块",
             (source) =>
                 source.includes("copyPlainTextFromSource") &&
-                source.includes("suppressCopyTurnToClipboardAnalytics") &&
                 source.includes("getCopyHtml"),
             (messages) => {
                 const copyText = single(
