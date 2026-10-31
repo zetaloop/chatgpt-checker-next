@@ -1340,20 +1340,15 @@
                     });
                 };
             },
-            time(fn, jsx) {
+            time(fn) {
                 return function (props) {
                     const result = fn(props);
                     return result
-                        ? jsx(
-                              result.type,
-                              {
-                                  ...result.props,
-                                  title:
-                                      props.title ??
-                                      formatAbsoluteTime(props.sentAtMs),
-                              },
-                              result.key,
-                          )
+                        ? native.cloneElement(result, {
+                              title:
+                                  props.title ??
+                                  formatAbsoluteTime(props.sentAtMs),
+                          })
                         : result;
                 };
             },
@@ -1884,9 +1879,9 @@
                 throw new Error("原生函数定义未匹配");
             target.source = target.source.replace(from, () => to);
         };
-        const wrap = (target, fn, wrapper, args = "") => {
+        const wrap = (target, fn, wrapper) => {
             const value = fn.inline ? fn.toString() : fn.name;
-            const wrapped = `${wrapper}(${value}${args ? `,${args}` : ""})`;
+            const wrapped = `${wrapper}(${value})`;
             if (fn.inline) {
                 replace(target, value, wrapped);
             } else if (fn.getter) {
@@ -3024,9 +3019,7 @@
         module(
             "消息时间模块",
             (source) =>
-                source.includes("nowMs:") &&
-                source.includes("weekdayFormat:") &&
-                source.includes("text-xs text-tertiary"),
+                source.includes("nowMs:") && source.includes("weekdayFormat:"),
             (time) => {
                 const render = exported(
                     time,
@@ -3035,11 +3028,7 @@
                         source.includes("sentAtMs:") &&
                         source.includes("weekdayFormat:"),
                 );
-                const jsx = single(
-                    [...render.toString().matchAll(/\(0,([\w$]+)\.jsx\)/g)],
-                    "时间元素接口",
-                )[1];
-                wrap(time, render, `${api}.time`, `${jsx}.jsx`);
+                wrap(time, render, `${api}.time`);
                 bindings.messageTime = [time.id, render.exportName];
             },
             "chat",
