@@ -1742,10 +1742,10 @@
         );
     }
 
-    function compileChatgptModule(source) {
+    function compileChatgptModule(source, strict = true) {
         const script = document.createElement("script");
         script.nonce = document.querySelector("script[nonce]")?.nonce ?? "";
-        script.textContent = `"use strict";globalThis.__checkerNextModule=Object.values({${source}})[0];`;
+        script.textContent = `${strict ? '"use strict";' : ""}globalThis.__checkerNextModule=Object.values({${source}})[0];`;
         try {
             document.head.append(script);
             const factory = pageWindow.__checkerNextModule;
@@ -1762,22 +1762,56 @@
         const [, exports, require] = source.match(
             /^[^(]+\([^,]+,([^,]+),([^)]*)\)\{/,
         );
-        const pattern = new RegExp(
-            `${RegExp.escape(require)}\\.d\\(${RegExp.escape(exports)},\\{([^{}]*)\\}(?:,\\{([^{}]*)\\})?`,
-            "g",
-        );
-        return Object.fromEntries(
-            [...source.matchAll(pattern)].flatMap((match) =>
-                (gettersOnly ? [match[1]] : [match[1], match[2] ?? ""]).flatMap(
-                    (table) =>
-                        [
-                            ...table.matchAll(
-                                /(?:^|,)([\w$]+):(?:\(\)=>)?([\w$.]+)/g,
-                            ),
-                        ].map((entry) => [entry[1], entry[2]]),
-                ),
+        const match = source.match(
+            new RegExp(
+                `${RegExp.escape(require)}\\.d\\(${RegExp.escape(exports)},\\{([^{}]*)\\}`,
             ),
         );
+        if (!match) return {};
+        const getters = Object.fromEntries(
+            [...match[1].matchAll(/(?:^|,)([\w$]+):\(\)=>([\w$.]+)/g)].map(
+                (entry) => [entry[1], entry[2]],
+            ),
+        );
+        const offset = match.index + match[0].length;
+        if (gettersOnly || source[offset] !== ",") return getters;
+
+        const references = new WeakMap();
+        const reference = (name) => {
+            const value = new Proxy(
+                {},
+                { get: (_, key) => reference(`${name}.${String(key)}`) },
+            );
+            references.set(value, name);
+            return value;
+        };
+        const scope = new Proxy(
+            {},
+            {
+                has: () => true,
+                get: (_, key) =>
+                    key === Symbol.unscopables
+                        ? undefined
+                        : reference(String(key)),
+            },
+        );
+        const values = source.slice(offset + 1, source.lastIndexOf("})") + 1);
+        const definitions = compileChatgptModule(
+            `read(scope){with(scope){return ${values}}}`,
+            false,
+        )(scope);
+        return {
+            ...getters,
+            ...Object.fromEntries(
+                Object.entries(definitions).map(([key, value]) => [
+                    key,
+                    references.get(value) ??
+                        (typeof value === "string"
+                            ? JSON.stringify(value)
+                            : value),
+                ]),
+            ),
+        };
     }
 
     function createChatgptModulePatches() {
@@ -1792,21 +1826,37 @@
         };
         const exported = (target, label, predicate) => {
             if (!target.functions) {
+                target.exports = getChatgptModuleExports(target.source);
+                target.getters = getChatgptModuleExports(target.source, true);
                 const declarations = new Set(
                     [...target.source.matchAll(/\bfunction\s+([\w$]+)\(/g)].map(
                         (match) => match[1],
                     ),
                 );
-                const members = Object.entries(
-                    getChatgptModuleExports(target.source, true),
-                )
+                const members = Object.entries(target.exports)
                     .filter(([, name]) => declarations.has(name))
-                    .map(([key, name]) => `${JSON.stringify(key)}:${name}`)
+                    .map(([key, name]) => `${JSON.stringify(key)}:()=>${name}`)
                     .join(",");
-                // 函数声明在入口前完成提升，提前返回即可读取其源码。
-                target.functions = compileChatgptModule(
-                    target.source.replace("{", `{return {${members}};`),
-                )();
+                target.functions = Object.fromEntries(
+                    Object.entries(target.exports).filter(
+                        ([, value]) => typeof value === "function",
+                    ),
+                );
+                // 函数声明在入口前完成提升，词法绑定保留为状态引用。
+                const getters = members
+                    ? compileChatgptModule(
+                          target.source.replace("{", `{return {${members}};`),
+                      )()
+                    : {};
+                for (const [key, get] of Object.entries(getters)) {
+                    try {
+                        const value = get();
+                        if (typeof value === "function")
+                            target.functions[key] = value;
+                    } catch (error) {
+                        if (error.name !== "ReferenceError") throw error;
+                    }
+                }
             }
             const matches = Object.entries(target.functions).filter(
                 ([exportName, fn]) =>
@@ -1815,14 +1865,16 @@
                         : predicate(fn.toString()),
             );
             const [exportName, fn] = single(
-                [
-                    ...new Map(
-                        matches.map((item) => [item[1].name, item]),
-                    ).values(),
-                ],
+                [...new Map(matches.map((item) => [item[1], item])).values()],
                 label,
             );
-            return { exportName, name: fn.name, toString: () => fn.toString() };
+            return {
+                exportName,
+                name: fn.name,
+                inline: typeof target.exports[exportName] === "function",
+                getter: exportName in target.getters,
+                toString: () => fn.toString(),
+            };
         };
         const append = (target, addition) => {
             target.source = `${target.source.slice(0, -1)};${addition}}`;
@@ -1830,7 +1882,22 @@
         const replace = (target, from, to) => {
             if (!target.source.includes(from))
                 throw new Error("原生函数定义未匹配");
-            target.source = target.source.replace(from, to);
+            target.source = target.source.replace(from, () => to);
+        };
+        const wrap = (target, fn, wrapper, args = "") => {
+            const value = fn.inline ? fn.toString() : fn.name;
+            const wrapped = `${wrapper}(${value}${args ? `,${args}` : ""})`;
+            if (fn.inline) {
+                replace(target, value, wrapped);
+            } else if (fn.getter) {
+                append(target, `${fn.name}=${wrapped};`);
+            } else {
+                const [, exports, require] = target.source.match(
+                    /^[^(]+\([^,]+,([^,]+),([^)]*)\)\{/,
+                );
+                const define = `${require}.d(${exports},`;
+                replace(target, define, `${fn.name}=${wrapped};${define}`);
+            }
         };
         const api = "globalThis.__checkerNextRuntimeModelBridge";
         const fakePlan = `localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_ENABLED_KEY)})==="true"?localStorage.getItem(${JSON.stringify(CHATGPT_FAKE_PLAN_KEY)})||"pro":""`;
@@ -1884,8 +1951,9 @@
                 )[1];
                 append(
                     scopes,
-                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useState:${react}.useState,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,Fragment:${react}.Fragment,Component:${react}.Component,useSyncExternalStore:${react}.useSyncExternalStore});${useScope.name}=${api}.scope(${useScope.name});`,
+                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useState:${react}.useState,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,Fragment:${react}.Fragment,Component:${react}.Component,useSyncExternalStore:${react}.useSyncExternalStore});`,
                 );
+                wrap(scopes, useScope, `${api}.scope`);
             },
         );
 
@@ -1896,7 +1964,7 @@
                 source.includes("sizingLabels:"),
             (button) => {
                 const render = exported(button, "按钮组件", (source) =>
-                    /^function [\w$]+\([\w$]+\)\{let [^{}]*;return /.test(
+                    /^function(?: [\w$]+)?\([\w$]+\)\{let [^{}]*;return /.test(
                         source,
                     ),
                 );
@@ -1950,10 +2018,7 @@
                 const item = exported(navigation, "侧栏导航项", (source) =>
                     source.includes("sidebar.navItem.unread"),
                 );
-                append(
-                    navigation,
-                    `${item.name}=${api}.sidebarNav(${item.name});`,
-                );
+                wrap(navigation, item, `${api}.sidebarNav`);
             },
         );
 
@@ -1966,10 +2031,7 @@
                 const render = exported(row, "侧栏行", (source) =>
                     source.includes("hasNavigationLink:"),
                 );
-                append(
-                    row,
-                    `${render.name}=${api}.sidebarRow(${render.name});`,
-                );
+                wrap(row, render, `${api}.sidebarRow`);
             },
         );
 
@@ -1996,6 +2058,7 @@
                         getChatgptModuleExports(routes.source),
                     ).filter(
                         ([, name]) =>
+                            typeof name !== "function" &&
                             !routes.source.includes(`function ${name}(`),
                     ),
                     "侧栏路由表",
@@ -2128,10 +2191,7 @@
                         source.includes("xHighExperimentResetContextKey") &&
                         source.includes("onThinkingEffortChange"),
                 );
-                append(
-                    picker,
-                    `${renderPicker.name}=${api}.picker(${renderPicker.name});`,
-                );
+                wrap(picker, renderPicker, `${api}.picker`);
             },
         );
 
@@ -2144,10 +2204,7 @@
                 const renderTurns = exported(turns, "会话内容接口", (source) =>
                     source.includes("timestampSeparatorAtMs"),
                 );
-                append(
-                    turns,
-                    `${renderTurns.name}=${api}.turns(${renderTurns.name});`,
-                );
+                wrap(turns, renderTurns, `${api}.turns`);
             },
             "chat",
         );
@@ -2185,10 +2242,8 @@
                     ],
                     "会话 ID 状态",
                 );
-                append(
-                    page,
-                    `${api}.register({serverId:${selector}});${view.name}=${api}.chatView(${view.name});`,
-                );
+                append(page, `${api}.register({serverId:${selector}});`);
+                wrap(page, view, `${api}.chatView`);
             },
             "chat",
         );
@@ -2290,10 +2345,7 @@
                             source,
                         ) && source.includes("persistedCollapsed:"),
                 );
-                append(
-                    analysis,
-                    `${activity.name}=${api}.analysis(${activity.name});`,
-                );
+                wrap(analysis, activity, `${api}.analysis`);
             },
             "chat",
         );
@@ -2325,6 +2377,7 @@
                         getChatgptModuleExports(content.source),
                     ).filter(
                         ([, name]) =>
+                            typeof name !== "function" &&
                             !content.source.includes(`function ${name}(`),
                     ),
                     "会话内容选择器",
@@ -2634,16 +2687,13 @@
                     "Dot 会话接口",
                     "AeonMessagingRoomView",
                 );
-                append(
-                    dot,
-                    `${renderDot.name}=${api}.dotPicker(${renderDot.name});`,
-                );
+                wrap(dot, renderDot, `${api}.dotPicker`);
             },
             "dot",
         );
 
         const conversationOrigin =
-            /function [\w$]+\([\w$]+,[\w$]+,([\w$]+)\)\{[^{}]*\{[^{}]*conversationOrigin:\1\?\?null\}/;
+            /function(?: [\w$]+)?\([\w$]+,[\w$]+,([\w$]+)\)\{[^{}]*\{[^{}]*conversationOrigin:\1\?\?null\}/;
         module(
             "会话状态模块",
             (source) => conversationOrigin.test(source),
@@ -2666,10 +2716,7 @@
                 const store = exported(conversation, "会话存储接口", (source) =>
                     conversationStore.test(source),
                 );
-                append(
-                    conversation,
-                    `${store.name}=${api}.conversation(${store.name});`,
-                );
+                wrap(conversation, store, `${api}.conversation`);
             },
         );
 
@@ -2682,7 +2729,7 @@
                 const query = exported(queries, "会话查询接口", (source) =>
                     source.includes('queryKey:["chatgpt-conversation",'),
                 );
-                append(queries, `${query.name}=${api}.query(${query.name});`);
+                wrap(queries, query, `${api}.query`);
             },
         );
 
@@ -2697,7 +2744,9 @@
                     home,
                     "首页模式接口",
                     (source) =>
-                        /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(source) &&
+                        /^function(?: [\w$]+)?\([\w$]+,[\w$]+\)\{/.test(
+                            source,
+                        ) &&
                         source.includes('"chat"===') &&
                         source.includes(".set("),
                 );
@@ -2729,7 +2778,7 @@
                     [
                         ...resolveHome
                             .toString()
-                            .matchAll(/^function [\w$]+\(([\w$]+)\)\{/g),
+                            .matchAll(/^function(?: [\w$]+)?\(([\w$]+)\)\{/g),
                     ],
                     "首页模式参数",
                 )[1];
@@ -2762,15 +2811,14 @@
                         source.includes("internalOptions:") &&
                         source.includes("workspaceModelPolicy:"),
                 );
-                append(
-                    models,
-                    `${parseModels.name}=${api}.models(${parseModels.name});`,
-                );
+                wrap(models, parseModels, `${api}.models`);
                 const resolveModel = exported(
                     models,
                     "模型选项解析接口",
                     (source) =>
-                        /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(source) &&
+                        /^function(?: [\w$]+)?\([\w$]+,[\w$]+\)\{/.test(
+                            source,
+                        ) &&
                         source.includes("defaultThinkingEffortByModelSlug") &&
                         source.includes("internalOptions"),
                 );
@@ -2801,7 +2849,7 @@
                 );
                 const limitModel = resolveLimit
                     .toString()
-                    .match(/^function [\w$]+\([^,]+,([^,]+),/)?.[1];
+                    .match(/^function(?: [\w$]+)?\([^,]+,([^,]+),/)?.[1];
                 if (!limitModel) throw new Error("模型额度参数未匹配");
                 replace(
                     limits,
@@ -2966,10 +3014,7 @@
                         source.includes("weekdayFormat:") &&
                         source.includes(".formatDate("),
                 );
-                append(
-                    time,
-                    `${format.name}=${api}.timeFormat(${format.name});`,
-                );
+                wrap(time, format, `${api}.timeFormat`);
             },
             "chat",
         );
@@ -2992,10 +3037,7 @@
                     [...render.toString().matchAll(/\(0,([\w$]+)\.jsx\)/g)],
                     "时间元素接口",
                 )[1];
-                append(
-                    time,
-                    `${render.name}=${api}.time(${render.name},${jsx}.jsx);`,
-                );
+                wrap(time, render, `${api}.time`, `${jsx}.jsx`);
                 bindings.messageTime = [time.id, render.exportName];
             },
             "chat",
@@ -3014,9 +3056,10 @@
                         source.includes("readAccounts") &&
                         source.includes("queryClient.fetchQuery"),
                 );
-                append(
+                wrap(
                     accounts,
-                    `{const original=${readAccounts.name};${readAccounts.name}=async function(...args){const result=await original(...args),plan=${fakePlan};return plan?{...result,accounts:result.accounts.map(account=>({...account,plan_type:plan}))}:result}};`,
+                    readAccounts,
+                    `(original=>async function(...args){const result=await original(...args),plan=${fakePlan};return plan?{...result,accounts:result.accounts.map(account=>({...account,plan_type:plan}))}:result})`,
                 );
             },
         );
@@ -3055,9 +3098,10 @@
                     "账号会话接口",
                     "getBrowserChatGptDocumentAuth",
                 );
-                append(
+                wrap(
                     auth,
-                    `{const original=${documentAuth.name};${documentAuth.name}=function(...args){const auth=original(...args),plan=${fakePlan};return !plan||auth==null?auth:{...auth,planType:plan,targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:plan}}}};`,
+                    documentAuth,
+                    `(original=>function(...args){const auth=original(...args),plan=${fakePlan};return !plan||auth==null?auth:{...auth,planType:plan,targetingAccount:auth.targetingAccount==null?auth.targetingAccount:{...auth.targetingAccount,planType:plan}}})`,
                 );
             },
         );
