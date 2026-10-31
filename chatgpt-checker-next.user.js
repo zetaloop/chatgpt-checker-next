@@ -2799,7 +2799,6 @@
         module(
             "模型解析模块",
             (source) =>
-                source.includes("default_slider_upgrades") &&
                 source.includes("workspace_model_policy") &&
                 source.includes("modelConfigBySlug"),
             (models) => {
@@ -2819,8 +2818,7 @@
                         /^function(?: [\w$]+)?\([\w$]+,[\w$]+\)\{/.test(
                             source,
                         ) &&
-                        source.includes("defaultThinkingEffortByModelSlug") &&
-                        source.includes("internalOptions"),
+                        source.includes("defaultThinkingEffortByModelSlug"),
                 );
                 const modelVersion = exported(
                     models,
