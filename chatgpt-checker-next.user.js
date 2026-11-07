@@ -839,7 +839,6 @@
                 };
             },
             projectHref: (id) => native.projectHref(id),
-            libraryHref: (scope) => native.libraryHref(scope),
             scope(fn) {
                 return after(fn, (_, scope) => {
                     if (scope.scope.__scopeBrand === "AppScope") {
@@ -2115,14 +2114,6 @@
                 (source) => source.includes('"/g/:projectId/project"'),
                 (source) => source.includes("}/project`"),
             ],
-            [
-                "libraryHref",
-                "资料库导航地址",
-                (source) => source.includes("library-display-preferences:"),
-                (source) =>
-                    source.includes('"/library"') &&
-                    source.includes(".lastTab"),
-            ],
         ]) {
             module(label, predicate, (routes) => {
                 const href = exported(routes, label, resolve);
@@ -2142,7 +2133,7 @@
                 (navigation) => {
                     navigation.source = navigation.source.replaceAll(
                         /"data-sidebar-destination":([\w$]+)\.id/g,
-                        '"data-checker-next-href":$1.href,$&',
+                        '"data-checker-next-href":$1.newTabPath??$1.href,$&',
                     );
                 },
             );
@@ -2194,19 +2185,6 @@
                 features.source = features.source.replaceAll(
                     /onSelect:(?:\(\)|[\w$]+)=>\{(?:[\w$]+\(\),)?[\w$]+\(("[^"\\]+"|[\w$]+\.[\w$]+)(?=[,)])/g,
                     "href:$1,$&",
-                );
-                features.source = features.source.replaceAll(
-                    /onSelect:([\w$]+)=>\{\(0,[\w$]+\.[\w$]+\)\(([\w$]+),[\w$]+,\1\)\},onRestore:\(\)=>\(0,[\w$]+\.[\w$]+\)\(\2,"(library|sites)"\),isCurrentDestination:[\w$]+\.startsWith\(("[^"]+")\)/g,
-                    (match, argument, scope, destination, path) =>
-                        `href:${destination === "library" ? `${api}.libraryHref(${scope})` : path},${match}`,
-                );
-                features.source = features.source.replaceAll(
-                    /onSelect:[\w$]+=>\{let [\w$]+=\(\)=>\{\(0,[\w$]+\.[\w$]+\)\([\w$]+,[\w$]+,([\w$]+),[\w$]+\.CodexPluginDirectoryEntrypoint\./g,
-                    'href:$1?"/plugins":"/skills",$&',
-                );
-                features.source = features.source.replaceAll(
-                    /onSelect:([\w$]+)=>\{[\w$]+\?[\w$]+\(([\w$]+\.[\w$]+),\{state:\1\}\):[\w$]+\.set\(/g,
-                    "href:$2,$&",
                 );
             },
         );
