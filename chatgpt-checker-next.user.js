@@ -1836,39 +1836,60 @@
                 throw new Error(`${label}匹配到 ${items.length} 个结果`);
             return items[0];
         };
-        const exported = (target, label, predicate) => {
-            if (!target.functions) {
-                target.exports = getChatgptModuleExports(target.source);
-                target.getters = getChatgptModuleExports(target.source, true);
-                const declarations = new Set(
-                    [...target.source.matchAll(/\bfunction\s+([\w$]+)\(/g)].map(
-                        (match) => match[1],
+        // 函数声明在入口前完成提升，词法绑定保留为状态引用。
+        const declarations = (target) => {
+            if (!target.declarations) {
+                const names = [
+                    ...new Set(
+                        [
+                            ...target.source.matchAll(
+                                /\bfunction\s+([\w$]+)\(/g,
+                            ),
+                        ].map((match) => match[1]),
                     ),
-                );
-                const members = Object.entries(target.exports)
-                    .filter(([, name]) => declarations.has(name))
-                    .map(([key, name]) => `${JSON.stringify(key)}:()=>${name}`)
-                    .join(",");
-                target.functions = Object.fromEntries(
-                    Object.entries(target.exports).filter(
-                        ([, value]) => typeof value === "function",
-                    ),
-                );
-                // 函数声明在入口前完成提升，词法绑定保留为状态引用。
-                const getters = members
+                ];
+                const getters = names.length
                     ? compileChatgptModule(
-                          target.source.replace("{", `{return {${members}};`),
+                          target.source.replace(
+                              "{",
+                              `{return {${names.map((name) => `${JSON.stringify(name)}:()=>${name}`).join(",")}};`,
+                          ),
                       )()
                     : {};
-                for (const [key, get] of Object.entries(getters)) {
+                target.declarations = {};
+                for (const [name, get] of Object.entries(getters)) {
                     try {
                         const value = get();
                         if (typeof value === "function")
-                            target.functions[key] = value;
+                            target.declarations[name] = value;
                     } catch (error) {
                         if (error.name !== "ReferenceError") throw error;
                     }
                 }
+            }
+            return target.declarations;
+        };
+        const declared = (target, label, predicate) =>
+            single(
+                Object.entries(declarations(target)).filter(([, fn]) =>
+                    predicate(fn.toString()),
+                ),
+                label,
+            )[0];
+        const exported = (target, label, predicate) => {
+            if (!target.functions) {
+                target.exports = getChatgptModuleExports(target.source);
+                target.getters = getChatgptModuleExports(target.source, true);
+                const functions = declarations(target);
+                target.functions = Object.fromEntries(
+                    Object.entries(target.exports).flatMap(([key, value]) =>
+                        typeof value === "function"
+                            ? [[key, value]]
+                            : value in functions
+                              ? [[key, functions[value]]]
+                              : [],
+                    ),
+                );
             }
             const matches = Object.entries(target.functions).filter(
                 ([exportName, fn]) =>
@@ -2278,22 +2299,16 @@
                 source.includes("message-inline-actions--orbit") &&
                 source.includes("className:`message-row ${"),
             (messages) => {
-                const renderMessage = single(
-                    [
-                        ...messages.source.matchAll(
-                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?className:`message-row \$\{/g,
-                        ),
-                    ],
+                const renderMessage = declared(
+                    messages,
                     "Dots 消息行",
-                )[1];
-                const actions = single(
-                    [
-                        ...messages.source.matchAll(
-                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?`message-inline-actions\$\{/g,
-                        ),
-                    ],
+                    (source) => source.includes("className:`message-row ${"),
+                );
+                const actions = declared(
+                    messages,
                     "Dots 消息操作栏",
-                )[1];
+                    (source) => source.includes("`message-inline-actions${"),
+                );
                 append(
                     messages,
                     `${renderMessage}=${api}.dotMessage(${renderMessage});${actions}=${api}.dotActions(${actions});`,
@@ -2306,14 +2321,9 @@
             "Dot 顶栏模块",
             (source) => source.includes('actionId:"orbit-messaging-actions"'),
             (header) => {
-                const render = single(
-                    [
-                        ...header.source.matchAll(
-                            /function ([\w$]+)\([\w$]+\)\{(?:(?!function [\w$]+\()[\s\S])*?actionId:"orbit-messaging-actions"/g,
-                        ),
-                    ],
-                    "Dot 顶栏",
-                )[1];
+                const render = declared(header, "Dot 顶栏", (source) =>
+                    source.includes('actionId:"orbit-messaging-actions"'),
+                );
                 const menu = single(
                     [
                         ...new Set(
