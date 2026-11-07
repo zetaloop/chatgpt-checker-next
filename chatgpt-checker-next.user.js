@@ -2431,7 +2431,6 @@
             "消息数据模块",
             (source) =>
                 source.includes("is_visually_hidden_from_conversation") &&
-                source.includes(".reverse().map(") &&
                 source.includes(".search_model_queries"),
             (messages) => {
                 for (const [name, predicate] of [
@@ -2439,7 +2438,8 @@
                         "messages",
                         (source) =>
                             source.includes(".current_node") &&
-                            source.includes(".reverse().map("),
+                            source.includes(".mapping") &&
+                            !source.includes(".author.role"),
                     ],
                     [
                         "messageContent",
@@ -2662,17 +2662,16 @@
         module(
             "任务模型目录模块",
             (source) =>
-                source.includes('"models","list"') &&
-                source.includes("modelCatalogPath:") &&
-                source.includes("additionalAvailableModels:"),
+                source.includes('"model/list"') &&
+                source.includes("additionalAvailableModels"),
             (models) => {
                 const useModels = exported(
                     models,
                     "任务模型目录接口",
                     (source) =>
-                        source.includes("model_catalog_json") &&
                         source.includes("additionalAvailableModels") &&
-                        source.includes("model_provider"),
+                        source.includes(".hostId") &&
+                        source.includes(".enabled"),
                 );
                 bindings.useThreadModels = [models.id, useModels.exportName];
             },
@@ -3065,7 +3064,7 @@
                 const result = single(
                     [
                         ...fullAccounts.source.matchAll(
-                            /return ([\w$]+)\?\.\(([\w$]+)\),\2\b/g,
+                            /([\w$]+)\?\.\(([\w$]+)\),\2(?![\w$])/g,
                         ),
                     ],
                     "完整账号查询结果",
@@ -3073,7 +3072,7 @@
                 replace(
                     fullAccounts,
                     result[0],
-                    `return ${result[1]}?.(${result[2]}),((result,plan)=>plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result)(${result[2]},${fakePlan})`,
+                    `${result[1]}?.(${result[2]}),((result,plan)=>plan?{...result,accounts:Object.fromEntries(Object.entries(result.accounts).map(([id,entry])=>[id,{...entry,account:{...entry.account,plan_type:plan}}]))}:result)(${result[2]},${fakePlan})`,
                 );
             },
         );
