@@ -4523,49 +4523,6 @@
             });
         }
 
-        function updateChatgptCopyButtonToggle() {
-            const toggle = document.getElementById(
-                "chatgpt-copy-button-toggle",
-            );
-            const slider = document.getElementById(
-                "chatgpt-copy-button-slider",
-            );
-            const sliderDot = document.getElementById(
-                "chatgpt-copy-button-slider-dot",
-            );
-            if (!(toggle instanceof HTMLInputElement) || !slider || !sliderDot)
-                return;
-
-            toggle.checked = chatgptCopyButtonEnabled;
-            toggle.disabled = !chatgptModuleInjectionStarted;
-            updateToggleStyle(
-                slider,
-                sliderDot,
-                chatgptModuleInjectionStarted && chatgptCopyButtonEnabled,
-            );
-        }
-
-        function bindChatgptCopyButtonToggle() {
-            const toggle = document.getElementById(
-                "chatgpt-copy-button-toggle",
-            );
-            if (!(toggle instanceof HTMLInputElement)) return;
-
-            updateChatgptCopyButtonToggle();
-            toggle.addEventListener("change", () => {
-                chatgptCopyButtonEnabled = toggle.checked;
-                pageWindow.dispatchEvent(
-                    new pageWindow.Event(CHATGPT_COPY_EVENT),
-                );
-                localStorage.setItem(
-                    CHATGPT_COPY_BUTTON_ENABLED_KEY,
-                    String(chatgptCopyButtonEnabled),
-                );
-                updateChatgptCopyButtonToggle();
-                updateChatgptInjectionStatus();
-            });
-        }
-
         function bindChatgptRuntimeModelControls() {
             const originElement = document.getElementById(
                 "chatgpt-runtime-origin",
@@ -4713,7 +4670,18 @@
                     updateChatgptInjectionStatus();
                 },
             );
-            bindChatgptCopyButtonToggle();
+            bindToggle(
+                "chatgpt-copy-button",
+                chatgptCopyButtonEnabled,
+                CHATGPT_COPY_BUTTON_ENABLED_KEY,
+                (value) => {
+                    chatgptCopyButtonEnabled = value;
+                    pageWindow.dispatchEvent(
+                        new pageWindow.Event(CHATGPT_COPY_EVENT),
+                    );
+                    updateChatgptInjectionStatus();
+                },
+            );
             bindToggle(
                 "chatgpt-copy-raw",
                 chatgptCopyRawEnabled,
