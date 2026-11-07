@@ -765,7 +765,7 @@
                         }
                         render() {
                             return this.state.failed
-                                ? null
+                                ? (this.props.fallback ?? null)
                                 : this.props.children;
                         }
                     };
@@ -1311,11 +1311,13 @@
                                 native.Fragment,
                                 null,
                                 props.sourcesAction,
-                                appScope && native.mapping
-                                    ? native.createElement(MessageInfo, {
-                                          conversationId: props.conversationId,
-                                      })
-                                    : null,
+                                native.createElement(
+                                    native.ErrorBoundary,
+                                    null,
+                                    native.createElement(MessageInfo, {
+                                        conversationId: props.conversationId,
+                                    }),
+                                ),
                             ),
                         });
                         return native.createElement(
@@ -1329,14 +1331,14 @@
                             result,
                         );
                     }
-                    return native.createElement(
-                        appScope &&
-                            native.mapping &&
-                            props.item?.type === "user-message"
-                            ? MessageInfo
-                            : fn,
-                        props,
-                    );
+                    const message = native.createElement(fn, props);
+                    return props.item?.type === "user-message"
+                        ? native.createElement(
+                              native.ErrorBoundary,
+                              { fallback: message },
+                              native.createElement(MessageInfo, props),
+                          )
+                        : message;
                 };
             },
             timeFormat(fn) {
