@@ -2222,9 +2222,7 @@
 
         module(
             "会话页面模块",
-            (source) =>
-                source.includes("ChatGptConversationPage:") &&
-                source.includes("ChatGptSharedConversationPage:"),
+            (source) => source.includes("ChatGptConversationPage:"),
             (page) => {
                 const view = exported(page, "会话页面", (source) =>
                     /\{[^{}]*\bisInlinePreview:[^{}]*\}=[\w$]+/.test(source),
@@ -2914,8 +2912,8 @@
         module(
             "消息操作模块",
             (source) =>
-                source.includes("copyPlainTextFromSource") &&
-                source.includes("getCopyHtml"),
+                source.includes("getCopyHtml") &&
+                source.includes("sourcesAction:"),
             (messages) => {
                 const copyText = single(
                     [
