@@ -2889,14 +2889,14 @@
                 source.includes("getCopyHtml") &&
                 source.includes("sourcesAction:"),
             (messages) => {
-                const copyText = single(
-                    [
-                        ...messages.source.matchAll(
-                            /([\w$]+)\?\.completed===!0\?([\w$]+)\(\1\):""/g,
-                        ),
-                    ],
+                const copyText = declared(
+                    messages,
                     "原生消息复制接口",
-                )[2];
+                    (source) =>
+                        source.includes(
+                            '.getAttribute("data-chatgpt-copy-reference")',
+                        ),
+                );
                 const [, parse, extensions, mdastExtensions] = single(
                     [
                         ...messages.source.matchAll(
