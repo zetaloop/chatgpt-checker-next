@@ -2739,9 +2739,6 @@
                     home,
                     "首页模式接口",
                     (source) =>
-                        /^function(?: [\w$]+)?\([\w$]+,[\w$]+\)\{/.test(
-                            source,
-                        ) &&
                         source.includes('"chat"===') &&
                         source.includes(".set("),
                 );
@@ -2810,9 +2807,7 @@
                     models,
                     "模型选项解析接口",
                     (source) =>
-                        /^function(?: [\w$]+)?\([\w$]+,[\w$]+\)\{/.test(
-                            source,
-                        ) &&
+                        source.includes(".thinkingEffort??") &&
                         source.includes("defaultThinkingEffortByModelSlug"),
                 );
                 const modelVersion = exported(
