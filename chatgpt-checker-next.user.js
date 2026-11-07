@@ -1375,18 +1375,11 @@
                         const request = props.item.request;
                         const body = request?.body;
                         const actions = body?.actions ?? [];
-                        const action =
-                            actions.find((action) => action.allow_once) ??
-                            actions.find(
-                                (action) =>
-                                    action.name === "allow_once" &&
-                                    action.allow,
-                            ) ??
-                            actions.find(
-                                (action) =>
-                                    action.name !== "approve_for_me" &&
-                                    action.allow,
-                            );
+                        const action = actions.find(
+                            (action) =>
+                                action.name !== "approve_for_me" &&
+                                (action.allow_once ?? action.allow),
+                        );
                         const allow = action?.allow_once ?? action?.allow;
                         if (!allow) return props.item;
                         const elicitation = body.codex_mcp_elicitation;
