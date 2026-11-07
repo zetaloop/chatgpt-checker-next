@@ -254,6 +254,19 @@
             }
             return wrapped;
         };
+        const observe = (fn, Observer) =>
+            function (props) {
+                return native.createElement(
+                    native.Fragment,
+                    null,
+                    native.createElement(fn, props),
+                    native.createElement(
+                        native.ErrorBoundary,
+                        null,
+                        native.createElement(Observer, props),
+                    ),
+                );
+            };
         const useControl = (scope, value) => {
             const control = native.useRef({}).current;
             const route = scope.getOwnValue(native.routeScope);
@@ -852,7 +865,7 @@
                 });
             },
             picker(fn) {
-                return function (props) {
+                function Observer(props) {
                     const scope = native.useScope(native.composerScope);
                     const models = native.useMemo(() => {
                         const models = new Map();
@@ -905,11 +918,12 @@
                         onModelChange: props.onModelChange,
                         onThinkingEffortChange: props.onThinkingEffortChange,
                     });
-                    return native.createElement(fn, props);
-                };
+                    return null;
+                }
+                return observe(fn, Observer);
             },
             dotPicker(fn) {
-                return function (props) {
+                function Observer(props) {
                     const scope = native.useScope(native.routeScope);
                     const conversationId = props.conversationId ?? null;
                     const active = props.active && conversationId !== null;
@@ -965,8 +979,9 @@
                             ? String(catalog.error)
                             : null,
                     });
-                    return native.createElement(fn, props);
-                };
+                    return null;
+                }
+                return observe(fn, Observer);
             },
             dotController(fn) {
                 return after(fn, (_, controller) => {
