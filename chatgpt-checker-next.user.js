@@ -1995,10 +1995,10 @@
                 source.includes("uniformAtMobile:") &&
                 source.includes("sizingLabels:"),
             (button) => {
-                const render = exported(button, "按钮组件", (source) =>
-                    /^function(?: [\w$]+)?\([\w$]+\)\{let [^{}]*;return /.test(
-                        source,
-                    ),
+                const render = exported(
+                    button,
+                    "按钮组件",
+                    (source) => !source.includes(".to"),
                 );
                 bindings.button = [button.id, render.exportName];
             },
@@ -2643,7 +2643,7 @@
                     [
                         ...state.source.matchAll(
                             new RegExp(
-                                `${RegExp.escape(settings)},\\{hostId:[\\w$]+\\?\\.managerHostId\\?\\?[\\w$]+\\(([\\w$.]+),[\\w$]+\\),threadId:[\\w$]+\\}`,
+                                `${RegExp.escape(settings)},\\{hostId:[^{}]*?\\(([\\w$.]+),[\\w$]+\\),threadId:`,
                                 "g",
                             ),
                         ),
@@ -2893,14 +2893,13 @@
                 source.includes("approveDisabled:") &&
                 source.includes("connectionRequired"),
             (approval) => {
-                const render = single(
-                    [
-                        ...approval.source.matchAll(
-                            /=([\w$]+);return [\w$]+\.request\?\.body\.codex_mcp_elicitation\?\.kind==="openaiForm"/g,
-                        ),
-                    ],
+                const render = declared(
+                    approval,
                     "授权组件",
-                )[1];
+                    (source) =>
+                        source.includes("scopedApproveAction:") &&
+                        source.includes("approveDisabled:"),
+                );
                 append(approval, `${render}=${api}.approval(${render});`);
             },
             "chat",
