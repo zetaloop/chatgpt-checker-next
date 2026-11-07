@@ -1190,18 +1190,18 @@
                     return extendModels(fn.apply(this, args));
                 };
             },
-            message(fn, React, assistant = false) {
-                const MessageId = assistant ? React.createContext(null) : null;
+            message(fn, assistant = false) {
+                const MessageId = assistant ? native.createContext(null) : null;
                 function MessageInfo(props) {
                     const scope = appScope;
                     const { conversationId } = props;
                     const item = props.item;
                     const id = assistant
-                        ? React.useContext(MessageId)
+                        ? native.useContext(MessageId)
                         : (item.latestMessageId ??
                           item.serverMessageId ??
                           item.messageId);
-                    const subscribe = React.useCallback(
+                    const subscribe = native.useCallback(
                         (listener) => {
                             const stop = scope.watch((scope) => {
                                 scope.get(native.mapping, conversationId);
@@ -1245,7 +1245,7 @@
                                 : null,
                         ]);
                     };
-                    const data = React.useSyncExternalStore(
+                    const data = native.useSyncExternalStore(
                         subscribe,
                         snapshot,
                         snapshot,
@@ -1256,9 +1256,9 @@
                     if (time === null && !model)
                         return assistant
                             ? null
-                            : React.createElement(fn, props);
+                            : native.createElement(fn, props);
                     if (!assistant)
-                        return React.createElement(fn, {
+                        return native.createElement(fn, {
                             ...props,
                             item: { ...item, sentAtMs: time },
                         });
@@ -1272,7 +1272,7 @@
                     ]
                         .filter(Boolean)
                         .join("\n");
-                    return React.createElement(
+                    return native.createElement(
                         "span",
                         {
                             className:
@@ -1281,14 +1281,14 @@
                             title,
                         },
                         model
-                            ? React.createElement(
+                            ? native.createElement(
                                   "span",
                                   { className: "truncate" },
                                   model,
                               )
                             : null,
                         effort
-                            ? React.createElement(
+                            ? native.createElement(
                                   "span",
                                   { className: "shrink-0" },
                                   effort,
@@ -1296,7 +1296,7 @@
                             : null,
                         time === null
                             ? null
-                            : React.createElement(native.messageTime, {
+                            : native.createElement(native.messageTime, {
                                   className: "shrink-0",
                                   sentAtMs: time,
                                   title,
@@ -1307,18 +1307,18 @@
                     if (assistant) {
                         const result = fn({
                             ...props,
-                            sourcesAction: React.createElement(
-                                React.Fragment,
+                            sourcesAction: native.createElement(
+                                native.Fragment,
                                 null,
                                 props.sourcesAction,
                                 appScope && native.mapping
-                                    ? React.createElement(MessageInfo, {
+                                    ? native.createElement(MessageInfo, {
                                           conversationId: props.conversationId,
                                       })
                                     : null,
                             ),
                         });
-                        return React.createElement(
+                        return native.createElement(
                             MessageId.Provider,
                             {
                                 value:
@@ -1329,7 +1329,7 @@
                             result,
                         );
                     }
-                    return React.createElement(
+                    return native.createElement(
                         appScope &&
                             native.mapping &&
                             props.item?.type === "user-message"
@@ -1367,9 +1367,9 @@
                         : result;
                 };
             },
-            approval(fn, React) {
+            approval(fn) {
                 return function (props) {
-                    const item = React.useMemo(() => {
+                    const item = native.useMemo(() => {
                         if (!chatgptApprovalEnabled) return props.item;
                         const request = props.item.request;
                         const body = request?.body;
@@ -1420,7 +1420,7 @@
                     );
                     const scope = appScope;
                     const id = props.conversationId;
-                    const subscribe = React.useCallback(
+                    const subscribe = native.useCallback(
                         (listener) => {
                             const stop = scope.watch((scope) => {
                                 scope.get(native.status, id);
@@ -1444,12 +1444,12 @@
                         chatgptApprovalEnabled
                             ? scope.get(native.status, id)
                             : null;
-                    const status = React.useSyncExternalStore(
+                    const status = native.useSyncExternalStore(
                         subscribe,
                         snapshot,
                         snapshot,
                     );
-                    const attempted = React.useRef(null);
+                    const attempted = native.useRef(null);
                     const { actions } = card.props;
                     const target = item.allowTargetMessageId;
                     const automatic =
@@ -1459,7 +1459,7 @@
                     const hidden =
                         automatic &&
                         (attempted.current !== target || actions.isLoading);
-                    React.useEffect(() => {
+                    native.useEffect(() => {
                         if (
                             !automatic ||
                             status !== "idle" ||
@@ -1960,7 +1960,7 @@
                 )[1];
                 append(
                     scopes,
-                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useState:${react}.useState,useLayoutEffect:${react}.useLayoutEffect,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,Fragment:${react}.Fragment,Component:${react}.Component,useSyncExternalStore:${react}.useSyncExternalStore});`,
+                    `${api}.register({useMemo:${react}.useMemo,useRef:${react}.useRef,useState:${react}.useState,useLayoutEffect:${react}.useLayoutEffect,useEffect:${react}.useEffect,useCallback:${react}.useCallback,createElement:${react}.createElement,createContext:${react}.createContext,useContext:${react}.useContext,cloneElement:${react}.cloneElement,Fragment:${react}.Fragment,Component:${react}.Component,useSyncExternalStore:${react}.useSyncExternalStore});`,
                 );
                 wrap(scopes, useScope, `${api}.scope`);
             },
@@ -2889,22 +2889,7 @@
                     ],
                     "授权组件",
                 )[1];
-                const react = single(
-                    [
-                        ...new Set(
-                            [
-                                ...approval.source.matchAll(
-                                    /\(0,([\w$]+)\.useState\)/g,
-                                ),
-                            ].map((match) => match[1]),
-                        ),
-                    ],
-                    "React 接口",
-                );
-                append(
-                    approval,
-                    `${render}=${api}.approval(${render},${react});`,
-                );
+                append(approval, `${render}=${api}.approval(${render});`);
             },
             "chat",
         );
@@ -2942,18 +2927,6 @@
                 append(
                     messages,
                     `${api}.register({messageText:${copyText},parseMarkdown:content=>${parse}(content,{extensions:[${extensions}()],mdastExtensions:[${mdastExtensions}()]}),resolveReference:${resolve}});`,
-                );
-                const react = single(
-                    [
-                        ...new Set(
-                            [
-                                ...messages.source.matchAll(
-                                    /\(0,([\w$]+)\.useState\)/g,
-                                ),
-                            ].map((match) => match[1]),
-                        ),
-                    ],
-                    "React 接口",
                 );
                 const renderMessage = single(
                     [
@@ -3002,7 +2975,7 @@
                 );
                 append(
                     messages,
-                    `${renderMessage}=${api}.message(${renderMessage},${react});${renderActions}=${api}.message(${renderActions},${react},true);`,
+                    `${renderMessage}=${api}.message(${renderMessage});${renderActions}=${api}.message(${renderActions},true);`,
                 );
             },
             "chat",
