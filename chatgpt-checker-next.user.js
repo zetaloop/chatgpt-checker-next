@@ -43,6 +43,8 @@
     const CHATGPT_COPY_EVENT = "checker-next-copy";
     const CHATGPT_MESSAGE_INFO_KEY = "checker-next-chatgpt-message-info";
     const CHATGPT_MESSAGE_INFO_EVENT = "checker-next-message-info";
+    const CHATGPT_EARLY_ACTIONS_KEY = "checker-next-chatgpt-early-actions";
+    const CHATGPT_EARLY_ACTIONS_EVENT = "checker-next-early-actions";
     const CHATGPT_APPROVAL_KEY = "checker-next-chatgpt-approval";
     const CHATGPT_APPROVAL_EVENT = "checker-next-approval";
     const CHATGPT_AUTO_COLLAPSE_KEY = "checker-next-chatgpt-auto-collapse";
@@ -75,6 +77,9 @@
     let chatgptMessageInfoEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_MESSAGE_INFO_KEY) !== "false";
+    let chatgptEarlyActionsEnabled =
+        isChatgptMode &&
+        localStorage.getItem(CHATGPT_EARLY_ACTIONS_KEY) !== "false";
     let chatgptApprovalEnabled =
         isChatgptMode && localStorage.getItem(CHATGPT_APPROVAL_KEY) !== "false";
     let chatgptAutoCollapseEnabled =
@@ -249,6 +254,21 @@
                 pageWindow.removeEventListener(CHATGPT_COPY_EVENT, listener);
         };
         const getCopyEnabled = () => chatgptCopyButtonEnabled;
+        const subscribeEarlyActions = (listener) => {
+            pageWindow.addEventListener(CHATGPT_EARLY_ACTIONS_EVENT, listener);
+            return () =>
+                pageWindow.removeEventListener(
+                    CHATGPT_EARLY_ACTIONS_EVENT,
+                    listener,
+                );
+        };
+        const getEarlyActionsEnabled = () => chatgptEarlyActionsEnabled;
+        const useEarlyActions = () =>
+            native.useSyncExternalStore(
+                subscribeEarlyActions,
+                getEarlyActionsEnabled,
+                getEarlyActionsEnabled,
+            );
         const subscribeAutoCollapse = (listener) => {
             pageWindow.addEventListener(CHATGPT_AUTO_COLLAPSE_EVENT, listener);
             return () =>
@@ -767,6 +787,7 @@
                 getText: () => formatDotConversation(controller),
             });
         }
+        let AssistantInfo;
         const bridge = {
             register(values) {
                 Object.assign(native, values);
@@ -1145,6 +1166,58 @@
                     conversations.set(conversation.id, conversation);
                 });
             },
+            earlyActionsEnabled: getEarlyActionsEnabled,
+            messageActions(fn) {
+                return function (props) {
+                    useEarlyActions();
+                    return fn(props);
+                };
+            },
+            actionRow(props) {
+                const enabled = useEarlyActions();
+                return native.createElement(native.actionRow, {
+                    ...props,
+                    alwaysShowActions: props.alwaysShowActions || enabled,
+                });
+            },
+            turnActions(fn, actions) {
+                const containsActions = (node) =>
+                    node?.type === actions ||
+                    (node?.type === native.Fragment &&
+                        [node.props.children].flat().some(containsActions));
+                return bridge.messageActions(function (props) {
+                    const result = fn(props);
+                    if (
+                        !chatgptEarlyActionsEnabled ||
+                        !result ||
+                        props.turnActions !== undefined ||
+                        result.props.children.some(containsActions)
+                    )
+                        return result;
+                    return native.cloneElement(result, {
+                        children: [
+                            ...result.props.children,
+                            native.createElement(
+                                native.ErrorBoundary,
+                                { key: "message-info" },
+                                native.createElement(AssistantInfo, {
+                                    conversationId: props.conversationId,
+                                    messageIds: props.turn.messageIds,
+                                    standalone: true,
+                                }),
+                            ),
+                        ],
+                    });
+                });
+            },
+            hasMessageActions(item, images) {
+                return (
+                    chatgptEarlyActionsEnabled &&
+                    (item?.completed === true ||
+                        images.some((image) => image.src != null) ||
+                        native.messageText(item).trim().length > 0)
+                );
+            },
             branchMenu(fn, branch) {
                 function Branch({ href, ...props }) {
                     const result = branch(props);
@@ -1283,10 +1356,22 @@
                     );
                     const snapshot = () => {
                         if (!chatgptMessageInfoEnabled) return null;
-                        const message = scope.get(
+                        const mapping = scope.get(
                             native.mapping,
                             conversationId,
-                        )?.[id]?.message;
+                        );
+                        const target =
+                            id ??
+                            props.messageIds?.findLast((id) => {
+                                const message = mapping?.[id]?.message;
+                                return (
+                                    message?.author.role === "assistant" &&
+                                    message.metadata
+                                        ?.is_visually_hidden_from_conversation !==
+                                        true
+                                );
+                            });
+                        const message = mapping?.[target]?.message;
                         const metadata = message?.metadata ?? {};
                         return JSON.stringify([
                             message?.create_time ?? null,
@@ -1313,7 +1398,7 @@
                     const [created, model, effort, requested] =
                         data === null ? [] : JSON.parse(data);
                     const time = created == null ? null : created * 1000;
-                    if (time === null && !model)
+                    if (time === null && !model && !effort)
                         return assistant
                             ? null
                             : native.createElement(fn, props);
@@ -1332,7 +1417,7 @@
                     ]
                         .filter(Boolean)
                         .join("\n");
-                    return native.createElement(
+                    const info = native.createElement(
                         "span",
                         {
                             className:
@@ -1362,7 +1447,16 @@
                                   title,
                               }),
                     );
+                    return props.standalone
+                        ? native.createElement(native.actionRow, {
+                              actionRowRef: props.actionRowRef,
+                              tooltipSide: "bottom",
+                              alwaysShowActions: true,
+                              beforeOverflowActions: info,
+                          })
+                        : info;
                 }
+                if (assistant) AssistantInfo = MessageInfo;
                 return function (props) {
                     if (assistant) {
                         const result = fn({
@@ -1376,6 +1470,8 @@
                                     null,
                                     native.createElement(MessageInfo, {
                                         conversationId: props.conversationId,
+                                        messageIds:
+                                            props.favoriteSourceMessageIds,
                                     }),
                                 ),
                             ),
@@ -1388,7 +1484,21 @@
                                     props.assistantItem?.latestMessageId ??
                                     props.assistantItem?.messageId,
                             },
-                            result,
+                            result ??
+                                (chatgptEarlyActionsEnabled
+                                    ? native.createElement(
+                                          native.ErrorBoundary,
+                                          null,
+                                          native.createElement(MessageInfo, {
+                                              conversationId:
+                                                  props.conversationId,
+                                              messageIds:
+                                                  props.favoriteSourceMessageIds,
+                                              actionRowRef: props.actionRowRef,
+                                              standalone: true,
+                                          }),
+                                      )
+                                    : null),
                         );
                     }
                     const message = native.createElement(fn, props);
@@ -3010,9 +3120,107 @@
                     ],
                     "消息操作栏",
                 );
+                const actionsSource =
+                    declarations(messages)[renderActions].toString();
+                const actions = { source: actionsSource };
+                const [, item] = single(
+                    [...actions.source.matchAll(/assistantItem:([\w$]+)/g)],
+                    "助手消息参数",
+                );
+                const [, canCopy, text] = single(
+                    [
+                        ...actions.source.matchAll(
+                            /copyText:([\w$]+)\?([\w$]+):void 0/g,
+                        ),
+                    ],
+                    "消息复制状态",
+                );
+                const [rowCall, actionRow] = single(
+                    [
+                        ...actions.source.matchAll(
+                            /\(0,[\w$]+\.(?:jsx|jsxs)\)\(([\w$.]+),\{actionRowRef:/g,
+                        ),
+                    ],
+                    "操作栏组件",
+                );
+                replace(
+                    actions,
+                    rowCall,
+                    rowCall.replace(
+                        `(${actionRow},`,
+                        () => `(${api}.actionRow,`,
+                    ),
+                );
+                const [copyState, declaration, available] = single(
+                    [
+                        ...actions.source.matchAll(
+                            new RegExp(
+                                `((?:[,;]|\\blet )${RegExp.escape(canCopy)}=)([^,;]+)`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "复制按钮可用状态",
+                );
+                replace(
+                    actions,
+                    copyState,
+                    `${declaration}(${api}.earlyActionsEnabled()||${item}?.completed===!0)&&(${available})`,
+                );
+                replace(
+                    actions,
+                    `${item}?.completed===!0?${copyText}(${item}):""`,
+                    `${copyText}(${item})`,
+                );
+                replace(
+                    actions,
+                    `${item}?.completed===!0&&${text}.trim().length>0`,
+                    `${text}.trim().length>0`,
+                );
+                replace(messages, actionsSource, actions.source);
+                const renderTurn = declared(
+                    messages,
+                    "会话轮次",
+                    (source) =>
+                        source.includes(".suppressTurnActions") &&
+                        source.includes("assistantItem:"),
+                );
+                const turn = declarations(messages)[renderTurn].toString();
+                const [condition] = single(
+                    [
+                        ...turn.matchAll(
+                            /[^,;{}?:]*\.suppressTurnActions[^,;{}?:]*/g,
+                        ),
+                    ],
+                    "轮次操作栏条件",
+                );
+                const [state, operator, turnValue] = single(
+                    [
+                        ...condition.matchAll(
+                            /"in_progress"([!=]==)([\w$]+)\.status/g,
+                        ),
+                    ],
+                    "轮次生成状态",
+                );
+                const [, assistant] = single(
+                    [...turn.matchAll(/assistantItem:([^,}]+)/g)],
+                    "轮次助手消息",
+                );
+                const [, images] = single(
+                    [...turn.matchAll(/imageItems:([\w$]+)/g)],
+                    "轮次图片",
+                );
+                const pending = `("in_progress"===${turnValue}.status&&!${api}.hasMessageActions(${assistant},${images}))`;
+                replace(
+                    messages,
+                    condition,
+                    condition.replace(state, () =>
+                        operator === "===" ? pending : `!${pending}`,
+                    ),
+                );
                 append(
                     messages,
-                    `${renderMessage}=${api}.message(${renderMessage});${renderActions}=${api}.message(${renderActions},true);`,
+                    `${api}.register({actionRow:${actionRow}});${renderMessage}=${api}.message(${renderMessage});${renderActions}=${api}.messageActions(${api}.message(${renderActions},true));${renderTurn}=${api}.turnActions(${renderTurn},${renderActions});`,
                 );
                 const menu = declared(messages, "消息菜单", (source) =>
                     source.includes(
@@ -3176,6 +3384,7 @@
         if (page && chatgptCopyButtonEnabled) items.push("复制全文");
         if (page === "chat") {
             if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
+            if (chatgptEarlyActionsEnabled) items.push("提前显示操作栏");
             if (chatgptApprovalEnabled) items.push("自动批准工具请求");
             if (chatgptAutoCollapseEnabled) items.push("自动收起分析内容");
         }
@@ -3976,6 +4185,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-early-actions-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>提前显示操作栏
+                <span id="chatgpt-early-actions-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-early-actions-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-early-actions-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-early-actions-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-approval-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>自动批准工具请求
                 <span id="chatgpt-approval-tooltip" style="
@@ -4478,6 +4728,11 @@
             "在消息末尾显示时间与模型信息。",
         );
 
+        const chatgptEarlyActionsTooltipBox = createTooltip(
+            "chatgpt-early-actions-tooltip-box",
+            "思考中提前显示消息底部的操作栏。",
+        );
+
         const chatgptApprovalTooltipBox = createTooltip(
             "chatgpt-approval-tooltip-box",
             "自动为每次工具请求选择允许。",
@@ -4562,6 +4817,10 @@
             bindTooltipEvents(
                 "chatgpt-message-info-tooltip",
                 chatgptMessageInfoTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-early-actions-tooltip",
+                chatgptEarlyActionsTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-approval-tooltip",
@@ -4779,6 +5038,18 @@
                     chatgptMessageInfoEnabled = value;
                     pageWindow.dispatchEvent(
                         new pageWindow.Event(CHATGPT_MESSAGE_INFO_EVENT),
+                    );
+                    updateChatgptInjectionStatus();
+                },
+            );
+            bindToggle(
+                "chatgpt-early-actions",
+                chatgptEarlyActionsEnabled,
+                CHATGPT_EARLY_ACTIONS_KEY,
+                (value) => {
+                    chatgptEarlyActionsEnabled = value;
+                    pageWindow.dispatchEvent(
+                        new pageWindow.Event(CHATGPT_EARLY_ACTIONS_EVENT),
                     );
                     updateChatgptInjectionStatus();
                 },
