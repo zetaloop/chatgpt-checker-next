@@ -1126,6 +1126,47 @@
                     conversations.set(conversation.id, conversation);
                 });
             },
+            branchMenu(fn, branch) {
+                function Branch({ href, ...props }) {
+                    const result = branch(props);
+                    const link = (item) =>
+                        item?.props?.children?.props?.id?.endsWith(
+                            ".branchInNewChat",
+                        )
+                            ? native.cloneElement(item, {
+                                  href,
+                                  onClick: sidebarClick(item.props.onSelect),
+                                  onSelect: (event) => event.preventDefault(),
+                              })
+                            : item;
+                    return Array.isArray(result.props.children)
+                        ? native.cloneElement(result, {
+                              children: result.props.children.map(link),
+                          })
+                        : link(result);
+                }
+                return function (props) {
+                    const result = fn(props);
+                    if (!result || !props.messageId) return result;
+                    const id = appScope.get(
+                        native.serverId,
+                        props.conversationId,
+                    );
+                    if (!id) return result;
+                    const href = `/branch/${encodeURIComponent(id)}/${encodeURIComponent(props.messageId)}`;
+                    return native.cloneElement(result, {
+                        children: result.props.children.map((item) =>
+                            item?.type === branch
+                                ? native.createElement(Branch, {
+                                      ...item.props,
+                                      href,
+                                      key: item.key,
+                                  })
+                                : item,
+                        ),
+                    });
+                };
+            },
             chatView(fn) {
                 return function (props) {
                     const result = fn(props);
@@ -2952,6 +2993,20 @@
                 append(
                     messages,
                     `${renderMessage}=${api}.message(${renderMessage});${renderActions}=${api}.message(${renderActions},true);`,
+                );
+                const menu = declared(messages, "消息菜单", (source) =>
+                    source.includes(
+                        'id:"chatgptConversations.messageActions.more"',
+                    ),
+                );
+                const branch = declared(messages, "分支菜单", (source) =>
+                    source.includes(
+                        'id:"chatgptConversations.messageActions.branchInNewChat"',
+                    ),
+                );
+                append(
+                    messages,
+                    `${menu}=${api}.branchMenu(${menu},${branch});`,
                 );
             },
             "chat",
