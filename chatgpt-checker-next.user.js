@@ -2207,7 +2207,7 @@
                 source.includes("timestampSeparatorAtMs"),
             (turns) => {
                 const renderTurns = exported(turns, "会话内容接口", (source) =>
-                    source.includes("timestampSeparatorAtMs"),
+                    source.includes("timestampSeparatorAtMs:"),
                 );
                 wrap(turns, renderTurns, `${api}.turns`);
             },
@@ -2222,24 +2222,23 @@
                     /\{[^{}]*\bisInlinePreview:[^{}]*\}=[\w$]+/.test(source),
                 );
                 const source = view.toString();
-                const serverId = single(
+                const serverIds = new Set(
+                    [...source.matchAll(/serverConversationId:([\w$]+)/g)].map(
+                        (match) => match[1],
+                    ),
+                );
+                const selector = single(
                     [
                         ...new Set(
-                            [
-                                ...source.matchAll(
-                                    /serverConversationId:([\w$]+)/g,
-                                ),
-                            ].map((match) => match[1]),
-                        ),
-                    ],
-                    "会话服务端 ID",
-                );
-                const [, selector] = single(
-                    [
-                        ...source.matchAll(
-                            new RegExp(
-                                `${RegExp.escape(serverId)}=\\(0,[\\w$]+\\.[\\w$]+\\)\\(([\\w$]+\\.[\\w$]+),[\\w$]+\\)`,
-                                "g",
+                            [...serverIds].flatMap((serverId) =>
+                                [
+                                    ...source.matchAll(
+                                        new RegExp(
+                                            `(?<![\\w$.])${RegExp.escape(serverId)}=\\(0,[\\w$]+\\.[\\w$]+\\)\\(([\\w$]+\\.[\\w$]+),[\\w$]+\\)`,
+                                            "g",
+                                        ),
+                                    ),
+                                ].map((match) => match[1]),
                             ),
                         ),
                     ],
@@ -2826,7 +2825,7 @@
             "模型额度模块",
             (source) =>
                 source.includes("using_default_model_slug") &&
-                source.includes("work_subscription_required"),
+                source.includes("model_slug==="),
             (limits) => {
                 const resolveLimit = exported(
                     limits,
