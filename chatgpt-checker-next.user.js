@@ -34,6 +34,8 @@
         "checker-next-chatgpt-fake-plan-enabled";
     const CHATGPT_MODULE_INJECTION_ENABLED_KEY =
         "checker-next-chatgpt-module-injection-enabled";
+    const CHATGPT_NEW_TAB_KEY = "checker-next-chatgpt-new-tab";
+    const CHATGPT_NEW_TAB_EVENT = "checker-next-new-tab";
     const CHATGPT_COPY_BUTTON_ENABLED_KEY =
         "checker-next-chatgpt-copy-button-enabled";
     const CHATGPT_COPY_DETAILS_KEY = "checker-next-chatgpt-copy-details";
@@ -60,6 +62,8 @@
     let chatgptModuleInjectionEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_MODULE_INJECTION_ENABLED_KEY) !== "false";
+    let chatgptNewTabEnabled =
+        isChatgptMode && localStorage.getItem(CHATGPT_NEW_TAB_KEY) !== "false";
     let chatgptCopyButtonEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_COPY_BUTTON_ENABLED_KEY) !== "false";
@@ -227,6 +231,18 @@
                     (control.route.search ?? "") === location.search,
             );
         const report = reportChatgptInjectionFailure;
+        const subscribeNewTab = (listener) => {
+            pageWindow.addEventListener(CHATGPT_NEW_TAB_EVENT, listener);
+            return () =>
+                pageWindow.removeEventListener(CHATGPT_NEW_TAB_EVENT, listener);
+        };
+        const getNewTabEnabled = () => chatgptNewTabEnabled;
+        const useNewTab = () =>
+            native.useSyncExternalStore(
+                subscribeNewTab,
+                getNewTabEnabled,
+                getNewTabEnabled,
+            );
         const subscribeCopy = (listener) => {
             pageWindow.addEventListener(CHATGPT_COPY_EVENT, listener);
             return () =>
@@ -780,7 +796,8 @@
             },
             sidebarNav(fn) {
                 return function (props) {
-                    const to = sidebarHref(props);
+                    const enabled = useNewTab();
+                    const to = enabled ? sidebarHref(props) : undefined;
                     return native.createElement(
                         fn,
                         to && !props.to && !props.disabled
@@ -797,8 +814,9 @@
             },
             sidebarButton(fn) {
                 return function (props) {
+                    const enabled = useNewTab();
                     const button = fn(props);
-                    const href = sidebarHref(props);
+                    const href = enabled ? sidebarHref(props) : undefined;
                     if (!href || button.props.disabled) return button;
                     const { type, disabled, onClick, ...attributes } =
                         button.props;
@@ -811,7 +829,8 @@
             },
             sidebarRow(fn) {
                 return function (props) {
-                    const href = sidebarHref(props);
+                    const enabled = useNewTab();
+                    const href = enabled ? sidebarHref(props) : undefined;
                     if (!href || props.hasNavigationLink || props.isDisabled)
                         return native.createElement(fn, props);
                     const [content, ...actions] = props.children;
@@ -1146,8 +1165,9 @@
                         : link(result);
                 }
                 return function (props) {
+                    const enabled = useNewTab();
                     const result = fn(props);
-                    if (!result || !props.messageId) return result;
+                    if (!enabled || !result || !props.messageId) return result;
                     const id = appScope.get(
                         native.serverId,
                         props.conversationId,
@@ -3151,7 +3171,8 @@
     }
 
     function getChatgptModuleItems(page) {
-        const items = ["运行时模型切换", "侧栏中键打开"];
+        const items = ["运行时模型切换"];
+        if (chatgptNewTabEnabled) items.push("中键新标签页打开");
         if (page && chatgptCopyButtonEnabled) items.push("复制全文");
         if (page === "chat") {
             if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
@@ -4037,6 +4058,47 @@
                     "></span>
                 </label>
             </div>
+            <div id="chatgpt-new-tab-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>中键新标签页打开
+                <span id="chatgpt-new-tab-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-new-tab-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-new-tab-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-new-tab-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
             <div id="chatgpt-selection-popover-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>禁用划词悬浮窗
                 <span id="chatgpt-selection-popover-tooltip" style="
@@ -4426,6 +4488,11 @@
             "默认收起分析执行内容。",
         );
 
+        const chatgptNewTabTooltipBox = createTooltip(
+            "chatgpt-new-tab-tooltip-box",
+            "让侧栏和分支菜单支持中键和 Ctrl+单击。",
+        );
+
         const chatgptSelectionPopoverTooltipBox = createTooltip(
             "chatgpt-selection-popover-tooltip-box",
             "隐藏划词和编辑时的悬浮菜单。",
@@ -4503,6 +4570,10 @@
             bindTooltipEvents(
                 "chatgpt-auto-collapse-tooltip",
                 chatgptAutoCollapseTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-new-tab-tooltip",
+                chatgptNewTabTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-selection-popover-tooltip",
@@ -4732,6 +4803,18 @@
                     chatgptAutoCollapseEnabled = value;
                     pageWindow.dispatchEvent(
                         new pageWindow.Event(CHATGPT_AUTO_COLLAPSE_EVENT),
+                    );
+                    updateChatgptInjectionStatus();
+                },
+            );
+            bindToggle(
+                "chatgpt-new-tab",
+                chatgptNewTabEnabled,
+                CHATGPT_NEW_TAB_KEY,
+                (value) => {
+                    chatgptNewTabEnabled = value;
+                    pageWindow.dispatchEvent(
+                        new pageWindow.Event(CHATGPT_NEW_TAB_EVENT),
                     );
                     updateChatgptInjectionStatus();
                 },
