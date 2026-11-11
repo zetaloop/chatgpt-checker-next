@@ -45,6 +45,13 @@
     const CHATGPT_MESSAGE_INFO_EVENT = "checker-next-message-info";
     const CHATGPT_EARLY_ACTIONS_KEY = "checker-next-chatgpt-early-actions";
     const CHATGPT_EARLY_ACTIONS_EVENT = "checker-next-early-actions";
+    const CHATGPT_PASTE_MODE_KEY = "checker-next-chatgpt-paste-mode";
+    const CHATGPT_PASTE_MODES = {
+        auto: "文本优先",
+        text: "仅文本",
+        file: "仅附件",
+        native: "原版",
+    };
     const CHATGPT_APPROVAL_KEY = "checker-next-chatgpt-approval";
     const CHATGPT_APPROVAL_EVENT = "checker-next-approval";
     const CHATGPT_AUTO_COLLAPSE_KEY = "checker-next-chatgpt-auto-collapse";
@@ -80,6 +87,9 @@
     let chatgptEarlyActionsEnabled =
         isChatgptMode &&
         localStorage.getItem(CHATGPT_EARLY_ACTIONS_KEY) !== "false";
+    let chatgptPasteMode = localStorage.getItem(CHATGPT_PASTE_MODE_KEY);
+    if (!Object.hasOwn(CHATGPT_PASTE_MODES, chatgptPasteMode))
+        chatgptPasteMode = "auto";
     let chatgptApprovalEnabled =
         isChatgptMode && localStorage.getItem(CHATGPT_APPROVAL_KEY) !== "false";
     let chatgptAutoCollapseEnabled =
@@ -210,6 +220,8 @@
         const origins = new Map();
         const customModels = new Map();
         const controls = new Set();
+        const composers = new WeakMap();
+        const pasteModes = new WeakMap();
         const native = new Proxy(
             {},
             {
@@ -235,6 +247,19 @@
                     control.route.pathname === location.pathname &&
                     (control.route.search ?? "") === location.search,
             );
+        const composerState = (view) => {
+            let state = composers.get(view);
+            if (!state) {
+                state = {};
+                composers.set(view, state);
+            }
+            return state;
+        };
+        const pasteThreshold = (mode, threshold) => {
+            if (mode === "text") return Infinity;
+            if (mode === "auto" || mode === "file") return 1;
+            return threshold;
+        };
         const report = reportChatgptInjectionFailure;
         const subscribeNewTab = (listener) => {
             pageWindow.addEventListener(CHATGPT_NEW_TAB_EVENT, listener);
@@ -1167,6 +1192,66 @@
                 });
             },
             earlyActionsEnabled: getEarlyActionsEnabled,
+            promptLimit(controller, limit) {
+                composerState(controller.view).limit = limit;
+                return limit;
+            },
+            pasteMode: (event) => pasteModes.get(event) ?? "native",
+            pasteThreshold: (event, threshold) =>
+                pasteThreshold(bridge.pasteMode(event), threshold),
+            clipboardThreshold: (view, threshold) =>
+                pasteThreshold(composers.get(view)?.paste?.mode, threshold),
+            paste(fn) {
+                return function (view, ...args) {
+                    const state = composers.get(view);
+                    if (!state?.handler || chatgptPasteMode === "native")
+                        return fn.call(this, view, ...args);
+                    const paste = { mode: chatgptPasteMode, upload: null };
+                    const dispatch = view.dispatch;
+                    state.paste = paste;
+                    view.dispatch = (transaction) => {
+                        if (paste.upload && transaction.docChanged) {
+                            const upload = paste.upload;
+                            paste.upload = null;
+                            if (
+                                native.isPromptTooLong(
+                                    state.limit,
+                                    transaction.doc.content.size,
+                                ) &&
+                                upload()
+                            )
+                                return;
+                        }
+                        dispatch(transaction);
+                    };
+                    try {
+                        return fn.call(this, view, ...args);
+                    } finally {
+                        delete state.paste;
+                        view.dispatch = dispatch;
+                    }
+                };
+            },
+            pasteHandler(controller, fn) {
+                const state = composerState(controller.view);
+                const handler = (event) => {
+                    const paste = state.paste;
+                    if (!paste) return fn(event);
+                    pasteModes.set(event, paste.mode);
+                    if (paste.mode === "auto") {
+                        paste.upload = () => fn(event);
+                        return false;
+                    }
+                    return fn(event);
+                };
+                state.handler = handler;
+                return handler;
+            },
+            removePasteHandler(controller, handler) {
+                controller.removePastedTextHandler(handler);
+                const state = composers.get(controller.view);
+                if (state?.handler === handler) delete state.handler;
+            },
             messageActions(fn) {
                 return function (props) {
                     useEarlyActions();
@@ -3300,6 +3385,169 @@
         );
 
         module(
+            "输入长度模块",
+            (source) =>
+                source.includes("isPromptTooLong:") &&
+                source.includes(".view.state.doc.content.size"),
+            (composer) => {
+                const [call, check, limit, controller] = single(
+                    [
+                        ...composer.source.matchAll(
+                            /(\(0,[\w$]+\.[\w$]+\)|[\w$]+)\(([\w$]+),([\w$]+)\.view\.state\.doc\.content\.size\)/g,
+                        ),
+                    ],
+                    "输入长度判断",
+                );
+                replace(
+                    composer,
+                    call,
+                    `${check}(${api}.promptLimit(${controller},${limit}),${controller}.view.state.doc.content.size)`,
+                );
+                append(
+                    composer,
+                    `${api}.register({isPromptTooLong:${check}});`,
+                );
+            },
+            "chat",
+        );
+
+        module(
+            "文本粘贴模块",
+            (source) =>
+                source.includes("handlePaste(") &&
+                source.includes('emit("pasted-text",'),
+            (editor) => {
+                const [handler, args] = single(
+                    [...editor.source.matchAll(/handlePaste\(([\w$,]+)\)\{/g)],
+                    "粘贴处理入口",
+                );
+                const view = args.split(",")[0];
+                replace(
+                    editor,
+                    handler,
+                    `handlePaste:${api}.paste(function(${args}){`,
+                );
+                replace(editor, "},handleDrop(", "}),handleDrop(");
+                const [condition, size, threshold] = single(
+                    [
+                        ...editor.source.matchAll(
+                            /(Math\.max\([\w$]+\.length,[\w$]+\?\.length\?\?0\))>=([\w$]+\.[\w$]+)(?=&&[\w$]+\.emit\("pasted-text",)/g,
+                        ),
+                    ],
+                    "粘贴文本长度",
+                );
+                replace(
+                    editor,
+                    condition,
+                    `${size}>=${api}.clipboardThreshold(${view},${threshold})`,
+                );
+            },
+            "chat",
+        );
+
+        module(
+            "粘贴附件模块",
+            (source) =>
+                source.includes("chatgptConversations.bigPaste.fileName") &&
+                source.includes("addPastedTextHandler"),
+            (composer) => {
+                const name = declared(composer, "粘贴附件处理", (source) =>
+                    source.includes("chatgptConversations.bigPaste.fileName"),
+                );
+                const source = declarations(composer)[name].toString();
+                const paste = { source };
+                const [, event] = single(
+                    [
+                        ...source.matchAll(
+                            /\{text:[\w$]+,markdown:[\w$]+,codeBlockLanguage:[\w$]+\}=([\w$]+)/g,
+                        ),
+                    ],
+                    "粘贴文本参数",
+                );
+                const [condition, threshold, size] = single(
+                    [
+                        ...source.matchAll(
+                            /null!=([\w$]+)&&\(\1<=0\|\|([\w$]+)<\1\)/g,
+                        ),
+                    ],
+                    "粘贴附件长度",
+                );
+                const effective = `${api}.pasteThreshold(${event},${threshold})`;
+                replace(
+                    paste,
+                    condition,
+                    `null!=${effective}&&(${effective}<=0||${size}<${effective})`,
+                );
+                const [minimumCondition, minimum] = single(
+                    [
+                        ...source.matchAll(
+                            new RegExp(
+                                `${RegExp.escape(size)}<([\\w$]+\\.[\\w$]+)`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "粘贴附件起始长度",
+                );
+                replace(
+                    paste,
+                    minimumCondition,
+                    `${size}<${api}.pasteThreshold(${event},${minimum})`,
+                );
+                replace(paste, `null==${threshold}`, `null==${effective}`);
+                const [, controller, listener] = single(
+                    [
+                        ...source.matchAll(
+                            /([\w$]+)\.addPastedTextHandler\(([\w$]+)\)/g,
+                        ),
+                    ],
+                    "粘贴附件监听",
+                );
+                const [callback, argument] = single(
+                    [
+                        ...source.matchAll(
+                            new RegExp(
+                                `(?<![\\w$])${RegExp.escape(listener)}=([\\w$]+)=>`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "粘贴附件回调",
+                );
+                replace(
+                    paste,
+                    callback,
+                    `${listener}=${api}.pasteHandler(${controller},${argument}=>`,
+                );
+                replace(
+                    paste,
+                    `;return ${controller}.addPastedTextHandler(${listener})`,
+                    `);return ${controller}.addPastedTextHandler(${listener})`,
+                );
+                replace(
+                    paste,
+                    `${controller}.removePastedTextHandler(${listener})`,
+                    `${api}.removePasteHandler(${controller},${listener})`,
+                );
+                const [restore, available, text] = single(
+                    [
+                        ...source.matchAll(
+                            /text:(\(0,[\w$]+\.[\w$]+\)\(([\w$]+)\.length\))\?\2:void 0/g,
+                        ),
+                    ],
+                    "粘贴文本回填",
+                );
+                replace(
+                    paste,
+                    restore,
+                    `text:(${available}||${api}.pasteMode(${event})!=="native"&&${text}.length<${minimum})?${text}:void 0`,
+                );
+                replace(composer, source, paste.source);
+            },
+            "chat",
+        );
+
+        module(
             "完整账号模块",
             (source) =>
                 source.includes(
@@ -3382,6 +3630,8 @@
         const items = ["运行时模型切换"];
         if (chatgptNewTabEnabled) items.push("中键新标签页打开");
         if (page && chatgptCopyButtonEnabled) items.push("复制全文");
+        if (page !== "dot" && chatgptPasteMode !== "native")
+            items.push(`文本粘贴：${CHATGPT_PASTE_MODES[chatgptPasteMode]}`);
         if (page === "chat") {
             if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
             if (chatgptEarlyActionsEnabled) items.push("提前显示操作栏");
@@ -4021,6 +4271,41 @@
                         border-radius: 50%;
                     "></span>
                 </label>
+            </div>
+            <div id="chatgpt-paste-mode-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <label for="chatgpt-paste-mode-select">文本粘贴
+                <span id="chatgpt-paste-mode-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></label>
+                <select id="chatgpt-paste-mode-select" style="
+                    background-color: #333;
+                    color: #fff;
+                    border: 0px;
+                    border-radius: 4px;
+                    padding: 4px 8px 4px 8px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    outline: none;
+                    line-height: 1em;
+                    box-sizing: border-box;
+                ">
+                    ${Object.entries(CHATGPT_PASTE_MODES)
+                        .map(
+                            ([value, label]) =>
+                                `<option value="${value}">${label}</option>`,
+                        )
+                        .join("")}
+                </select>
             </div>
             <div id="chatgpt-copy-button-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>复制按钮
@@ -4732,6 +5017,10 @@
             "chatgpt-early-actions-tooltip-box",
             "思考中提前显示消息底部的操作栏。",
         );
+        const chatgptPasteModeTooltipBox = createTooltip(
+            "chatgpt-paste-mode-tooltip-box",
+            "文本优先：超出模型长度才转为附件。\n仅文本：无论如何都粘贴为文本。\n仅附件：粘贴文本都转附件上传。\n原版：按字数自动决定转为附件。",
+        );
 
         const chatgptApprovalTooltipBox = createTooltip(
             "chatgpt-approval-tooltip-box",
@@ -4821,6 +5110,10 @@
             bindTooltipEvents(
                 "chatgpt-early-actions-tooltip",
                 chatgptEarlyActionsTooltipBox,
+            );
+            bindTooltipEvents(
+                "chatgpt-paste-mode-tooltip",
+                chatgptPasteModeTooltipBox,
             );
             bindTooltipEvents(
                 "chatgpt-approval-tooltip",
@@ -4987,6 +5280,17 @@
         }
 
         if (isChatgptMode) {
+            const pasteSelect = document.getElementById(
+                "chatgpt-paste-mode-select",
+            );
+            pasteSelect.value = chatgptPasteMode;
+            pasteSelect.addEventListener("change", () => {
+                if (!Object.hasOwn(CHATGPT_PASTE_MODES, pasteSelect.value))
+                    return;
+                chatgptPasteMode = pasteSelect.value;
+                localStorage.setItem(CHATGPT_PASTE_MODE_KEY, chatgptPasteMode);
+                updateChatgptInjectionStatus();
+            });
             const difficultyElement = document.getElementById("difficulty");
             difficultyElement.addEventListener("click", () => {
                 powRadix = powRadix === 10 ? 16 : 10;
