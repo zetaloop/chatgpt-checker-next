@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      5.6.0
+// @version      5.6.1
 // @description  查看 ChatGPT 和 Codex 的账号、用量与服务信息。
 // @match        *://chatgpt.com/*
 // @grant        GM_addElement
@@ -3127,10 +3127,11 @@
         );
 
         module(
-            "消息操作模块",
+            "消息复制模块",
             (source) =>
-                source.includes("getCopyHtml") &&
-                source.includes("sourcesAction:"),
+                source.includes(
+                    '.getAttribute("data-chatgpt-copy-reference")',
+                ) && source.includes("mdastExtensions:"),
             (messages) => {
                 const copyText = declared(
                     messages,
@@ -3160,6 +3161,16 @@
                     messages,
                     `${api}.register({messageText:${copyText},parseMarkdown:content=>${parse}(content,{extensions:[${extensions}()],mdastExtensions:[${mdastExtensions}()]}),resolveReference:${resolve}});`,
                 );
+            },
+            "chat",
+        );
+
+        module(
+            "消息操作模块",
+            (source) =>
+                source.includes("getCopyHtml") &&
+                source.includes("sourcesAction:"),
+            (messages) => {
                 const renderMessage = single(
                     [
                         ...new Set(
@@ -3212,6 +3223,17 @@
                     [...actions.source.matchAll(/assistantItem:([\w$]+)/g)],
                     "助手消息参数",
                 );
+                const [copyCall, copyText] = single(
+                    [
+                        ...actions.source.matchAll(
+                            new RegExp(
+                                `${RegExp.escape(item)}\\?\\.completed===!0\\?(\\(0,[\\w$]+\\.[\\w$]+\\)|[\\w$.]+)\\(${RegExp.escape(item)}\\):""`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "原生消息复制调用",
+                );
                 const [, canCopy, text] = single(
                     [
                         ...actions.source.matchAll(
@@ -3247,21 +3269,16 @@
                     ],
                     "复制按钮可用状态",
                 );
+                const [, image, ready] = single(
+                    [...available.matchAll(/^null==([\w$]+)&&([\w$]+)$/g)],
+                    "复制按钮内容",
+                );
                 replace(
                     actions,
                     copyState,
-                    `${declaration}(${api}.earlyActionsEnabled()||${item}?.completed===!0)&&(${available})`,
+                    `${declaration}null==${image}&&(${api}.earlyActionsEnabled()?${text}.trim().length>0:${ready})`,
                 );
-                replace(
-                    actions,
-                    `${item}?.completed===!0?${copyText}(${item}):""`,
-                    `${copyText}(${item})`,
-                );
-                replace(
-                    actions,
-                    `${item}?.completed===!0&&${text}.trim().length>0`,
-                    `${text}.trim().length>0`,
-                );
+                replace(actions, copyCall, `${copyText}(${item})`);
                 replace(messages, actionsSource, actions.source);
                 const renderTurn = declared(
                     messages,
