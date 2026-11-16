@@ -1368,6 +1368,7 @@
                                   ...props,
                                   allowCollapseBeforeFinal: true,
                                   preventAutoCollapse: false,
+                                  waitForToolIconExit: false,
                                   forceExpanded: false,
                                   disableCollapse: false,
                               }
