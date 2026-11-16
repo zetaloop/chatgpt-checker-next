@@ -105,9 +105,7 @@
     let chatgptRuntimeEnvironmentState;
     let chatgptPlanTypes;
     let chatgptModuleInjectionStarted = false;
-    let chatgptModuleEntries = [];
     let chatgptModuleState;
-    let chatgptRuntimeReady = false;
     let chatgptInjectionFailure;
     const chatgptReportedFailures = new Set();
 
@@ -131,7 +129,6 @@
                 throw new Error("原生模块加载接口未找到");
             const { patches, bindings } = createChatgptModulePatches();
             const entries = patches.concat(createChatgptModuleData());
-            chatgptModuleEntries = entries;
             installChatgptRuntimeBridge(require, bindings);
             const processed = new WeakMap();
             const bootstrap = new Set(Object.keys(require.m));
@@ -1113,10 +1110,6 @@
                 return after(fn, (_, scope) => {
                     if (scope.scope.__scopeBrand === "AppScope") {
                         appScope = scope;
-                        if (!chatgptRuntimeReady) {
-                            chatgptRuntimeReady = true;
-                            queueMicrotask(updateChatgptInjectionStatus);
-                        }
                         queueMicrotask(watchEnvironment);
                     }
                     if (
@@ -4055,37 +4048,53 @@
         const items = getChatgptModuleItems(page)
             .map((item) => `• ${item}`)
             .join("\n");
-        let label = "加载中";
+        const state = chatgptModuleState;
+        const errors = [
+            ...(chatgptInjectionFailure ? [chatgptInjectionFailure] : []),
+            ...(state?.errors ?? []),
+        ];
+        const loading = state?.loading ?? [];
+        const pending = state?.pending ?? ["原生路由入口"];
+        const refresh =
+            chatgptModuleInjectionEnabled !== chatgptModuleInjectionStarted
+                ? chatgptModuleInjectionEnabled
+                    ? `刷新页面后启用模块注入：\n${items}`
+                    : "刷新页面后关闭模块注入。"
+                : null;
+        let label = "未完成";
         let color = "#bbbbbb";
-        let description = "正在加载 ChatGPT 页面模块。";
-        const pending = chatgptModuleEntries.filter(
-            (entry) =>
-                entry.id === undefined &&
-                (entry.page === undefined || entry.page === page),
-        );
-        if (chatgptModuleInjectionEnabled !== chatgptModuleInjectionStarted) {
-            label = "刷新生效";
-            color = "#ffd700";
-            description = chatgptModuleInjectionEnabled
-                ? `刷新页面后启用模块注入：\n${items}`
-                : "刷新页面后关闭模块注入。";
-        } else if (!chatgptModuleInjectionEnabled) {
-            label = "注入关闭";
-            description = "模块注入已关闭。";
-        } else if (chatgptInjectionFailure) {
+        if (errors.length) {
             label = "注入失败";
             color = "#ff6b6b";
-            description = chatgptInjectionFailure;
-        } else if (chatgptRuntimeReady && pending.length === 0) {
+        } else if (refresh) {
+            label = "刷新生效";
+            color = "#ffd700";
+        } else if (!chatgptModuleInjectionEnabled) {
+            label = "注入关闭";
+        } else if (loading.length) {
+            label = "加载中";
+        } else if (state?.delivered && pending.length === 0) {
             label = "注入成功";
             color = "#98fb98";
-            description = `当前页面已注入：\n${items}`;
-        } else if (pending.length) {
-            description = `正在加载：\n${pending.map((entry) => `• ${entry.label}`).join("\n")}`;
+        }
+        const description = [...errors];
+        if (refresh) description.push(refresh);
+        if (label === "注入关闭") description.push("模块注入已关闭。");
+        if (chatgptModuleInjectionStarted) {
+            if (loading.length)
+                description.push(
+                    `正在加载：\n${loading.map((file) => `• ${new URL(file).pathname}`).join("\n")}`,
+                );
+            if (pending.length)
+                description.push(
+                    `待接入：\n${pending.map((item) => `• ${item}`).join("\n")}`,
+                );
+            if (label === "注入成功")
+                description.push(`当前页面已注入：\n${items}`);
         }
         status.innerText = label;
         status.style.color = color;
-        if (tooltip) tooltip.innerText = description;
+        if (tooltip) tooltip.innerText = description.join("\n\n");
     }
 
     function updateChatgptRuntimeModelControls() {
@@ -4166,9 +4175,6 @@
                 updateChatgptRuntimeModelControls();
             },
         );
-        pageWindow.addEventListener("load", updateChatgptInjectionStatus, {
-            once: true,
-        });
     }
 
     function formatChatgptConversation(turns, conversationId) {
