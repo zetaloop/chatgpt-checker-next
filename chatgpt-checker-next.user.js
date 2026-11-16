@@ -1177,19 +1177,19 @@
                     );
                 };
             },
-            turns(fn) {
-                return after(fn, ([props]) => {
-                    const conversation = {
-                        id: props.conversationId,
-                        isWorkConversation: props.isWorkConversation,
-                        copyReady: props.renderedTurns.length > 0,
-                        turns:
-                            props.isReadOnly || props.isTemporaryChat
-                                ? props.renderedTurns
-                                : undefined,
-                    };
-                    conversations.set(conversation.id, conversation);
-                });
+            turns(fn, props) {
+                const result = fn(props);
+                const conversation = {
+                    id: props.conversationId,
+                    isWorkConversation: props.isWorkConversation,
+                    copyReady: props.renderedTurns.length > 0,
+                    turns:
+                        props.isReadOnly || props.isTemporaryChat
+                            ? props.renderedTurns
+                            : undefined,
+                };
+                conversations.set(conversation.id, conversation);
+                return result;
             },
             earlyActionsEnabled: getEarlyActionsEnabled,
             promptLimit(controller, limit) {
@@ -2457,20 +2457,6 @@
         });
 
         module(
-            "会话渲染模块",
-            (source) =>
-                source.includes('id:"pending-chatgpt-submit"') &&
-                source.includes("timestampSeparatorAtMs"),
-            (turns) => {
-                const renderTurns = exported(turns, "会话内容接口", (source) =>
-                    source.includes("timestampSeparatorAtMs:"),
-                );
-                wrap(turns, renderTurns, `${api}.turns`);
-            },
-            "chat",
-        );
-
-        module(
             "会话页面模块",
             (source) => source.includes("ChatGptConversationPage:"),
             (page) => {
@@ -2478,6 +2464,29 @@
                     /\{[^{}]*\bisInlinePreview:[^{}]*\}=[\w$]+/.test(source),
                 );
                 const source = view.toString();
+                const [turnCall, renderTurns] = single(
+                    [
+                        ...source.matchAll(
+                            /\(0,([\w$]+\.[\w$]+)\)\(\{([^{}]*)/g,
+                        ),
+                    ].filter(([, , props]) =>
+                        [
+                            "conversationId:",
+                            "renderedTurns:",
+                            "onEditUserMessage:",
+                            "onFork:",
+                        ].every((property) => props.includes(property)),
+                    ),
+                    "会话轮次调用",
+                );
+                replace(
+                    page,
+                    turnCall,
+                    turnCall.replace(
+                        `(0,${renderTurns})(`,
+                        () => `${api}.turns(${renderTurns},`,
+                    ),
+                );
                 const serverIds = new Set(
                     [...source.matchAll(/serverConversationId:([\w$]+)/g)].map(
                         (match) => match[1],
