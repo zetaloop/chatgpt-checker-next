@@ -106,6 +106,7 @@
     let chatgptPlanTypes;
     let chatgptModuleInjectionStarted = false;
     let chatgptModuleEntries = [];
+    let chatgptModuleState;
     let chatgptRuntimeReady = false;
     let chatgptInjectionFailure;
     const chatgptReportedFailures = new Set();
@@ -126,49 +127,169 @@
         const original = prototype.call;
         let runtime;
         const install = (require) => {
+            if (typeof require.ir !== "function")
+                throw new Error("原生模块加载接口未找到");
             const { patches, bindings } = createChatgptModulePatches();
             const entries = patches.concat(createChatgptModuleData());
             chatgptModuleEntries = entries;
             installChatgptRuntimeBridge(require, bindings);
             const processed = new WeakMap();
+            const bootstrap = new Set(Object.keys(require.m));
+            const chunks = new Map();
+            const routes = new Map();
+            const loads = new Map();
+            const loadErrors = new Map();
+            let initialRoutes,
+                router,
+                stopRouter,
+                scheduled = false;
+            const url = (value) =>
+                new URL(value, pageWindow.location.href).href;
+            const assetId = (value) => {
+                const id = new URL(
+                    value,
+                    pageWindow.location.href,
+                ).pathname.match(/\/(\d+)\.[^/]+\.js$/)?.[1];
+                if (!id) throw new Error(`原生模块资源标识未识别：${value}`);
+                return id;
+            };
+            const remember = (namespace) => {
+                if (!namespace?.__webpack_modules__) return;
+                try {
+                    if (!Array.isArray(namespace.__rspack_esm_ids))
+                        throw new Error("原生模块资源标识未提供");
+                    for (const id of namespace.__rspack_esm_ids)
+                        chunks.set(String(id), namespace.__webpack_modules__);
+                } catch (error) {
+                    reportChatgptInjectionFailure(`原生模块登记失败：${error}`);
+                }
+            };
+            const inspect = () => {
+                const manifest = pageWindow.__reactRouterManifest;
+                const ids =
+                    router?.state.matches.map(({ route }) => route.id) ??
+                    initialRoutes;
+                if (!ids?.length)
+                    return {
+                        delivered: false,
+                        pending: ["原生路由入口"],
+                        loading: [],
+                        errors: [],
+                    };
+                const files = new Set();
+                for (const id of ids) {
+                    const route = manifest?.routes?.[id];
+                    if (!route) throw new Error(`原生路由定义未找到：${id}`);
+                    for (const file of [
+                        route.module,
+                        route.clientLoaderModule,
+                        route.clientActionModule,
+                        ...(route.imports ?? []),
+                    ])
+                        if (file) files.add(url(file));
+                }
+                const pending = ids.filter((id) => !routes.has(id));
+                const loading = [...loads.keys()].filter((file) =>
+                    files.has(file),
+                );
+                const errors = [...loadErrors]
+                    .filter(([file]) => files.has(file))
+                    .map(([file, error]) => `${file} 加载失败：${error}`);
+                if (pending.length)
+                    return { delivered: false, pending, loading, errors };
+                const candidates = new Set(bootstrap);
+                // 入口清单首项是运行时，其余资源通过 C 登记模块。
+                const runtimeUrl = url(manifest.entry.imports[0]);
+                for (const file of files) {
+                    if (file === runtimeUrl) continue;
+                    for (const id of Object.keys(
+                        chunks.get(assetId(file)) ?? {},
+                    ))
+                        candidates.add(id);
+                }
+                for (const id of ids) {
+                    const modules = routes.get(id)?.__webpack_modules__;
+                    if (!modules)
+                        throw new Error(`原生路由模块结构未识别：${id}`);
+                    for (const key of Object.keys(modules)) candidates.add(key);
+                }
+                const page = getChatgptPage(router?.state.location.pathname);
+                for (const entry of entries) {
+                    if (entry.page !== undefined && entry.page !== page)
+                        continue;
+                    if (entry.error) errors.push(entry.error);
+                    else if (
+                        entry.id === undefined ||
+                        !candidates.has(entry.id)
+                    )
+                        errors.push(`${entry.label}匹配到 0 个结果`);
+                    else if (!entry.ready) pending.push(entry.label);
+                }
+                return { delivered: true, pending, loading, errors };
+            };
+            const publish = () => {
+                scheduled = false;
+                try {
+                    chatgptModuleState = inspect();
+                } catch (error) {
+                    chatgptModuleState = {
+                        delivered: true,
+                        pending: [],
+                        loading: [],
+                        errors: [String(error)],
+                    };
+                }
+                for (const error of chatgptModuleState.errors)
+                    reportChatgptFailure(`模块注入失败：${error}`);
+                updateChatgptInjectionStatus();
+            };
+            const schedule = () => {
+                if (scheduled) return;
+                scheduled = true;
+                queueMicrotask(publish);
+            };
             const patch = (id, factory) => {
                 if (processed.has(factory)) return processed.get(factory);
                 const source = factory.toString();
                 const target = { id, source };
-                let matched = false;
+                const matched = entries.filter((entry) =>
+                    entry.predicate(source),
+                );
                 try {
-                    for (const entry of entries) {
-                        if (!entry.predicate(source)) continue;
-                        matched = true;
+                    for (const entry of matched) {
                         if (entry.id !== undefined && entry.id !== id)
                             throw new Error(`${entry.label}匹配到多个模块`);
-                        if (entry.read) {
-                            if (entry.id === undefined) {
-                                queueMicrotask(() => {
-                                    try {
-                                        entry.read(require(id));
-                                    } catch (error) {
-                                        reportChatgptInjectionFailure(
-                                            `读取${entry.label}失败：${error}`,
-                                        );
-                                    }
-                                });
-                            }
-                        } else {
-                            entry.apply(target);
-                        }
-                        entry.id = id;
+                        entry.apply?.(target);
                     }
                     const result =
                         target.source === source
                             ? factory
                             : compileChatgptModule(target.source);
                     processed.set(factory, result);
-                    if (matched) queueMicrotask(updateChatgptInjectionStatus);
+                    for (const entry of matched) {
+                        entry.id = id;
+                        entry.error = undefined;
+                        entry.ready = !entry.read;
+                        if (entry.read)
+                            queueMicrotask(() => {
+                                try {
+                                    entry.read(require(id));
+                                    entry.ready = true;
+                                } catch (error) {
+                                    entry.error = `读取${entry.label}失败：${error}`;
+                                }
+                                schedule();
+                            });
+                    }
+                    if (matched.length) schedule();
                     return result;
                 } catch (error) {
-                    reportChatgptInjectionFailure(error);
+                    for (const entry of matched) {
+                        entry.ready = false;
+                        entry.error = `${entry.label}挂接失败：${error}`;
+                    }
                     processed.set(factory, factory);
+                    schedule();
                     return factory;
                 }
             };
@@ -180,6 +301,90 @@
                     return true;
                 },
             });
+            const register = require.C;
+            require.C = function (namespace) {
+                const result = register.call(this, namespace);
+                remember(namespace);
+                return result;
+            };
+            const importModule = require.ir;
+            require.ir = function (resource) {
+                const promise = importModule.call(this, resource);
+                const manifest = pageWindow.__reactRouterManifest;
+                const file = new URL(
+                    resource,
+                    manifest
+                        ? url(manifest.entry.imports[0])
+                        : pageWindow.location.href,
+                ).href;
+                loads.set(file, promise);
+                loadErrors.delete(file);
+                schedule();
+                promise.then(
+                    (namespace) => {
+                        remember(namespace);
+                        if (loads.get(file) === promise) {
+                            loads.delete(file);
+                            loadErrors.delete(file);
+                        }
+                        schedule();
+                    },
+                    (error) => {
+                        if (loads.get(file) === promise) {
+                            loads.delete(file);
+                            loadErrors.set(file, String(error));
+                        }
+                        schedule();
+                    },
+                );
+                return promise;
+            };
+            const observe = (name, receive) => {
+                let value;
+                const set = (next) => {
+                    value = next;
+                    try {
+                        value = receive(next);
+                    } catch (error) {
+                        reportChatgptInjectionFailure(
+                            `原生入口接入失败：${name}：${error}`,
+                        );
+                    }
+                    schedule();
+                };
+                const current = pageWindow[name];
+                Object.defineProperty(pageWindow, name, {
+                    configurable: true,
+                    enumerable: true,
+                    get: () => value,
+                    set,
+                });
+                if (current !== undefined) set(current);
+            };
+            observe("__reactRouterRouteModules", (value) => {
+                initialRoutes = Object.keys(value);
+                routes.clear();
+                for (const [id, namespace] of Object.entries(value)) {
+                    remember(namespace);
+                    routes.set(id, namespace);
+                }
+                return new Proxy(value, {
+                    set(target, id, namespace) {
+                        target[id] = namespace;
+                        remember(namespace);
+                        routes.set(id, namespace);
+                        schedule();
+                        return true;
+                    },
+                });
+            });
+            observe("__reactRouterDataRouter", (value) => {
+                stopRouter?.();
+                router = value;
+                stopRouter = router.subscribe(schedule);
+                return value;
+            });
+            schedule();
         };
         const hook = new Proxy(original, {
             apply(target, factory, args) {
@@ -3645,8 +3850,7 @@
         ];
     }
 
-    function getChatgptPage() {
-        const pathname = pageWindow.location.pathname;
+    function getChatgptPage(pathname = pageWindow.location.pathname) {
         if (pathname.startsWith("/dots/")) return "dot";
         if (/^\/(?:c|share|g\/[^/]+\/(?:shared\/)?c)\//.test(pathname))
             return "chat";
