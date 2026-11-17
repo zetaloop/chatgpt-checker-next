@@ -4,7 +4,7 @@
 // @homepage     https://github.com/zetaloop/chatgpt-checker-next
 // @author       zetaloop
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZmlsbD0iIzJjM2U1MCIgZD0iTTMyIDJDMTUuNDMyIDIgMiAxNS40MzIgMiAzMnMxMy40MzIgMzAgMzAgMzAgMzAtMTMuNDMyIDMwLTMwUzQ4LjU2OCAyIDMyIDJ6bTAgNTRjLTEzLjIzMyAwLTI0LTEwLjc2Ny0yNC0yNFMxOC43NjcgOCAzMiA4czI0IDEwLjc2NyAyNCAyNFM0NS4yMzMgNTYgMzIgNTZ6Ii8+PHBhdGggZmlsbD0iIzNkYzJmZiIgZD0iTTMyIDEyYy0xMS4wNDYgMC0yMCA4Ljk1NC0yMCAyMHM4Ljk1NCAyMCAyMCAyMCAyMC04Ljk1NCAyMC0yMFM0My4wNDYgMTIgMzIgMTJ6bTAgMzZjLTguODM3IDAtMTYtNy4xNjMtMTYtMTZzNy4xNjMtMTYgMTYtMTYgMTYgNy4xNjMgMTYgMTZTNDAuODM3IDQ4IDMyIDQ4eiIvPjxwYXRoIGZpbGw9IiMwMGZmN2YiIGQ9Ik0zMiAyMGMtNi42MjcgMC0xMiA1LjM3My0xMiAxMnM1LjM3MyAxMiAxMiAxMiAxMi01LjM3MyAxMi0xMlMzOC42MjcgMjAgMzIgMjB6bTAgMjBjLTQuNDE4IDAtOC0zLjU4Mi04LThzMy41ODItOCA4LTggOCAzLjU4MiA4IDgtMy41ODIgOC04IDh6Ii8+PGNpcmNsZSBmaWxsPSIjZmZmIiBjeD0iMzIiIGN5PSIzMiIgcj0iNCIvPjwvc3ZnPg==
-// @version      5.6.2
+// @version      5.6.3
 // @description  查看 ChatGPT 和 Codex 的账号、用量与服务信息。
 // @match        *://chatgpt.com/*
 // @grant        GM_addElement
@@ -1968,7 +1968,7 @@
                 }
                 return (
                     conversation.turns ??
-                    scope.get(native.turns, conversation.id)
+                    native.turns(scope.get, conversation.id)
                 );
             },
             getMessageText(item, conversationId) {
@@ -2831,17 +2831,15 @@
                 source.includes("getRenderTelemetry:") &&
                 source.includes("isStreaming:(0,"),
             (content) => {
-                const [contentExport] = single(
-                    Object.entries(
-                        getChatgptModuleExports(content.source),
-                    ).filter(
-                        ([, name]) =>
-                            typeof name !== "function" &&
-                            !content.source.includes(`function ${name}(`),
-                    ),
-                    "会话内容选择器",
+                const render = exported(
+                    content,
+                    "会话内容接口",
+                    (source) =>
+                        source.includes("context_truncation_continuation:") &&
+                        source.includes("getRenderTelemetry:"),
                 );
-                bindings.turns = [content.id, contentExport];
+                bindings.turns = [content.id, render.exportName];
+                const source = render.toString();
                 const imports = Object.fromEntries(
                     [
                         ...content.source.matchAll(
@@ -2855,7 +2853,7 @@
                 ]) {
                     const value = single(
                         [
-                            ...content.source.matchAll(
+                            ...source.matchAll(
                                 new RegExp(`${field}:([\\w$]+)`, "g"),
                             ),
                         ],
@@ -2863,7 +2861,7 @@
                     )[1];
                     const reference = single(
                         [
-                            ...content.source.matchAll(
+                            ...source.matchAll(
                                 new RegExp(
                                     `(?:[,;])${RegExp.escape(value)}=[\\w$]+\\(([\\w$]+)\\.([\\w$]+),[\\w$]+\\)`,
                                     "g",
@@ -2876,13 +2874,34 @@
                 }
                 const status = single(
                     [
-                        ...content.source.matchAll(
+                        ...source.matchAll(
                             /isStreaming:\(0,[\w$]+\.[\w$]+\)\([\w$]+\(([\w$]+)\.([\w$]+),[\w$]+\)\)/g,
                         ),
                     ],
                     "响应状态接口",
                 );
                 bindings.status = [imports[status[1]], status[2]];
+                const actions = exported(content, "轮次操作栏条件", (source) =>
+                    source.includes(".suppressTurnActions"),
+                );
+                const [state] = single(
+                    [
+                        ...actions
+                            .toString()
+                            .matchAll(/"in_progress"!==[\w$]+\.status/g),
+                    ],
+                    "轮次生成状态",
+                );
+                replace(
+                    content,
+                    actions.toString(),
+                    actions
+                        .toString()
+                        .replace(
+                            state,
+                            () => `(${state}||arguments[1]===true)`,
+                        ),
+                );
             },
         );
 
@@ -3488,29 +3507,28 @@
                 );
                 replace(actions, copyCall, `${copyText}(${item})`);
                 replace(messages, actionsSource, actions.source);
-                const renderTurn = declared(
-                    messages,
-                    "会话轮次",
-                    (source) =>
-                        source.includes(".suppressTurnActions") &&
-                        source.includes("assistantItem:"),
+                const renderTurn = declared(messages, "会话轮次", (source) =>
+                    source.includes(`(${renderActions},{`),
                 );
                 const turn = declarations(messages)[renderTurn].toString();
-                const [condition] = single(
+                const [, turnValue] = single(
                     [
                         ...turn.matchAll(
-                            /[^,;{}?:]*\.suppressTurnActions[^,;{}?:]*/g,
+                            /favoriteSourceMessageIds:([\w$]+)\.messageIds/g,
+                        ),
+                    ],
+                    "轮次消息来源",
+                );
+                const [condition, check] = single(
+                    [
+                        ...turn.matchAll(
+                            new RegExp(
+                                `(\\(0,[\\w$]+\\.[\\w$]+\\))\\(${RegExp.escape(turnValue)}\\)`,
+                                "g",
+                            ),
                         ),
                     ],
                     "轮次操作栏条件",
-                );
-                const [state, operator, turnValue] = single(
-                    [
-                        ...condition.matchAll(
-                            /"in_progress"([!=]==)([\w$]+)\.status/g,
-                        ),
-                    ],
-                    "轮次生成状态",
                 );
                 const [, assistant] = single(
                     [...turn.matchAll(/assistantItem:([^,}]+)/g)],
@@ -3520,13 +3538,10 @@
                     [...turn.matchAll(/imageItems:([\w$]+)/g)],
                     "轮次图片",
                 );
-                const pending = `("in_progress"===${turnValue}.status&&!${api}.hasMessageActions(${assistant},${images}))`;
                 replace(
                     messages,
                     condition,
-                    condition.replace(state, () =>
-                        operator === "===" ? pending : `!${pending}`,
-                    ),
+                    `${check}(${turnValue},${api}.hasMessageActions(${assistant},${images}))`,
                 );
                 append(
                     messages,
