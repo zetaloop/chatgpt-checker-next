@@ -3554,16 +3554,16 @@
         module(
             "消息时间格式模块",
             (source) =>
-                source.includes("sentAtMs:") &&
                 source.includes("weekdayFormat:") &&
+                source.includes("weekday:") &&
                 source.includes(".formatDate("),
             (time) => {
                 const format = exported(
                     time,
                     "消息时间格式接口",
                     (source) =>
-                        source.includes("sentAtMs:") &&
                         source.includes("weekdayFormat:") &&
+                        source.includes("weekday:") &&
                         source.includes(".formatDate("),
                 );
                 wrap(time, format, `${api}.timeFormat`);
