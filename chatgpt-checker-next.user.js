@@ -1376,19 +1376,18 @@
                     );
                 };
             },
-            turns(fn, props) {
-                const result = fn(props);
-                const conversation = {
-                    id: props.conversationId,
-                    isWorkConversation: props.isWorkConversation,
-                    copyReady: props.renderedTurns.length > 0,
-                    turns:
-                        props.isReadOnly || props.isTemporaryChat
-                            ? props.renderedTurns
-                            : undefined,
-                };
-                conversations.set(conversation.id, conversation);
-                return result;
+            turns(fn) {
+                return after(fn, ([props]) => {
+                    conversations.set(props.conversationId, {
+                        id: props.conversationId,
+                        isWorkConversation: props.isWorkConversation,
+                        copyReady: props.renderedTurns.length > 0,
+                        turns:
+                            props.isReadOnly || props.isTemporaryChat
+                                ? props.renderedTurns
+                                : undefined,
+                    });
+                });
             },
             earlyActionsEnabled: getEarlyActionsEnabled,
             promptLimit(controller, limit) {
@@ -2655,6 +2654,20 @@
             wrap(picker, renderPicker, `${api}.picker`);
         });
 
+        const mapsTurns = (source) =>
+            /\brenderedTurns:([\w$]+)(?![\w$])[\s\S]*?(?<![\w$.])\1\.map\(/.test(
+                source,
+            );
+        module(
+            "会话轮次模块",
+            mapsTurns,
+            (turns) => {
+                const render = exported(turns, "会话轮次映射", mapsTurns);
+                wrap(turns, render, `${api}.turns`);
+            },
+            "chat",
+        );
+
         module(
             "会话页面模块",
             (source) => source.includes("ChatGptConversationPage:"),
@@ -2663,29 +2676,6 @@
                     /\{[^{}]*\bisInlinePreview:[^{}]*\}=[\w$]+/.test(source),
                 );
                 const source = view.toString();
-                const [turnCall, renderTurns] = single(
-                    [
-                        ...source.matchAll(
-                            /\(0,([\w$]+\.[\w$]+)\)\(\{([^{}]*)/g,
-                        ),
-                    ].filter(([, , props]) =>
-                        [
-                            "conversationId:",
-                            "renderedTurns:",
-                            "onEditUserMessage:",
-                            "onFork:",
-                        ].every((property) => props.includes(property)),
-                    ),
-                    "会话轮次调用",
-                );
-                replace(
-                    page,
-                    turnCall,
-                    turnCall.replace(
-                        `(0,${renderTurns})(`,
-                        () => `${api}.turns(${renderTurns},`,
-                    ),
-                );
                 const serverIds = new Set(
                     [...source.matchAll(/serverConversationId:([\w$]+)/g)].map(
                         (match) => match[1],
