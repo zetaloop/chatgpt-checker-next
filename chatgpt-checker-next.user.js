@@ -3422,27 +3422,12 @@
                     ],
                     "消息组件",
                 );
-                const renderActions = single(
-                    [
-                        ...new Set(
-                            [
-                                ...messages.source.matchAll(
-                                    /\(0,[\w$]+\.(?:jsx|jsxs)\)\(([\w$]+),\{([^{}]*)/g,
-                                ),
-                            ]
-                                .filter((match) =>
-                                    [
-                                        "assistantItem:",
-                                        "sourcesAction:",
-                                        "actionRowRef:",
-                                    ].every((property) =>
-                                        match[2].includes(property),
-                                    ),
-                                )
-                                .map((match) => match[1]),
-                        ),
-                    ],
+                const renderActions = declared(
+                    messages,
                     "消息操作栏",
+                    (source) =>
+                        source.includes("assistantItem:") &&
+                        source.includes("copyText:"),
                 );
                 const actionsSource =
                     declarations(messages)[renderActions].toString();
