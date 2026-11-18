@@ -1389,7 +1389,17 @@
                     });
                 });
             },
-            earlyActionsEnabled: getEarlyActionsEnabled,
+            earlyCopyText(item, isImage) {
+                if (
+                    !chatgptEarlyActionsEnabled ||
+                    !item ||
+                    item.completed ||
+                    isImage
+                )
+                    return "";
+                const text = native.messageText(item);
+                return text.trim() ? text : "";
+            },
             promptLimit(controller, limit) {
                 composerState(controller.view).limit = limit;
                 return limit;
@@ -3410,24 +3420,13 @@
                     [...actions.source.matchAll(/assistantItem:([\w$]+)/g)],
                     "助手消息参数",
                 );
-                const [copyCall, copyText] = single(
-                    [
-                        ...actions.source.matchAll(
-                            new RegExp(
-                                `${RegExp.escape(item)}\\?\\.completed===!0\\?(\\(0,[\\w$]+\\.[\\w$]+\\)|[\\w$.]+)\\(${RegExp.escape(item)}\\):""`,
-                                "g",
-                            ),
-                        ),
-                    ],
-                    "原生消息复制调用",
-                );
-                const [, canCopy, text] = single(
-                    [
-                        ...actions.source.matchAll(
-                            /copyText:([\w$]+)\?([\w$]+):void 0/g,
-                        ),
-                    ],
+                const [, canCopy] = single(
+                    [...actions.source.matchAll(/\bcanCopy:([\w$]+)(?=[,}])/g)],
                     "消息复制状态",
+                );
+                const [, isImage] = single(
+                    [...actions.source.matchAll(/\bisImage:([^,}]+)/g)],
+                    "图片操作状态",
                 );
                 const [rowCall, actionRow] = single(
                     [
@@ -3445,27 +3444,28 @@
                         () => `(${api}.actionRow,`,
                     ),
                 );
-                const [copyState, declaration, available] = single(
+                const [assignment] = single(
                     [
                         ...actions.source.matchAll(
                             new RegExp(
-                                `((?:[,;]|\\blet )${RegExp.escape(canCopy)}=)([^,;]+)`,
+                                `[^\\w$.]${RegExp.escape(canCopy)}=(?!=)`,
                                 "g",
                             ),
                         ),
                     ],
                     "复制按钮可用状态",
                 );
-                const [, image, ready] = single(
-                    [...available.matchAll(/^null==([\w$]+)&&([\w$]+)$/g)],
-                    "复制按钮内容",
+                replace(actions, "{", "{let checkerCopyText;");
+                replace(
+                    actions,
+                    assignment,
+                    `${assignment}(checkerCopyText=${api}.earlyCopyText(${item},${isImage}))?true:`,
                 );
                 replace(
                     actions,
-                    copyState,
-                    `${declaration}null==${image}&&(${api}.earlyActionsEnabled()?${text}.trim().length>0:${ready})`,
+                    "copyText:",
+                    "copyText:checkerCopyText?checkerCopyText:",
                 );
-                replace(actions, copyCall, `${copyText}(${item})`);
                 replace(messages, actionsSource, actions.source);
                 const renderTurn = declared(messages, "会话轮次", (source) =>
                     source.includes(`(${renderActions},{`),
