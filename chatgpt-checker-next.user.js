@@ -3289,8 +3289,9 @@
                     models,
                     "模型选项解析接口",
                     (source) =>
-                        source.includes(".thinkingEffort??") &&
-                        source.includes("defaultThinkingEffortByModelSlug"),
+                        /defaultThinkingEffortByModelSlug\?\.\[[\w$]+\.slug\]/.test(
+                            source,
+                        ),
                 );
                 const modelVersion = exported(
                     models,
