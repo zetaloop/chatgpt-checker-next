@@ -3389,28 +3389,12 @@
                 source.includes("getCopyHtml") &&
                 source.includes("sourcesAction:"),
             (messages) => {
-                const renderMessage = single(
-                    [
-                        ...new Set(
-                            [
-                                ...messages.source.matchAll(
-                                    /\(0,[\w$]+\.(?:jsx|jsxs)\)\(([\w$]+),\{([^{}]*)/g,
-                                ),
-                            ]
-                                .filter((match) =>
-                                    [
-                                        "item:",
-                                        "items:",
-                                        "isMostRecentTurn:",
-                                        "isReadOnly:",
-                                    ].every((property) =>
-                                        match[2].includes(property),
-                                    ),
-                                )
-                                .map((match) => match[1]),
-                        ),
-                    ],
+                const renderMessage = declared(
+                    messages,
                     "消息组件",
+                    (source) =>
+                        source.includes('"user-message"') &&
+                        /sentAtMs:[\w$]+\.sentAtMs\b/.test(source),
                 );
                 const renderActions = declared(
                     messages,
