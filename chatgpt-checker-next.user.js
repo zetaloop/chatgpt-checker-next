@@ -1958,6 +1958,64 @@
                     native.turns(scope.get, conversation.id)
                 );
             },
+            useMessageCopy(props) {
+                const ref = native.useRef(null);
+                ref.current = props.getMessageCopy;
+                return ref;
+            },
+            copyMessage({
+                item,
+                assistantItem,
+                conversationId,
+                favoriteSourceMessageIds,
+            }) {
+                if (
+                    (!item && !assistantItem) ||
+                    (!chatgptCopyRawEnabled &&
+                        !(assistantItem && chatgptCopyDetailsEnabled))
+                )
+                    return;
+                try {
+                    if (!assistantItem || !chatgptCopyDetailsEnabled)
+                        return bridge.getMessageText(
+                            item ?? assistantItem,
+                            conversationId,
+                        );
+                    const mapping = appScope.get(
+                        native.mapping,
+                        conversationId,
+                    );
+                    const id =
+                        favoriteSourceMessageIds?.findLast(
+                            (id) => mapping?.[id],
+                        ) ??
+                        assistantItem.latestMessageId ??
+                        assistantItem.messageId;
+                    if (!mapping?.[id]) throw new Error("本轮消息尚未载入");
+                    const items = [];
+                    for (
+                        let node = mapping[id];
+                        node;
+                        node = mapping[node.parent]
+                    ) {
+                        const source = node.message;
+                        if (source?.author.role === "user") break;
+                        if (["assistant", "tool"].includes(source?.author.role))
+                            items.push(
+                                bridge.getMessageText(
+                                    { source },
+                                    conversationId,
+                                ),
+                            );
+                    }
+                    return (
+                        items.reverse().filter(Boolean).join("\n\n") ||
+                        undefined
+                    );
+                } catch (error) {
+                    report(error);
+                }
+            },
             getMessageText(item, conversationId) {
                 if (item.source) {
                     const message = item.source;
@@ -3389,6 +3447,27 @@
                 const actionsSource =
                     declarations(messages)[renderActions].toString();
                 const actions = { source: actionsSource };
+                const copyProps = (source) => {
+                    const [, props] = source.match(
+                        /^function [\w$]+\(([\w$]+)\)/,
+                    );
+                    return source.replace(
+                        "{",
+                        () =>
+                            `{const checkerCopy=()=>${api}.copyMessage(${props});`,
+                    );
+                };
+                const userSource =
+                    declarations(messages)[renderMessage].toString();
+                replace(
+                    messages,
+                    userSource,
+                    copyProps(userSource).replaceAll(
+                        "copyContentRef:",
+                        "getMessageCopy:checkerCopy,copyContentRef:",
+                    ),
+                );
+                actions.source = copyProps(actions.source);
                 const [, item] = single(
                     [...actions.source.matchAll(/assistantItem:([\w$]+)/g)],
                     "助手消息参数",
@@ -3412,10 +3491,12 @@
                 replace(
                     actions,
                     rowCall,
-                    rowCall.replace(
-                        `(${actionRow},`,
-                        () => `(${api}.actionRow,`,
-                    ),
+                    rowCall
+                        .replace(`(${actionRow},`, () => `(${api}.actionRow,`)
+                        .replace(
+                            "{actionRowRef:",
+                            "{getMessageCopy:checkerCopy,actionRowRef:",
+                        ),
                 );
                 const [assignment] = single(
                     [
@@ -3498,6 +3579,89 @@
             "chat",
         );
 
+        module(
+            "用户消息复制按钮",
+            (source) =>
+                source.includes('surface:"user_message"') &&
+                source.includes("preserveWhitespaceInHtml:"),
+            (button) => {
+                const fn = declared(
+                    button,
+                    "用户消息复制",
+                    (source) =>
+                        source.includes('surface:"user_message"') &&
+                        source.includes("preserveWhitespaceInHtml:"),
+                );
+                const source = declarations(button)[fn].toString();
+                const [start] = single(
+                    [
+                        ...source.matchAll(
+                            /let [\w$]+=function\([\w$]+\)\{let\{contentRef:/g,
+                        ),
+                    ],
+                    "复制用户消息内容",
+                );
+                const [, props] = source.match(/^function [\w$]+\(([\w$]+)\)/);
+                replace(
+                    button,
+                    source,
+                    source
+                        .replace(
+                            "{",
+                            () =>
+                                `{const checkerCopy=${api}.useMessageCopy(${props});`,
+                        )
+                        .replace(start, () =>
+                            start.replace(
+                                "=function",
+                                "=checkerCopy.current?.()??function",
+                            ),
+                        ),
+                );
+            },
+            "chat",
+        );
+        module(
+            "助手消息复制按钮",
+            (source) =>
+                source.includes('surface:"assistant_message"') &&
+                source.includes("getCopyHtml:"),
+            (button) => {
+                const fn = declared(
+                    button,
+                    "助手消息复制",
+                    (source) =>
+                        source.includes('surface:"assistant_message"') &&
+                        source.includes("getCopyHtml:"),
+                );
+                const source = declarations(button)[fn].toString();
+                const [read, html, getHtml, text] = single(
+                    [
+                        ...source.matchAll(
+                            /let ([\w$]+)=([\w$]+)\?\.\(\),([\w$]+)=/g,
+                        ),
+                    ],
+                    "复制助手消息内容",
+                );
+                const [, props] = source.match(/^function [\w$]+\(([\w$]+)\)/);
+                replace(
+                    button,
+                    source,
+                    source
+                        .replace(
+                            "{",
+                            () =>
+                                `{const checkerCopy=${api}.useMessageCopy(${props});`,
+                        )
+                        .replace(
+                            read,
+                            () =>
+                                `let checkerText=checkerCopy.current?.(),${html}=checkerText==null?${getHtml}?.():null,${text}=checkerText??`,
+                        ),
+                );
+            },
+            "chat",
+        );
         module(
             "消息时间格式模块",
             (source) =>
