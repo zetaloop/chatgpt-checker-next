@@ -55,7 +55,6 @@
     const CHATGPT_APPROVAL_KEY = "checker-next-chatgpt-approval";
     const CHATGPT_APPROVAL_EVENT = "checker-next-approval";
     const CHATGPT_AUTO_COLLAPSE_KEY = "checker-next-chatgpt-auto-collapse";
-    const CHATGPT_AUTO_COLLAPSE_EVENT = "checker-next-auto-collapse";
     const CHATGPT_SELECTION_POPOVER_DISABLED_KEY =
         "checker-next-chatgpt-selection-popover-disabled";
     const CHATGPT_RUNTIME_MODEL_STATE_EVENT =
@@ -496,15 +495,6 @@
                 getEarlyActionsEnabled,
                 getEarlyActionsEnabled,
             );
-        const subscribeAutoCollapse = (listener) => {
-            pageWindow.addEventListener(CHATGPT_AUTO_COLLAPSE_EVENT, listener);
-            return () =>
-                pageWindow.removeEventListener(
-                    CHATGPT_AUTO_COLLAPSE_EVENT,
-                    listener,
-                );
-        };
-        const getAutoCollapse = () => chatgptAutoCollapseEnabled;
         const after = (fn, callback) => {
             function wrapped(...args) {
                 const result = fn.apply(this, args);
@@ -1356,22 +1346,10 @@
             },
             analysis(fn) {
                 return function (props) {
-                    const enabled = native.useSyncExternalStore(
-                        subscribeAutoCollapse,
-                        getAutoCollapse,
-                        getAutoCollapse,
-                    );
                     return native.createElement(
                         fn,
-                        enabled
-                            ? {
-                                  ...props,
-                                  allowCollapseBeforeFinal: true,
-                                  preventAutoCollapse: false,
-                                  waitForToolIconExit: false,
-                                  forceExpanded: false,
-                                  disableCollapse: false,
-                              }
+                        chatgptAutoCollapseEnabled
+                            ? { ...props, defaultExpanded: false }
                             : props,
                     );
                 };
@@ -2790,22 +2768,17 @@
 
         module(
             "分析内容模块",
-            (source) =>
-                /\{[^{}]*\ballowCollapseBeforeFinal:[^{}]*\}=[\w$]+/.test(
-                    source,
-                ) &&
-                source.includes("preventAutoCollapse:") &&
-                source.includes("agentActivityProps:"),
+            (source) => source.includes('"chatgpt.pythonExecution.status"'),
             (analysis) => {
-                const activity = exported(
+                const activity = declared(
                     analysis,
                     "分析内容组件",
                     (source) =>
-                        /\{[^{}]*\ballowCollapseBeforeFinal:[^{}]*\}=[\w$]+/.test(
-                            source,
-                        ) && source.includes("persistedCollapsed:"),
+                        source.includes("defaultExpanded:") &&
+                        source.includes(".code.length") &&
+                        source.includes(".output.length"),
                 );
-                wrap(analysis, activity, `${api}.analysis`);
+                append(analysis, `${activity}=${api}.analysis(${activity});`);
             },
             "chat",
         );
@@ -5588,9 +5561,6 @@
                 CHATGPT_AUTO_COLLAPSE_KEY,
                 (value) => {
                     chatgptAutoCollapseEnabled = value;
-                    pageWindow.dispatchEvent(
-                        new pageWindow.Event(CHATGPT_AUTO_COLLAPSE_EVENT),
-                    );
                     updateChatgptInjectionStatus();
                 },
             );
