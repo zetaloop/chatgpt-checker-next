@@ -244,15 +244,12 @@
                 scheduled = true;
                 queueMicrotask(publish);
             };
-            const patch = (id, factory) => {
-                if (processed.has(factory)) return processed.get(factory);
-                const source = factory.toString();
+            const apply = (id, factory, source, matched) => {
                 const target = { id, source };
-                const matched = entries.filter((entry) =>
-                    entry.predicate(source),
-                );
                 try {
                     for (const entry of matched) {
+                        if (entry.after && !entry.after.ready)
+                            throw new Error(`${entry.after.label}尚未挂接`);
                         if (entry.id !== undefined && entry.id !== id)
                             throw new Error(`${entry.label}匹配到多个模块`);
                         entry.apply?.(target);
@@ -277,6 +274,8 @@
                                 schedule();
                             });
                     }
+                    for (const entry of matched)
+                        for (const finish of entry.consumers ?? []) finish();
                     if (matched.length) schedule();
                     return result;
                 } catch (error) {
@@ -288,6 +287,30 @@
                     schedule();
                     return factory;
                 }
+            };
+            const patch = (id, factory) => {
+                if (processed.has(factory)) return processed.get(factory);
+                const source = factory.toString();
+                const matched = entries.filter((entry) =>
+                    entry.predicate(source),
+                );
+                const dependency = matched.find(
+                    (entry) => entry.after && !entry.after.ready,
+                )?.after;
+                if (!dependency) return apply(id, factory, source, matched);
+                dependency.consumers ??= new Set();
+                let result;
+                const finish = () => {
+                    dependency.consumers.delete(finish);
+                    result = apply(id, factory, source, matched);
+                };
+                dependency.consumers.add(finish);
+                function deferred(...args) {
+                    if (!result) finish();
+                    return Reflect.apply(result, this, args);
+                }
+                processed.set(factory, deferred);
+                return deferred;
             };
             for (const [id, factory] of Object.entries(require.m))
                 require.m[id] = patch(id, factory);
@@ -2321,8 +2344,11 @@
     function createChatgptModulePatches() {
         const patches = [];
         const bindings = {};
-        const module = (label, predicate, apply, page) =>
-            patches.push({ label, predicate, apply, page });
+        const module = (label, predicate, apply, page, after) => {
+            const entry = { label, predicate, apply, page, after };
+            patches.push(entry);
+            return entry;
+        };
         const single = (items, label) => {
             if (items.length !== 1)
                 throw new Error(`${label}匹配到 ${items.length} 个结果`);
@@ -2855,7 +2881,7 @@
             },
         );
 
-        module(
+        const contentModule = module(
             "会话内容模块",
             (source) =>
                 source.includes("context_truncation_continuation:") &&
@@ -2915,6 +2941,7 @@
                 const actions = exported(content, "轮次操作栏条件", (source) =>
                     source.includes(".suppressTurnActions"),
                 );
+                bindings.turnActions = [content.id, actions.exportName];
                 const [state] = single(
                     [
                         ...actions
@@ -3533,11 +3560,27 @@
                     ],
                     "轮次消息来源",
                 );
-                const [condition, check] = single(
+                const [moduleId, exportName] = bindings.turnActions;
+                const [, require] = messages.source.match(
+                    /^[^(]+\([^,]+,[^,]+,([^)]*)\)\{/,
+                );
+                const [, namespace] = single(
+                    [
+                        ...messages.source.matchAll(
+                            new RegExp(
+                                `([\\w$]+)=${RegExp.escape(require)}\\("${RegExp.escape(moduleId)}"\\)`,
+                                "g",
+                            ),
+                        ),
+                    ],
+                    "操作栏条件模块导入",
+                );
+                const check = `(0,${namespace}.${exportName})`;
+                const [condition] = single(
                     [
                         ...turn.matchAll(
                             new RegExp(
-                                `(\\(0,[\\w$]+\\.[\\w$]+\\))\\(${RegExp.escape(turnValue)}\\)`,
+                                `${RegExp.escape(check)}\\(${RegExp.escape(turnValue)}\\)`,
                                 "g",
                             ),
                         ),
@@ -3577,6 +3620,7 @@
                 );
             },
             "chat",
+            contentModule,
         );
 
         module(
