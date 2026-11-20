@@ -3964,15 +3964,15 @@
 
     function getChatgptModuleItems(page) {
         const items = ["运行时模型切换"];
-        if (chatgptNewTabEnabled) items.push("中键新标签页打开");
+        if (chatgptNewTabEnabled) items.push("中键打开链接");
         if (page && chatgptCopyButtonEnabled) items.push("复制全文");
         if (page !== "dot" && chatgptPasteMode !== "native")
-            items.push(`文本粘贴：${CHATGPT_PASTE_MODES[chatgptPasteMode]}`);
+            items.push(`粘贴输入：${CHATGPT_PASTE_MODES[chatgptPasteMode]}`);
         if (page === "chat") {
             if (chatgptMessageInfoEnabled) items.push("显示时间和模型");
             if (chatgptEarlyActionsEnabled) items.push("提前显示操作栏");
-            if (chatgptApprovalEnabled) items.push("自动批准工具请求");
-            if (chatgptAutoCollapseEnabled) items.push("自动收起分析内容");
+            if (chatgptApprovalEnabled) items.push("自动批准工具");
+            if (chatgptAutoCollapseEnabled) items.push("收起分析");
         }
         if (chatgptFakePlanEnabled)
             items.push(`假装会员：${chatgptFakePlanValue}`);
@@ -4621,41 +4621,6 @@
                     "></span>
                 </label>
             </div>
-            <div id="chatgpt-paste-mode-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <label for="chatgpt-paste-mode-select">文本粘贴
-                <span id="chatgpt-paste-mode-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></label>
-                <select id="chatgpt-paste-mode-select" style="
-                    background-color: #333;
-                    color: #fff;
-                    border: 0px;
-                    border-radius: 4px;
-                    padding: 4px 8px 4px 8px;
-                    font-size: 11px;
-                    cursor: pointer;
-                    outline: none;
-                    line-height: 1em;
-                    box-sizing: border-box;
-                ">
-                    ${Object.entries(CHATGPT_PASTE_MODES)
-                        .map(
-                            ([value, label]) =>
-                                `<option value="${value}">${label}</option>`,
-                        )
-                        .join("")}
-                </select>
-            </div>
             <div id="chatgpt-copy-button-container" style="display: flex; align-items: center; justify-content: space-between;">
                 <span>复制按钮
                 <span id="chatgpt-copy-button-tooltip" style="
@@ -4698,7 +4663,7 @@
                 </label>
             </div>
             <div id="chatgpt-copy-raw-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>复制原始格式
+                <span>- 复制原始格式
                 <span id="chatgpt-copy-raw-tooltip" style="
                     cursor: pointer;
                     font-size: 12px;
@@ -4738,7 +4703,7 @@
                 </label>
             </div>
             <div id="chatgpt-copy-details-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>复制思考内容
+                <span>- 复制思考内容
                 <span id="chatgpt-copy-details-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -4766,6 +4731,123 @@
                         border-radius: 16px;
                     "></span>
                     <span id="chatgpt-copy-details-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="chatgpt-paste-mode-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <label for="chatgpt-paste-mode-select">粘贴输入
+                <span id="chatgpt-paste-mode-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></label>
+                <select id="chatgpt-paste-mode-select" style="
+                    background-color: #333;
+                    color: #fff;
+                    border: 0px;
+                    border-radius: 4px;
+                    padding: 4px 8px 4px 8px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    outline: none;
+                    line-height: 1em;
+                    box-sizing: border-box;
+                ">
+                    ${Object.entries(CHATGPT_PASTE_MODES)
+                        .map(
+                            ([value, label]) =>
+                                `<option value="${value}">${label}</option>`,
+                        )
+                        .join("")}
+                </select>
+            </div>
+            <div id="chatgpt-auto-collapse-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>收起分析
+                <span id="chatgpt-auto-collapse-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-auto-collapse-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-auto-collapse-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-auto-collapse-slider-dot" style="
+                        position: absolute;
+                        content: '';
+                        height: 10px;
+                        width: 10px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: white;
+                        transition: 0.3s;
+                        border-radius: 50%;
+                    "></span>
+                </label>
+            </div>
+            <div id="chatgpt-approval-container" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>自动批准工具
+                <span id="chatgpt-approval-tooltip" style="
+                    cursor: pointer;
+                    color: #fff;
+                    font-size: 12px;
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 14px;
+                    text-align: center;
+                    border-radius: 50%;
+                    border: 1px solid #fff;
+                    margin-left: 3px;
+                ">?</span></span>
+                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
+                    <input type="checkbox" id="chatgpt-approval-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span id="chatgpt-approval-slider" style="
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #555;
+                        transition: 0.3s;
+                        border-radius: 16px;
+                    "></span>
+                    <span id="chatgpt-approval-slider-dot" style="
                         position: absolute;
                         content: '';
                         height: 10px;
@@ -4860,90 +4942,8 @@
                     "></span>
                 </label>
             </div>
-            <div id="chatgpt-approval-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>自动批准工具请求
-                <span id="chatgpt-approval-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-approval-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-approval-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-approval-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
-            <div id="chatgpt-auto-collapse-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>自动收起分析内容
-                <span id="chatgpt-auto-collapse-tooltip" style="
-                    cursor: pointer;
-                    color: #fff;
-                    font-size: 12px;
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 14px;
-                    text-align: center;
-                    border-radius: 50%;
-                    border: 1px solid #fff;
-                    margin-left: 3px;
-                ">?</span></span>
-                <label style="position: relative; display: inline-block; width: 28px; height: 16px; cursor: pointer;">
-                    <input type="checkbox" id="chatgpt-auto-collapse-toggle" style="opacity: 0; width: 0; height: 0;">
-                    <span id="chatgpt-auto-collapse-slider" style="
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #555;
-                        transition: 0.3s;
-                        border-radius: 16px;
-                    "></span>
-                    <span id="chatgpt-auto-collapse-slider-dot" style="
-                        position: absolute;
-                        content: '';
-                        height: 10px;
-                        width: 10px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: 0.3s;
-                        border-radius: 50%;
-                    "></span>
-                </label>
-            </div>
             <div id="chatgpt-new-tab-container" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>中键新标签页打开
+                <span>中键打开链接
                 <span id="chatgpt-new-tab-tooltip" style="
                     cursor: pointer;
                     color: #fff;
@@ -5354,7 +5354,7 @@
 
         const chatgptCopyDetailsTooltipBox = createTooltip(
             "chatgpt-copy-details-tooltip-box",
-            "复制全文包括思考与工具调用内容。",
+            "复制时包含思考与工具调用内容。",
         );
 
         const chatgptMessageInfoTooltipBox = createTooltip(
